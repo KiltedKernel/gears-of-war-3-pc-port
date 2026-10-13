@@ -388,7 +388,19 @@ namespace
         TrackDevice(hasPad ? &pad : nullptr, k);
         out = hasPad ? pad.Gamepad : XINPUT_GAMEPAD{};
         out.wButtons |= k.wButtons;
-        if (GetTickCount64() < g_injectedUntil) out.wButtons |= g_injected;
+        const uint16_t injected = GetTickCount64() < g_injectedUntil ? uint16_t(g_injected) : 0;
+        out.wButtons |= injected;
+        // in menus, every change of buttons by source (a player's report of menus not answering can then be read
+        // from build\gow3.log): pad, keyboard/mouse, and presses injected by the menu mouse (ui/gfx_menu.cpp)
+        if (g_menuMode)
+        {
+            static uint16_t lastPad = 0, lastKey = 0, lastInj = 0;
+            static int logged = 0;
+            const uint16_t p = hasPad ? pad.Gamepad.wButtons : 0;
+            if ((p != lastPad || k.wButtons != lastKey || injected != lastInj) && logged++ < 600)
+                LOGFN("menu input: pad {:04X} keyboard {:04X} injected {:04X}", p, k.wButtons, injected);
+            lastPad = p; lastKey = k.wButtons; lastInj = injected;
+        }
         out.bLeftTrigger = std::max(out.bLeftTrigger, k.bLeftTrigger);
         out.bRightTrigger = std::max(out.bRightTrigger, k.bRightTrigger);
         out.sThumbLX = Pick(out.sThumbLX, k.sThumbLX);

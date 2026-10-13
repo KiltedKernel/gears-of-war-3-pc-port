@@ -351,7 +351,8 @@ namespace
             // selectedIndex past the end: the highlight sat on an empty row and the pad could not move it any more
             float length = GetNumber(sc, g_focus.list + ".dataProvider.length");
             if (!(length > 0)) length = GetNumber(sc, g_focus.list + "._dataProvider.length");
-            if (hit.hovered < 0 || (length > 0 && hit.hovered >= length)) hit.state = 1;
+            static const bool allRows = getenv("GOW3_HOVER_ALL_ROWS") != nullptr;   // (testing Heal: the old behaviour)
+            if (hit.hovered < 0 || (!allRows && length > 0 && hit.hovered >= length)) hit.state = 1;
             return hit;
         }
         return hit;
@@ -399,7 +400,7 @@ namespace
                 // the setter runs the list's ActionScript at once: read the result back
                 Invoke(hit.scene, hit.list + ".__set__selectedIndex", true, hit.hovered);
                 const float result = GetNumber(hit.scene, hit.list + "._selectedIndex");
-                if (logged++ < 20 || g_timing)
+                if (logged++ < 400 || g_timing)
                     LOGFN("gfx_menu: hover {}: select {} (was {}){}", hit.list, hit.hovered, hit.selected,
                         g_timing ? fmt::format(" t {} y {}", GetTickCount64(), y) : "");
                 if (result != hit.hovered && ++g_setFails >= 2)
@@ -441,7 +442,7 @@ namespace
     {
         const Hit hit = Find(true);
         static int logged = 0;
-        const bool log = logged++ < 40;
+        const bool log = logged++ < 400;
         if (hit.state == 1) { if (log) LOGFN("gfx_menu: click beside the options"); return; }
         if (hit.state == 2)
         {
@@ -480,6 +481,32 @@ namespace
     }
 }
 
+namespace
+{
+    // a selection outside the focused list's data (the reused main-menu list: a submenu with fewer options than the
+    // menu it came from) leaves the highlight on an empty row and the list ignoring the d-pad. Whatever put it there
+    // (a hover, a click, Esc / B back to a shorter menu...), it is moved back onto the last option, twice a second
+    void Heal()
+    {
+        static uint64_t next = 0;
+        const uint64_t now = GetTickCount64();
+        if (now < next || now < g_lastPress + 300) return;
+        next = now + 500;
+        if (now >= g_focus.at + 250) RefreshFocus(now);
+        if (g_focus.list.empty()) return;
+        const uint32_t sc = g_focus.scene;
+        float length = GetNumber(sc, g_focus.list + ".dataProvider.length");
+        if (!(length > 0)) length = GetNumber(sc, g_focus.list + "._dataProvider.length");
+        const float sel = GetNumber(sc, g_focus.list + "._selectedIndex");
+        if (!(length > 0) || !(sel >= length)) return;
+        Invoke(sc, g_focus.list + ".__set__selectedIndex", true, length - 1);
+        static int logged = 0;
+        if (logged++ < 50)
+            LOGFN("gfx_menu: {} had option {} selected of {}: moved to {}", g_focus.list, sel, length,
+                  GetNumber(sc, g_focus.list + "._selectedIndex"));
+    }
+}
+
 // the game's input poll (hid::GetState): on the main loop's thread, once a frame
 void OnGameThread()
 {
@@ -487,6 +514,7 @@ void OnGameThread()
     if (GetCurrentThreadId() != g_mainThreadId) return;
     static int lastX = -2, lastY = -2;
     if (!hid::MenuMode()) { lastX = -2; return; }
+    Heal();
     float fx, fy;
     if (!hid::MenuCursor(fx, fy)) return;   // read now, not from the 15 ms mouse poll
     const int x = int(fx), y = int(fy);

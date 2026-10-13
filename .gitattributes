@@ -1,0 +1,7 @@
+# line endings: shell scripts and patches must stay LF (bash, git apply); Windows scripts CRLF
+* text=auto
+*.sh text eol=lf
+*.patch -text
+*.py text eol=lf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

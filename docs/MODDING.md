@@ -19,7 +19,10 @@ build\
       GearGame\CookedXbox360\MP_GridlockG3.xxx
 ```
 
-That's all: start the game. To turn a mod off without deleting it, set `enabled = false` in its `mod.ini`.
+That's all: start the game. The launcher's **Mods** tab lists the installed mods: tick or untick a mod to turn it on or
+off, use **Up** / **Down** to change the load order (later mods win when two change the same file), **Install .zip...**
+to add a shared mod, and select a mod to see what it changes and which other mods it overlaps. (Without the launcher:
+set `enabled = false` in a mod's `mod.ini` to turn it off.)
 
 The mod tool does the same from the command line:
 

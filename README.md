@@ -65,7 +65,9 @@ In menus the mouse works too: hover selects, left click accepts, right click goe
 
 Each folder in `build\mods\` with a `mod.ini` adds or replaces game files; several mods stack by priority, and the
 game's table of contents is merged automatically. Mods can change the game's configuration and add campaign chapters
-to the Select Chapter menu. `tools\modtool.py` creates, checks, packs and installs mods. See
+to the Select Chapter menu. Players manage mods in the launcher's **Mods** tab (turn them on or off, change the load
+order, install a shared .zip); `tools\modtool.py` does the same from the command line and creates, checks and packs
+mods. See
 [docs/MODDING.md](docs/MODDING.md).
 
 ## How it works / reverse engineering

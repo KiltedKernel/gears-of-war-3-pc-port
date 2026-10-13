@@ -29,8 +29,8 @@
    (Visual Studio, LLVM, CMake, Ninja) because the recompiled game code is generated from the player's disc and must
    be compiled on their machine. Goal: a single installer/converter executable that brings or fetches what it needs
    (a pinned portable clang + ninja, the prebuilt runtime as a library), shows progress, and resumes after failures.
-2. **Launcher with a mod manager.** The launcher already edits gow3.ini; add a Mods page: installed mods, enable or
-   disable, priority order, conflicts, install from a .zip (what `tools/modtool.py` does), and per-mod notes.
+2. ~~Launcher with a mod manager~~ (done 2026-10-13: the Mods tab). Later: remove / update mods, mod pages with
+   screenshots.
 3. ~~Runtime config merge for mods~~ (done 2026-10-13).
 4. **Campaign coverage:** play through every act with scripted tests; fix what breaks.
 5. **Reverse-engineering documentation:** keep `docs/REVERSE_ENGINEERING.md` current as systems are understood.

@@ -18,6 +18,13 @@ call "%VSDIR%\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1
 :tools
 if exist "%USERPROFILE%\scoop\apps\llvm\current\bin" set "PATH=%USERPROFILE%\scoop\apps\llvm\current\bin;%PATH%"
 if exist "%USERPROFILE%\scoop\apps\ninja\current" set "PATH=%USERPROFILE%\scoop\apps\ninja\current;%PATH%"
+if exist "%ProgramFiles%\LLVM\bin\clang-cl.exe" set "PATH=%ProgramFiles%\LLVM\bin;%PATH%"
+rem Visual Studio's own clang-cl, CMake and Ninja (any installed instance: Build Tools or a full edition), when they are
+rem not installed separately (tools\setup.ps1 installs the Build Tools with them)
+if not exist "%VSWHERE%" set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+where clang-cl >nul 2>nul || for /f "usebackq delims=" %%I in (`"%VSWHERE%" -products * -requires Microsoft.VisualStudio.Component.VC.Llvm.Clang -property installationPath 2^>nul`) do if exist "%%I\VC\Tools\Llvm\x64\bin\clang-cl.exe" set "PATH=%%I\VC\Tools\Llvm\x64\bin;%PATH%"
+where cmake >nul 2>nul || for /f "usebackq delims=" %%I in (`"%VSWHERE%" -products * -property installationPath 2^>nul`) do if exist "%%I\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" set "PATH=%%I\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin;%PATH%"
+where ninja >nul 2>nul || for /f "usebackq delims=" %%I in (`"%VSWHERE%" -products * -property installationPath 2^>nul`) do if exist "%%I\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja\ninja.exe" set "PATH=%%I\Common7\IDE\CommonExtensions\Microsoft\CMake\Ninja;%PATH%"
 where clang-cl >nul 2>nul || (echo clang-cl not found: install LLVM ^(scoop install llvm, or the VS "C++ Clang tools" component^) & exit /b 1)
 where ninja >nul 2>nul || (echo ninja not found: scoop install ninja & exit /b 1)
 where cmake >nul 2>nul || (echo cmake not found & exit /b 1)

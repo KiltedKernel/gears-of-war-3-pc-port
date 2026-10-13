@@ -24,6 +24,10 @@ Status: boots, menus, the Act 1 campaign and Horde play; mods and new campaign c
 powershell -ExecutionPolicy Bypass -File tools\setup.ps1 -Iso "D:\Games\Gears of War 3.iso"
 ```
 
+Missing build tools are listed first, and the setup offers to install them with winget: one Visual Studio 2022 Build
+Tools install (C++ compiler, Windows SDK, clang-cl, CMake, Ninja), plus Python and Git if needed. Add
+`-InstallPrerequisites` to install without asking, or run `tools\setup.ps1 -CheckOnly` to only see what is missing.
+
 The setup:
 1. extracts the disc next to this folder (`..\gow3-decomp\disc`) and checks the game version;
 2. decrypts `default.xex` for the analysis tools;

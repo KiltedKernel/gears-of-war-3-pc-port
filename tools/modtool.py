@@ -102,6 +102,23 @@ def cmd_new(args):
     print(f'created {folder} (put files under {os.path.join(folder, "GearGame", "CookedXbox360")})')
 
 
+def check_fragment(path):
+    """problems in a config fragment (the rules of runtime/kernel/mod_config.cpp)"""
+    errs, have_file, have_section = [], False, False
+    for n, raw in enumerate(open(path, encoding='utf-8-sig', errors='replace'), 1):
+        line = raw.strip()
+        if not line or line.startswith(';') or (line.startswith('#') and not line.startswith('#####')): continue
+        if line.startswith('#####'):
+            have_file, have_section = bool(line[5:].strip()), False
+            if not have_file: errs.append(f'line {n}: ##### needs an ini file name')
+            continue
+        if line.startswith('[') and line.endswith(']'):
+            if not have_file: errs.append(f'line {n}: section before any ##### <ini file> line')
+            have_section = True; continue
+        if '=' not in line or not have_section: errs.append(f'line {n}: expected [section] or key=value')
+    return errs
+
+
 def cmd_check(args):
     import upk
     mods_dir, g3 = paths(args)
@@ -121,6 +138,11 @@ def cmd_check(args):
                 if p.version != 828: note += '  <- not a Gears 3 package (version 828)'; problems += 1
             except Exception as ex:
                 note = f'cannot be read: {ex}'; problems += 1
+        elif low.startswith('config\\'):
+            kind = 'config'
+            errs = check_fragment(path)
+            note = 'fragment ok' if not errs else '; '.join(errs[:3])
+            problems += len(errs)
         else:
             note = f'{os.path.getsize(path):,} bytes'
         print(f'  {kind} {low}: {note}')

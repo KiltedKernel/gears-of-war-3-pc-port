@@ -101,8 +101,23 @@ python -P tools/coalesced.py merge <Coalesced_INT.bin> <out.bin> my.ini   # appl
 
 A fragment names its ini with `##### <file>` (for example `##### Xbox360-GearGame.ini` or `##### GearGame.int`),
 then sections and keys, UE3 style: `Key=v` replaces the key, `+Key=v` adds a value, `-Key=v` removes one, and
-`*Key=(Identifier=X,...)` replaces the entry with the same first field (a menu entry). The merged file goes in the mod
-at `GearGame\CookedXbox360\Coalesced_INT.bin`.
+`*Key=(Identifier=X,...)` replaces the entry with the same first field (a menu entry).
+
+**Ship fragments, not the whole file.** Put them in the mod's `config\` folder (any number of `.ini` files):
+
+```
+MyMod\
+  mod.ini
+  config\
+    chapters.ini
+```
+
+When the game starts, the runtime merges every enabled mod's fragments, in load order, into each language's
+`Coalesced_<LANG>.bin` (the disc's, or a whole file a mod ships) and serves the merged file. So several mods can
+change the configuration at once. The log lists each fragment (`mods: config chapters.ini from My mod: 13 lines`);
+mistakes are logged with the file and line. `python -P tools/modtool.py check MyMod` checks fragments too.
+
+Two small working examples are in `examples/mods/` (a new act and chapter; a menu string): copy them into `mods\`.
 
 ## New campaign chapters
 
@@ -132,7 +147,7 @@ ChapterNumDesc=Chapter 1
 ```
 
 `python -P tools/campaign.py fragment --chapter 32 --act 6 --map sp_mymap_p --title "First Chapter" --act-title
-"My Campaign"` writes such a fragment. The new act appears in Campaign > Standard > Select Chapter after Act V. When the game starts, the runtime reads every
+"My Campaign" --out MyMod\config\chapters.ini` writes such a fragment into a mod. The new act appears in Campaign > Standard > Select Chapter after Act V. When the game starts, the runtime reads every
 chapter 32-49 from the active config and loads its `MapName` for it (`runtime/ue3/campaign_chapters.cpp`). The map is
 a persistent level package (`sp_mymap_p.xxx`) in the mod.
 

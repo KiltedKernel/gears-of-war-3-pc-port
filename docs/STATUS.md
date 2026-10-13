@@ -10,8 +10,9 @@
 - Horde private matches start and play waves.
 - 60 fps (frame-rate unlock), 16x anisotropy, effect toggles, resolution scaling, native mouse look, keyboard/mouse
   button prompts, launcher with options.
-- Mods: folders with `mod.ini`, priorities and conflicts, merged table of contents, packed config replacement, new
-  campaign chapters (32-49) in Select Chapter loading their own maps.
+- Mods: folders with `mod.ini`, priorities and conflicts, merged table of contents, configuration fragments merged
+  at startup (several mods changing the config stack), new campaign chapters (32-49) in Select Chapter loading their
+  own maps.
 
 ## Not done / known issues
 
@@ -19,8 +20,6 @@
   party features).
 - The rest of the campaign (Acts 2-5) has not been played through in tests.
 - Versus with bots: not tested.
-- Mod config: a mod ships a whole `Coalesced_INT.bin`, so two mods that change configuration conflict. Planned:
-  mods ship ini fragments and the runtime merges them (as it merges the table of contents).
 - `tools/xpack` does not decode every LZX block (GearGame.xxx blocks 340-347): packages compressed as a whole cannot
   be rewritten offline yet.
 
@@ -32,7 +31,7 @@
    (a pinned portable clang + ninja, the prebuilt runtime as a library), shows progress, and resumes after failures.
 2. **Launcher with a mod manager.** The launcher already edits gow3.ini; add a Mods page: installed mods, enable or
    disable, priority order, conflicts, install from a .zip (what `tools/modtool.py` does), and per-mod notes.
-3. **Runtime config merge for mods** (above), so config-changing mods stack.
+3. ~~Runtime config merge for mods~~ (done 2026-10-13).
 4. **Campaign coverage:** play through every act with scripted tests; fix what breaks.
 5. **Reverse-engineering documentation:** keep `docs/REVERSE_ENGINEERING.md` current as systems are understood.
 6. **Room for expansion:** content conversion from Gears of War 1 and 2 (developed separately) plugs in as mods

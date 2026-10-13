@@ -67,6 +67,8 @@ namespace
         std::vector<Mod> mods;                                             // load order: lowest priority first
         std::unordered_map<std::string, std::filesystem::path> files;     // lower-case relative path -> winning file
         std::map<std::string, std::filesystem::path> tocs;                 // merged TOCs built so far
+        std::vector<std::pair<const Mod*, std::filesystem::path>> fragments; // config\*.ini of enabled mods, load order
+        bool configMerged = false;
     };
 
     State& Get()
@@ -102,6 +104,7 @@ namespace
                     if (!it->is_regular_file()) continue;
                     const std::string rel = Lower(std::filesystem::relative(it->path(), m.dir, ec).string());
                     if (rel == "mod.ini" || rel.ends_with("toc.txt") && rel.find("xbox360toc") != std::string::npos) continue;
+                    if (rel.starts_with("config\\")) continue;                  // configuration fragments (below)
                     s.files[rel] = it->path();                              // later (higher priority) wins
                     owners[rel].push_back(m.name);
                 }
@@ -113,7 +116,10 @@ namespace
                     for (const auto& n : who) list += (list.empty() ? "" : ", ") + n;
                     LOGFN("mods: conflict on {}: {} (the last wins)", rel, list);
                 }
-            LOGFN("mods: {} mods, {} files", s.mods.size(), s.files.size());
+            for (const Mod& m : s.mods)
+                if (m.enabled && m.name != "(loose files)")
+                    for (const auto& f : config::Fragments(m)) s.fragments.emplace_back(&m, f);
+            LOGFN("mods: {} mods, {} files, {} configuration fragments", s.mods.size(), s.files.size(), s.fragments.size());
         });
         return s;
     }
@@ -193,7 +199,29 @@ const std::vector<Mod>& List() { return Get().mods; }
 std::filesystem::path Resolve(const std::string& relative, const std::filesystem::path& gameRoot)
 {
     State& s = Get();
-    if (s.files.empty()) return {};
+    if (s.files.empty() && s.fragments.empty()) return {};
+    if (!s.fragments.empty())
+    {
+        // once, before anything is served (the merged TOC lists the merged files): every language's packed
+        // configuration on the disc, with the fragments applied
+        static std::mutex cm;
+        std::lock_guard lock(cm);
+        if (!s.configMerged)
+        {
+            s.configMerged = true;
+            std::error_code ec;
+            for (const auto& e : std::filesystem::directory_iterator(gameRoot / "GearGame" / "CookedXbox360", ec))
+            {
+                const std::string name = Lower(e.path().filename().string());
+                if (!(name.starts_with("coalesced_") && name.ends_with(".bin"))) continue;
+                const std::string crel = "geargame\\cookedxbox360\\" + name;
+                const auto it = s.files.find(crel);
+                const auto base = it != s.files.end() ? it->second : e.path();
+                const auto out = GetUserPath() / "mods_config" / crel;
+                if (config::Merge(base, s.fragments, out)) s.files[crel] = out;
+            }
+        }
+    }
     std::string rel = Lower(relative);
     while (!rel.empty() && rel[0] == '\\') rel.erase(0, 1);
     if (rel.starts_with("geargame\\xbox360toc") && rel.ends_with(".txt"))

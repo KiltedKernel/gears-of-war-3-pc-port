@@ -5,7 +5,8 @@
 // Files directly under mods\ (no mod.ini) form one more mod, "(loose files)", at priority 0. When several mods
 // have the same file, the highest priority wins (then the later name). The game finds packages through
 // GearGame\Xbox360TOC*.txt: the runtime serves a merged TOC (the disc's, with every mod file's size and MD5), so
-// mods never ship or edit a TOC.
+// mods never ship or edit a TOC. A mod's config\*.ini fragments are merged into the packed configuration
+// (Coalesced_<LANG>.bin) the same way, so several mods can change the game's .ini settings.
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -24,4 +25,13 @@ namespace mods
     // the file a mod provides for a game-relative path ("GearGame\CookedXbox360\X.xxx"), or empty;
     // TOC files get the merged TOC (built once, from disc + mods)
     std::filesystem::path Resolve(const std::string& relative, const std::filesystem::path& gameRoot);
+
+    // configuration fragments (kernel/mod_config.cpp): a mod's config\*.ini, merged into the packed configuration
+    // GearGame\CookedXbox360\Coalesced_<LANG>.bin (the disc's, or a mod's whole file) when the game first asks for a file
+    namespace config
+    {
+        std::vector<std::filesystem::path> Fragments(const Mod& m);
+        bool Merge(const std::filesystem::path& base, const std::vector<std::pair<const Mod*, std::filesystem::path>>& fragments,
+                   const std::filesystem::path& out);
+    }
 }

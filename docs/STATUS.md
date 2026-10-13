@@ -1,0 +1,39 @@
+# Status and roadmap
+
+## Verified (scripted playtests in tests/, see ENGINEERING_LOG.md)
+
+- Boots from the player's disc, Epic logo movie (or `-nointro`), title screen with audio.
+- Menus: main menu, campaign, difficulty, save slots, options; controller, keyboard and mouse (hover selects, click,
+  right click back, wheel, sliders and steppers).
+- Campaign: Act 1 Prologue "Troubled Past" through the flashback and waking on the Raven's Nest, combat, checkpoint
+  saves, Continue (tests/new_campaign.txt, combat.txt, continue.txt; minutes-long runs without a crash).
+- Horde private matches start and play waves.
+- 60 fps (frame-rate unlock), 16x anisotropy, effect toggles, resolution scaling, native mouse look, keyboard/mouse
+  button prompts, launcher with options.
+- Mods: folders with `mod.ini`, priorities and conflicts, merged table of contents, packed config replacement, new
+  campaign chapters (32-49) in Select Chapter loading their own maps.
+
+## Not done / known issues
+
+- No Xbox Live: online modes, party UI (the game asks for xam.xex through XexLoadImage, which fails; it then skips the
+  party features).
+- The rest of the campaign (Acts 2-5) has not been played through in tests.
+- Versus with bots: not tested.
+- Mod config: a mod ships a whole `Coalesced_INT.bin`, so two mods that change configuration conflict. Planned:
+  mods ship ini fragments and the runtime merges them (as it merges the table of contents).
+- `tools/xpack` does not decode every LZX block (GearGame.xxx blocks 340-347): packages compressed as a whole cannot
+  be rewritten offline yet.
+
+## Roadmap to the deliverable: your ISO in, a PC port out
+
+1. **Converter for players.** `tools/setup.ps1` does the whole conversion today, but it needs a C++ toolchain
+   (Visual Studio, LLVM, CMake, Ninja) because the recompiled game code is generated from the player's disc and must
+   be compiled on their machine. Goal: a single installer/converter executable that brings or fetches what it needs
+   (a pinned portable clang + ninja, the prebuilt runtime as a library), shows progress, and resumes after failures.
+2. **Launcher with a mod manager.** The launcher already edits gow3.ini; add a Mods page: installed mods, enable or
+   disable, priority order, conflicts, install from a .zip (what `tools/modtool.py` does), and per-mod notes.
+3. **Runtime config merge for mods** (above), so config-changing mods stack.
+4. **Campaign coverage:** play through every act with scripted tests; fix what breaks.
+5. **Reverse-engineering documentation:** keep `docs/REVERSE_ENGINEERING.md` current as systems are understood.
+6. **Room for expansion:** content conversion from Gears of War 1 and 2 (developed separately) plugs in as mods
+   (new chapters, levels, characters).

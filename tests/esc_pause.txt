@@ -1,0 +1,7 @@
+# continue into gameplay, Esc pauses (Start), Esc again resumes (B in menus)
+45 pad 0010 250
+53 pad 1000 250
+58 pad 1000 250
+63 pad 1000 250
+110 key 1B 150
+118 key 1B 150

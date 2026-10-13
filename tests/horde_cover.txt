@@ -1,0 +1,34 @@
+# main menu -> HORDE -> PRIVATE -> start -> map selection: right trigger x2 = GRIDLOCK (MP_GridlockG3), Start = select
+45 pad 0010 250
+53 pad 0002 150
+55 pad 0002 150
+58 pad 1000 250
+64 pad 0002 150
+67 pad 1000 250
+72 pad 1000 250
+78 pad 1000 250
+90 trig R 200
+93 trig R 200
+96 pad 0010 250
+102 pad 0010 250
+150 capture
+180 key 57 2500
+181 key 20 200
+182 key 20 200
+183 key 20 200
+186 mouse 1800 0 1200
+192 key 57 2500
+193 key 20 200
+194 key 20 200
+195 key 20 200
+198 mouse 1800 0 1200
+204 key 57 2500
+205 key 20 200
+206 key 20 200
+207 key 20 200
+210 mouse 1800 0 1200
+216 key 57 2500
+217 key 20 200
+218 key 20 200
+219 key 20 200
+222 mouse 1800 0 1200

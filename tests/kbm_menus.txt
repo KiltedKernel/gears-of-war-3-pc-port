@@ -1,0 +1,4 @@
+# keyboard only, prompts on "auto": Enter at the title, Space into Campaign, then a pad press switches back
+45 key 0D 200
+53 key 20 200
+66 pad 0001 150

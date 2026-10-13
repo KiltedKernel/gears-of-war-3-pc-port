@@ -1,0 +1,14 @@
+# main menu -> Options (Start) -> click CONTROLLER; then click the Look Sensitivity slider near its left end, the
+# Control Scheme stepper's left arrow, the Invert Y-Axis row (next value), and beside the options (nothing)
+52 pad 0010 250
+60 pad 0010 250
+65 cursor 300 303
+66 click L 120
+71 cursor 760 277
+72 click L 120
+75 cursor 693 430
+76 click L 120
+79 cursor 350 203
+80 click L 120
+83 cursor 1100 650
+84 click L 120

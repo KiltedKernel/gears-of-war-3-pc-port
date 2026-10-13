@@ -1,0 +1,116 @@
+# XenonRecomp config for Gears of War 3 (Xbox 360, disc version, no title update). Paths relative to this file.
+# default.xex comes from the player's own disc (D:/gow3-decomp is the dev copy; never committed or shipped).
+[main]
+file_path = "../game_link/default.xex"
+out_directory_path = "../ppc"
+switch_table_file_path = "GOW3_switch_tables.toml"
+
+# optimizations stay off until the recompilation runs correctly (XenonRecomp README)
+skip_lr = false
+skip_msr = false
+ctr_as_local = false
+xer_as_local = false
+reserved_as_local = false
+cr_as_local = false
+non_argument_as_local = false
+non_volatile_as_local = false
+
+# register save/restore helpers: the same bytes as Gears of War 2's, one match each in .text
+restgprlr_14_address = 0x82CC9910
+savegprlr_14_address = 0x82CC98C0
+restfpr_14_address = 0x82CCA1CC
+savefpr_14_address = 0x82CCA180
+restvmx_14_address = 0x82CCA518
+savevmx_14_address = 0x82CCA280
+restvmx_64_address = 0x82CCA5AC
+savevmx_64_address = 0x82CCA314
+
+invalid_instructions = [
+    { data = 0x00000000, size = 4 }, # padding
+]
+
+# ---- generated: explicit function bounds (tools/fix_boundaries.py) ----
+functions = [
+    { address = 0x823AC230, size = 0xFC },
+    { address = 0x824167F8, size = 0x160 },
+    { address = 0x826F2030, size = 0x140 },
+    { address = 0x829619F0, size = 0xE0 },
+    { address = 0x8297CCF0, size = 0x25C },
+    { address = 0x829C7B28, size = 0x180 },
+    { address = 0x82CC9EA0, size = 0xA0 },
+    { address = 0x82D2D300, size = 0x270 },
+    { address = 0x82D381E8, size = 0x44 },
+    { address = 0x82D38230, size = 0x44 },
+    { address = 0x82D67E40, size = 0x260 },
+    { address = 0x82E0F418, size = 0x110 },
+]
+
+# ---- mid-asm hooks (runtime/kernel/gow3_patches.cpp) ----
+# Frame rate unlock (Xenia game-patches "Unlock FPS", illusion & boma)
+[[midasm_hook]]
+name = "GoW3MaxTickRateHook"
+address = 0x8253D9B0
+registers = ["r3"]
+jump_address_on_true = 0x8253D9B4
+
+[[midasm_hook]]
+name = "GoW3PresentIntervalHook"
+address = 0x82AF66BC
+registers = ["r11"]
+after_instruction = true
+
+# 16x anisotropic filtering (boma)
+[[midasm_hook]]
+name = "GoW3AnisotropyHook"
+address = 0x82969614
+registers = ["r5"]
+after_instruction = true
+
+# effects (boma, illusion): the register loaded with the GSystemSettings flag
+[[midasm_hook]]
+name = "GoW3MotionBlurHook"
+address = 0x82430640
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3MotionBlurHook"
+address = 0x827A2BCC
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3DepthOfFieldHook"
+address = 0x824BAA50
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3DepthOfFieldHook"
+address = 0x82593DC4
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3BloomHook"
+address = 0x82593DC0
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3LensFlaresHook"
+address = 0x82861FD0
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3AmbientOcclusionHook"
+address = 0x82762C54
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3AmbientOcclusionHook"
+address = 0x827C9628
+registers = ["r11"]
+after_instruction = true

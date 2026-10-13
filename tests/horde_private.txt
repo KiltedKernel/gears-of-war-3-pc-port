@@ -1,0 +1,9 @@
+# main menu -> HORDE -> PRIVATE, then look at the lobby
+45 pad 0010 250
+53 pad 0002 150
+55 pad 0002 150
+58 pad 1000 250
+64 pad 0002 150
+67 pad 1000 250
+72 pad 1000 250
+78 pad 1000 250

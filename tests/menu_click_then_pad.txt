@@ -1,0 +1,15 @@
+# bug repro: click Campaign with the mouse, keep moving the cursor over the new menu (as a hand does), then pad
+# d-pad down / up / B and keyboard arrows: do they still drive the menu?
+45 pad 0010 250
+52 cursor 640 360
+53 glide 230 373 400
+55 click L 120
+57 glide 260 400 600
+58 glide 700 500 800
+59 glide 230 425 500
+61 pad 0002 150
+63 pad 0002 150
+65 pad 0001 150
+67 pad 2000 150
+70 key 28 150
+72 key 26 150

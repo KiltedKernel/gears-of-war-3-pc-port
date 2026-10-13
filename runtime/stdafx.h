@@ -1,0 +1,31 @@
+#pragma once
+// Gears of War 3 recompilation runtime: shared includes (slim version of Unleashed Recompiled's stdafx.h)
+#define NOMINMAX
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+#include <algorithm>
+#include <atomic>
+#include <cassert>
+#include <chrono>
+#include <cstddef>
+#include <filesystem>
+#include <fstream>
+#include <list>
+#include <memory>
+#include <mutex>
+#include <numeric>
+#include <semaphore>
+#include <set>
+#include <span>
+#include <string>
+#include <vector>
+#include <charconv>
+#include <xbox.h>
+#include <xxhash.h>
+#include <ankerl/unordered_dense.h>
+#include <ppc_recomp_shared.h>
+#include <o1heap.h>
+#include <fmt/core.h>
+#include "framework.h"
+#include "mutex.h"

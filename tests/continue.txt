@@ -1,0 +1,8 @@
+# title -> main menu -> Campaign -> Standard -> (Continue is the first entry when a checkpoint exists)
+45 pad 0010 250
+53 pad 1000 250
+58 pad 1000 250
+63 pad 1000 250
+100 capture
+110 key 57 6000
+120 mouse 400 0 600

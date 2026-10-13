@@ -1,0 +1,6 @@
+# Gears 3 menus with the mouse: Start, then left click = A (Campaign), wheel down (Standard -> Arcade), right click = B
+45 pad 0010 250
+52 cursor 640 360
+54 click L 120
+59 wheel -1
+64 click R 120

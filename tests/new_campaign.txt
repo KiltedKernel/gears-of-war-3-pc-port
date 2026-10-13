@@ -1,0 +1,11 @@
+# title -> calibration -> Campaign -> Standard -> New -> (difficulty / lobby) -> start
+45 pad 0010 250
+52 pad 1000 250
+60 pad 1000 250
+64 pad 1000 250
+68 pad 1000 250
+74 pad 1000 250
+80 pad 1000 250
+86 pad 1000 250
+92 pad 1000 250
+98 pad 1000 250

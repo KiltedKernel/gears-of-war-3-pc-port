@@ -1,0 +1,5 @@
+# prompts follow the device in the main menu: controller first, then a keyboard key, then the controller again
+45 pad 0010 250
+53 pad 1000 250
+58 key 26 150
+66 pad 0001 150

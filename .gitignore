@@ -1,0 +1,22 @@
+# Everything made from the player's game is generated locally and never committed
+/ppc/
+/game_link
+/game_link/
+/build/
+/tools/XenonRecomp/
+/config/GOW3_new.toml
+*.log
+# tool build products
+/tools/xpack/*.exe
+/tools/xpack/*.obj
+/tools/xexdump/*.exe
+/tools/xexdump/*.obj
+__pycache__/
+*.pyc
+# game data that must never be added by accident
+*.xex
+*.xxx
+*.tfc
+*.bin
+*.iso
+*.sav

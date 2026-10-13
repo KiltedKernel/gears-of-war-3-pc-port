@@ -1,0 +1,69 @@
+# ---- mid-asm hooks (runtime/kernel/gow3_patches.cpp) ----
+# Frame rate unlock (Xenia game-patches "Unlock FPS", illusion & boma)
+[[midasm_hook]]
+name = "GoW3MaxTickRateHook"
+address = 0x8253D9B0
+registers = ["r3"]
+jump_address_on_true = 0x8253D9B4
+
+[[midasm_hook]]
+name = "GoW3PresentIntervalHook"
+address = 0x82AF66BC
+registers = ["r11"]
+after_instruction = true
+
+# 16x anisotropic filtering (boma)
+[[midasm_hook]]
+name = "GoW3AnisotropyHook"
+address = 0x82969614
+registers = ["r5"]
+after_instruction = true
+
+# effects (boma, illusion): the register loaded with the GSystemSettings flag
+[[midasm_hook]]
+name = "GoW3MotionBlurHook"
+address = 0x82430640
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3MotionBlurHook"
+address = 0x827A2BCC
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3DepthOfFieldHook"
+address = 0x824BAA50
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3DepthOfFieldHook"
+address = 0x82593DC4
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3BloomHook"
+address = 0x82593DC0
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3LensFlaresHook"
+address = 0x82861FD0
+registers = ["r10"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3AmbientOcclusionHook"
+address = 0x82762C54
+registers = ["r11"]
+after_instruction = true
+
+[[midasm_hook]]
+name = "GoW3AmbientOcclusionHook"
+address = 0x827C9628
+registers = ["r11"]
+after_instruction = true

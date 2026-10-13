@@ -1,0 +1,4 @@
+# title screen -> Start -> A presses into the main menu (pad masks: Start 0010, A 1000)
+45 pad 0010 250
+52 pad 1000 250
+60 pad 1000 250

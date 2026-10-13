@@ -1,0 +1,504 @@
+// GoW2 port: glue between the recompiled game's runtime and Xenia's D3D12 GPU (Xenia is BSD-3, see D:/xenia/LICENSE).
+// Built inside Xenia's CMake build (MSVC), with XE_GOW2=1 (patched Xenia sources: tools/xenia-gow2.patch).
+//
+// - xe::Memory: the runtime's guest address space has Xenia's layout (physical memory viewed at 0xA0000000,
+//   0xC0000000 and 0xE0000000, the E0 view shifted by 4 KB), so the GPU's Memory is a zeroed object whose two base
+//   pointers point into it; only the member functions the GPU calls are defined here.
+// - CPU-write watches: Xenia's caches arm read-only protection on physical pages they mirror on the GPU; the
+//   runtime's exception handler reports faults to HandleAccessViolation, which invalidates and unprotects.
+// - A UI thread owns the window and its message loop; the graphics system presents into it.
+#include "gow2_gpu.h"
+
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "third_party/stb/stb_image_write.h"
+
+#include <atomic>
+#include <filesystem>
+#include <future>
+#include <set>
+#include <mutex>
+#include <thread>
+#include <vector>
+
+#include "xenia/base/cvar.h"
+#include "xenia/base/logging.h"
+#include "xenia/base/memory.h"
+#include "xenia/base/mutex.h"
+#include "xenia/base/platform_win.h"
+#include "xenia/apu/audio_system.h"
+#include "xenia/apu/xaudio2/xaudio2_audio_system.h"
+#include "xenia/apu/xma_decoder.h"
+#include "xenia/gpu/command_processor.h"
+#include "xenia/gpu/d3d12/d3d12_command_processor.h"
+#include "xenia/gpu/d3d12/d3d12_graphics_system.h"
+#include "xenia/memory.h"
+#include "xenia/ui/window.h"
+#include "xenia/ui/window_win.h"
+#include "xenia/ui/windowed_app_context_win.h"
+
+namespace {
+
+gow2gpu::Host g_host;
+alignas(64) uint8_t g_memory_storage[sizeof(xe::Memory)];   // zeroed static: never constructed (see above)
+xe::Memory* g_memory = nullptr;
+
+// ---- physical page watches (4 KB pages over 512 MB) ----
+constexpr uint32_t kPageShift = 12, kPageSize = 1u << kPageShift, kPhysicalSize = 0x20000000;
+constexpr uint32_t kPageCount = kPhysicalSize >> kPageShift;
+std::vector<uint64_t> g_watched(kPageCount / 64);
+// watches are guarded by Xenia's global critical region (the GPU holds it while arming watches; its invalidation
+// callbacks take it again, recursively)
+std::vector<std::pair<xe::Memory::PhysicalMemoryInvalidationCallback, void*>*> g_invalidation_callbacks;
+
+// every host view of a physical page: A0 full; C0 all but the last 64 KB; E0 shifted down by 4 KB (the last page is
+// not visible through it)
+void ForEachView(uint32_t physical, uint32_t length, const std::function<void(uint8_t*, size_t)>& fn) {
+  uint8_t* base = g_host.guestBase;
+  fn(base + 0xA0000000u + physical, length);
+  {
+    uint32_t end = std::min<uint32_t>(physical + length, kPhysicalSize - 0x10000);
+    if (end > physical) fn(base + 0xC0000000u + physical, end - physical);
+  }
+  {
+    // virtual E0000000 + x = physical x + 0x1000
+    if (physical + length > 0x1000) {
+      uint32_t start = std::max<uint32_t>(physical, 0x1000);
+      uint32_t end = std::min<uint32_t>(physical + length, kPhysicalSize);
+      if (end > start) fn(base + 0xE0000000u + (start - 0x1000), end - start);
+    }
+  }
+}
+
+void Protect(uint32_t page_first, uint32_t page_count, bool read_only) {
+  ForEachView(page_first << kPageShift, page_count << kPageShift, [&](uint8_t* p, size_t n) {
+    xe::memory::Protect(p, n, read_only ? xe::memory::PageAccess::kReadOnly : xe::memory::PageAccess::kReadWrite);
+  });
+}
+
+bool IsWatched(uint32_t page) { return (g_watched[page >> 6] >> (page & 63)) & 1; }
+void SetWatched(uint32_t page, bool on) {
+  if (on) g_watched[page >> 6] |= uint64_t(1) << (page & 63);
+  else g_watched[page >> 6] &= ~(uint64_t(1) << (page & 63));
+}
+
+// unwatch + unprotect watched pages in [first, last]
+void Unwatch(uint32_t first, uint32_t last) {
+  uint32_t run = UINT32_MAX;
+  for (uint32_t i = first; i <= last + 1; i++) {
+    bool w = i <= last && IsWatched(i);
+    if (w) {
+      SetWatched(i, false);
+      if (run == UINT32_MAX) run = i;
+    } else if (run != UINT32_MAX) {
+      Protect(run, i - run, false);
+      run = UINT32_MAX;
+    }
+  }
+}
+
+// Xenia's PhysicalHeap::TriggerCallbacks for a write to [physical, physical+length)
+bool TriggerWrite(uint32_t physical, uint32_t length, bool unwatch_exact_range) {
+  uint32_t first = physical >> kPageShift, last = (physical + std::max<uint32_t>(length, 1) - 1) >> kPageShift;
+  last = std::min(last, kPageCount - 1);
+  bool any = false;
+  for (uint32_t i = first; i <= last && !any; i++) any = IsWatched(i);
+  if (!any) return false;
+  const uint32_t start = first << kPageShift, len = (last - first + 1) << kPageShift;
+  uint32_t unwatch_first = 0, unwatch_last = UINT32_MAX;
+  for (auto* cb : g_invalidation_callbacks) {
+    auto range = cb->first(cb->second, start, len, unwatch_exact_range);
+    if (!unwatch_exact_range) {
+      unwatch_first = std::max(unwatch_first, range.first);
+      unwatch_last = std::min(unwatch_last, xe::sat_add(range.first, std::max(range.second, uint32_t(1)) - 1));
+    }
+  }
+  uint32_t page_first = first, page_last = last;
+  if (!unwatch_exact_range) {
+    constexpr uint32_t kMaxUnwatchExcess = 4 * 1024 * 1024;
+    unwatch_first = std::min(unwatch_first, start);
+    unwatch_last = std::max(unwatch_last, start + len - 1);
+    unwatch_first = std::max(unwatch_first, start & ~(kMaxUnwatchExcess - 1));
+    unwatch_last = std::min(unwatch_last, (start + len - 1) | (kMaxUnwatchExcess - 1));
+    page_first = unwatch_first >> kPageShift;
+    page_last = std::min(unwatch_last >> kPageShift, kPageCount - 1);
+  }
+  Unwatch(page_first, page_last);
+  return true;
+}
+
+// the graphics system with register access for the runtime's MMIO forwarding
+class Gow2GraphicsSystem : public xe::gpu::d3d12::D3D12GraphicsSystem {
+ public:
+  using GraphicsSystem::ReadRegister;
+  using GraphicsSystem::WriteRegister;
+};
+
+std::unique_ptr<Gow2GraphicsSystem> g_graphics;
+std::thread g_ui_thread;
+xe::ui::Win32WindowedAppContext* g_app_context = nullptr;
+std::unique_ptr<xe::ui::Window> g_window;
+
+// closing the window ends the game, like switching the console off (game threads are not joined; a hard exit
+// avoids hanging on them, and the game shows its own "don't turn off" icon while it saves)
+class CloseListener : public xe::ui::WindowListener {
+ public:
+  void OnClosing(xe::ui::UIEvent& e) override {
+    XELOGI("gow2: window closed, exiting");
+    xe::FlushLog();
+    TerminateProcess(GetCurrentProcess(), 0);
+  }
+};
+CloseListener g_close_listener;
+std::atomic<bool> g_running{false};
+
+}  // namespace
+
+// ---- xe::Memory: the members the GPU uses ----
+namespace xe {
+
+bool Memory::Initialize() {
+  system_page_size_ = uint32_t(xe::memory::page_size());
+  system_allocation_granularity_ = uint32_t(xe::memory::allocation_granularity());
+  virtual_membase_ = g_host.guestBase;
+  physical_membase_ = g_host.guestBase + 0xA0000000u;
+  return true;
+}
+
+void* Memory::RegisterPhysicalMemoryInvalidationCallback(PhysicalMemoryInvalidationCallback callback,
+                                                         void* callback_context) {
+  auto lock = xe::global_critical_region::AcquireDirect();   // Xenia's lock order: global region first
+  auto* entry = new std::pair<PhysicalMemoryInvalidationCallback, void*>(callback, callback_context);
+  g_invalidation_callbacks.push_back(entry);
+  return entry;
+}
+
+void Memory::UnregisterPhysicalMemoryInvalidationCallback(void* callback_handle) {
+  auto lock = xe::global_critical_region::AcquireDirect();   // Xenia's lock order: global region first
+  auto* entry = static_cast<std::pair<PhysicalMemoryInvalidationCallback, void*>*>(callback_handle);
+  auto it = std::find(g_invalidation_callbacks.begin(), g_invalidation_callbacks.end(), entry);
+  if (it != g_invalidation_callbacks.end()) {
+    g_invalidation_callbacks.erase(it);
+    delete entry;
+  }
+}
+
+void Memory::EnablePhysicalMemoryAccessCallbacks(uint32_t physical_address, uint32_t length,
+                                                 bool enable_invalidation_notifications,
+                                                 bool enable_data_providers) {
+  if (!enable_invalidation_notifications || !length) return;
+  auto lock = xe::global_critical_region::AcquireDirect();   // Xenia's lock order: global region first
+  physical_address &= kPhysicalSize - 1;
+  uint32_t first = physical_address >> kPageShift;
+  uint32_t last = std::min((physical_address + length - 1) >> kPageShift, kPageCount - 1);
+  uint32_t run = UINT32_MAX;
+  for (uint32_t i = first; i <= last + 1; i++) {
+    bool arm = i <= last && !IsWatched(i);
+    if (arm) {
+      SetWatched(i, true);
+      if (run == UINT32_MAX) run = i;
+    } else if (run != UINT32_MAX) {
+      Protect(run, i - run, true);
+      run = UINT32_MAX;
+    }
+  }
+}
+
+// The GPU asks the physical heap whether a range is mapped and writable before uploads and resolves. The title's
+// physical memory is all committed read-write here, so the heap is a placeholder object and every query says so.
+alignas(64) static uint8_t g_physical_heap_storage[sizeof(VirtualHeap)];
+VirtualHeap* Memory::GetPhysicalHeap() { return reinterpret_cast<VirtualHeap*>(g_physical_heap_storage); }
+
+bool BaseHeap::QueryRegionInfo(uint32_t base_address, HeapAllocationInfo* out_info) {
+  *out_info = {};
+  out_info->base_address = 0;
+  out_info->allocation_base = 0;
+  out_info->allocation_protect = kMemoryProtectRead | kMemoryProtectWrite;
+  out_info->allocation_size = kPhysicalSize;
+  out_info->region_size = kPhysicalSize;
+  out_info->state = kMemoryAllocationReserve | kMemoryAllocationCommit;
+  out_info->protect = kMemoryProtectRead | kMemoryProtectWrite;
+  return true;
+}
+
+xe::memory::PageAccess BaseHeap::QueryRangeAccess(uint32_t low_address, uint32_t high_address) {
+  return xe::memory::PageAccess::kReadWrite;
+}
+
+bool Memory::TriggerPhysicalMemoryCallbacks(global_unique_lock_type global_lock_locked_once, uint32_t virtual_address,
+                                            uint32_t length, bool is_write, bool unwatch_exact_range,
+                                            bool unprotect) {
+  if (!is_write) return false;
+  auto lock = xe::global_critical_region::AcquireDirect();   // Xenia's lock order: global region first
+  uint32_t physical = virtual_address >= 0xE0000000u ? (virtual_address - 0xE0000000u + 0x1000)
+                                                      : (virtual_address & (kPhysicalSize - 1));
+  return TriggerWrite(physical, length, unwatch_exact_range);
+}
+
+}  // namespace xe
+
+namespace xe {
+// Xenia's system heap (XMA context array, audio callback arguments): the runtime's heaps
+uint32_t Memory::SystemHeapAlloc(uint32_t size, uint32_t alignment, uint32_t system_heap_flags) {
+  uint32_t address = g_host.systemAlloc(size, alignment, (system_heap_flags & kSystemHeapPhysical) != 0);
+  if (address) std::memset(TranslateVirtual(address), 0, size);
+  return address;
+}
+void Memory::SystemHeapFree(uint32_t address, uint32_t* out_region_size) {
+  if (address) g_host.systemFree(address);
+  if (out_region_size) *out_region_size = 0;
+}
+// physical windows only (the GPU and XMA only take physical memory); E0 is shifted by 4 KB
+uint32_t Memory::GetPhysicalAddress(uint32_t address) const {
+  if (address < 0xA0000000u) return UINT32_MAX;
+  return address >= 0xE0000000u ? address - 0xE0000000u + 0x1000 : address & 0x1FFFFFFF;
+}
+}  // namespace xe
+
+// ---- glue entry points used by the patched Xenia sources ----
+namespace xe::gow2 {
+Memory* GuestMemory() { return g_memory; }
+
+// texture hook (texture_cache.cc): GOW2_TEXTURE_DUMP=1 writes each new 2D texture's raw guest data once to
+// texdump\<address>_f<format>_<w>x<h>_p<pitch>_<t|l>.bin (decode offline: tools/texdecode.py)
+void OnTextureLoad(uint32_t guest_address, uint32_t size, uint32_t format, uint32_t width, uint32_t height,
+                   uint32_t pitch, bool tiled, uint32_t dimension) {
+  if (g_host.onTextureLoad && dimension == 1) g_host.onTextureLoad(guest_address, size, format, width, height, tiled);
+  static const bool dump = getenv("GOW2_TEXTURE_DUMP") != nullptr;
+  if (!dump || dimension != 1 || size > (16u << 20)) return;
+  static std::mutex m;
+  static std::set<uint64_t> seen;
+  std::lock_guard lock(m);
+  const uint64_t key = (uint64_t(guest_address) << 32) ^ (uint64_t(format) << 26) ^ (uint64_t(width) << 13) ^ height;
+  if (!seen.insert(key).second) return;
+  CreateDirectoryW(L"texdump", nullptr);
+  char name[160];
+  snprintf(name, sizeof(name), "texdump\\%08X_f%u_%ux%u_p%u_%c.bin", guest_address, format, width, height, pitch,
+           tiled ? 't' : 'l');
+  if (FILE* f = fopen(name, "wb")) {
+    fwrite(g_memory->TranslatePhysical<uint8_t*>(guest_address), 1, size, f);
+    fclose(f);
+  }
+}
+uint32_t VblankIntervalMicroseconds() {
+  return uint32_t(1000000 / std::max(30, g_host.vblankHz ? g_host.vblankHz : 60));
+}
+void CallGuest(uint32_t function, const uint64_t* args, size_t arg_count) {
+  g_host.callGuest(function, args, arg_count);
+}
+void DispatchInterrupt(uint32_t callback, uint32_t user_data, uint32_t source, uint32_t cpu) {
+  g_host.dispatchInterrupt(callback, user_data, source, cpu);
+}
+}  // namespace xe::gow2
+
+// startup trace (gow2-gpu-start.txt next to the executable): which step of Start failed
+static void StartTrace(const char* step) {
+  static FILE* f = fopen("gow2-gpu-start.txt", "w");
+  if (f) { fprintf(f, "%s\n", step); fflush(f); }
+}
+
+DECLARE_int32(draw_resolution_scale_x);
+DECLARE_int32(draw_resolution_scale_y);
+DECLARE_bool(vsync);
+DECLARE_bool(xenos_sample_positions);
+DECLARE_bool(draw_resolution_scaled_texture_offsets);
+DECLARE_bool(resolve_resolution_scale_fill_half_pixel_offset);
+DECLARE_uint32(draw_resolution_scale_threshold);
+
+// ---- runtime-facing API ----
+bool gow2gpu::Start(const Host& host) {
+  g_host = host;
+  StartTrace("logging");
+  xe::InitializeLogging("gow2-gpu");
+  StartTrace("memory");
+  // display options, before anything reads them
+  cvars::draw_resolution_scale_x = cvars::draw_resolution_scale_y = std::clamp(host.resolutionScale, 1, 3);
+  cvars::vsync = host.vsync;
+  cvars::xenos_sample_positions = host.xenosSamplePositions;
+  // resolution-scaling hacks, for experiments (environment, both ports): GOW_SCALED_TEXTURE_OFFSETS=0/1,
+  // GOW_RESOLVE_HALF_PIXEL=0/1, GOW_SCALE_THRESHOLD=<pitch in pixels> (render targets this narrow stay unscaled)
+  if (const char* e = getenv("GOW_SCALED_TEXTURE_OFFSETS")) cvars::draw_resolution_scaled_texture_offsets = atoi(e) != 0;
+  if (const char* e = getenv("GOW_RESOLVE_HALF_PIXEL")) cvars::resolve_resolution_scale_fill_half_pixel_offset = atoi(e) != 0;
+  if (const char* e = getenv("GOW_SCALE_THRESHOLD")) cvars::draw_resolution_scale_threshold = uint32_t(atoi(e));
+  if (host.scaleThreshold) cvars::draw_resolution_scale_threshold = host.scaleThreshold;
+  g_memory = reinterpret_cast<xe::Memory*>(g_memory_storage);
+  g_memory->Initialize();
+
+  StartTrace("d3d12 available?");
+  if (!xe::gpu::d3d12::D3D12GraphicsSystem::IsAvailable()) {
+    XELOGE("gow2: Direct3D 12 is not available");
+    return false;
+  }
+
+  std::promise<bool> window_ready;
+  g_ui_thread = std::thread([&window_ready, title = std::string(host.windowTitle ? host.windowTitle : "Gears of War 2")]() {
+    auto context = std::make_unique<xe::ui::Win32WindowedAppContext>(GetModuleHandleW(nullptr), SW_SHOWDEFAULT);
+    if (!context->Initialize()) {
+      window_ready.set_value(false);
+      return;
+    }
+    g_app_context = context.get();
+    g_window = xe::ui::Window::Create(*context, title, std::max(640, g_host.windowWidth ? g_host.windowWidth : 1280),
+                                      std::max(360, g_host.windowHeight ? g_host.windowHeight : 720));
+    if (g_window) g_window->AddListener(&g_close_listener);
+    if (!g_window || !g_window->Open()) {
+      window_ready.set_value(false);
+      return;
+    }
+    g_running = true;
+    window_ready.set_value(true);
+    context->RunMainMessageLoop();
+    g_running = false;
+  });
+  StartTrace("window thread started");
+  if (!window_ready.get_future().get()) {
+    XELOGE("gow2: could not open the window");
+    return false;
+  }
+
+  StartTrace("graphics system");
+  g_graphics = std::make_unique<Gow2GraphicsSystem>();
+  if (g_graphics->Setup(nullptr, nullptr, g_app_context, true) != 0) {   // X_STATUS_SUCCESS
+    XELOGE("gow2: graphics system setup failed");
+    return false;
+  }
+  // shaders and pipelines from earlier runs: compiled in the background (draws wait for them, no hitch), and new
+  // ones are appended as the game meets them
+  if (host.shaderCacheRoot) {
+    StartTrace("shader storage");
+    g_graphics->InitializeShaderStorage(std::filesystem::path(host.shaderCacheRoot), 0x4D53082D, false, nullptr);
+  }
+  StartTrace("presenter");
+  const bool fullscreen = host.fullscreen;
+  const int upscaling = host.upscaling;
+  const float sharpness = host.sharpness;
+  g_app_context->CallInUIThreadSynchronous([fullscreen, upscaling, sharpness]() {
+    g_window->SetPresenter(g_graphics->presenter());
+    // scaling to the window (what Xenia's Display menu sets)
+    auto paint = g_graphics->presenter()->GetGuestOutputPaintConfigFromUIThread();
+    using Effect = xe::ui::Presenter::GuestOutputPaintConfig::Effect;
+    paint.SetEffect(upscaling == 0 ? Effect::kBilinear : upscaling == 1 ? Effect::kCas : Effect::kFsr);
+    paint.SetCasAdditionalSharpness(sharpness);
+    g_graphics->presenter()->SetGuestOutputPaintConfigFromUIThread(paint);
+    if (fullscreen) g_window->SetFullscreen(true);
+  });
+  using SwapPostEffect = xe::gpu::CommandProcessor::SwapPostEffect;
+  g_graphics->command_processor()->SetDesiredSwapPostEffect(host.antialiasing == 1   ? SwapPostEffect::kFxaa
+                                                            : host.antialiasing == 2 ? SwapPostEffect::kFxaaExtreme
+                                                                                     : SwapPostEffect::kNone);
+  StartTrace("started");
+  return true;
+}
+
+void gow2gpu::Shutdown() {
+  if (g_graphics) {
+    if (g_app_context) g_app_context->CallInUIThreadSynchronous([]() { g_window->SetPresenter(nullptr); });
+    g_graphics->Shutdown();
+    g_graphics.reset();
+  }
+}
+
+void gow2gpu::InitializeRingBuffer(uint32_t ptr, uint32_t size_log2) { g_graphics->InitializeRingBuffer(ptr, size_log2); }
+void gow2gpu::EnableReadPointerWriteBack(uint32_t ptr, uint32_t block_size_log2) {
+  g_graphics->EnableReadPointerWriteBack(ptr, block_size_log2);
+}
+void gow2gpu::SetInterruptCallback(uint32_t callback, uint32_t user_data) {
+  g_graphics->SetInterruptCallback(callback, user_data);
+}
+void gow2gpu::WriteRegister(uint32_t index, uint32_t value) { g_graphics->WriteRegister(index * 4, value); }
+uint32_t gow2gpu::ReadRegister(uint32_t index) { return g_graphics->ReadRegister(index * 4); }
+
+bool gow2gpu::HandleAccessViolation(void* host_address, bool is_write) {
+  if (!is_write || !g_memory) return false;
+  uintptr_t offset = uintptr_t(host_address) - uintptr_t(g_host.guestBase);
+  if (offset < 0xA0000000u || offset >= 0x100000000ull) return false;
+  uint32_t physical = offset >= 0xE0000000u ? uint32_t(offset - 0xE0000000u + 0x1000) : uint32_t(offset & (kPhysicalSize - 1));
+  auto lock = xe::global_critical_region::AcquireDirect();   // Xenia's lock order: global region first
+  if (TriggerWrite(physical, 1, false)) return true;
+  // raced with another thread that already unwatched it: retry if the page is writable again
+  MEMORY_BASIC_INFORMATION mbi;
+  return VirtualQuery(host_address, &mbi, sizeof(mbi)) && mbi.Protect == PAGE_READWRITE;
+}
+
+bool gow2gpu::IsRunning() { return g_running; }
+
+// ---- audio ----
+namespace {
+std::unique_ptr<xe::apu::AudioSystem> g_audio;
+}
+
+bool gow2gpu::StartAudio() {
+  if (!g_memory) {
+    g_memory = reinterpret_cast<xe::Memory*>(g_memory_storage);
+    g_memory->Initialize();
+  }
+  g_audio = xe::apu::xaudio2::XAudio2AudioSystem::Create(nullptr);
+  if (!g_audio || g_audio->Setup(nullptr) != 0) {
+    XELOGE("gow2: audio system setup failed");
+    g_audio.reset();
+    return false;
+  }
+  return true;
+}
+
+int gow2gpu::AudioRegisterClient(uint32_t callback, uint32_t callback_arg) {
+  if (!g_audio) return -1;
+  size_t index = 0;
+  return g_audio->RegisterClient(callback, callback_arg, &index) == 0 ? int(index) : -1;
+}
+void gow2gpu::AudioUnregisterClient(int index) {
+  if (g_audio && index >= 0) g_audio->UnregisterClient(size_t(index));
+}
+void gow2gpu::AudioSubmitFrame(int index, uint32_t samples) {
+  if (g_audio && index >= 0) g_audio->SubmitFrame(size_t(index), g_memory->TranslateVirtual<float*>(samples));
+}
+uint32_t gow2gpu::XmaAllocateContext() { return g_audio ? g_audio->xma_decoder()->AllocateContext() : 0; }
+void gow2gpu::XmaReleaseContext(uint32_t context) {
+  if (g_audio) g_audio->xma_decoder()->ReleaseContext(context);
+}
+uint32_t gow2gpu::XmaReadRegister(uint32_t index) {
+  return g_audio ? g_audio->xma_decoder()->ReadRegister(index * 4) : 0;
+}
+void gow2gpu::XmaWriteRegister(uint32_t index, uint32_t raw_value) {
+  if (g_audio) g_audio->xma_decoder()->WriteRegister(index * 4, raw_value);
+}
+
+bool gow2gpu::CaptureScreenshot(const char* png_path) {
+  if (!g_graphics || !g_graphics->presenter()) return false;
+  xe::ui::RawImage image;
+  if (!g_graphics->presenter()->CaptureGuestOutput(image) || !image.width) return false;
+  for (size_t i = 3; i < image.data.size(); i += 4) image.data[i] = 0xFF;   // X8 -> opaque
+  return stbi_write_png(png_path, int(image.width), int(image.height), 4, image.data.data(), int(image.stride)) != 0;
+}
+
+void gow2gpu::ToggleFullscreen() {
+  if (!g_app_context || !g_window) return;
+  g_app_context->CallInUIThread([]() {
+    if (g_window) g_window->SetFullscreen(!g_window->IsFullscreen());
+  });
+}
+
+void gow2gpu::SetMouseCaptured(bool captured) {
+  if (!g_app_context || !g_window) return;
+  g_app_context->CallInUIThread([captured]() {
+    if (!g_window) return;
+    g_window->SetCursorVisibility(captured ? xe::ui::Window::CursorVisibility::kHidden
+                                           : xe::ui::Window::CursorVisibility::kVisible);
+    // clipping: the runtime pins the cursor to the window center while captured (hid.cpp)
+  });
+}
+
+void* gow2gpu::GetWindowHandle() {
+  return g_window ? static_cast<xe::ui::Win32Window*>(g_window.get())->hwnd() : nullptr;
+}
+
+void gow2gpu::ReadPhysical(uint32_t address, void* out, size_t size) {
+  memcpy(out, g_memory->TranslatePhysical<uint8_t*>(address), size);
+}
+
+void gow2gpu::WritePhysical(uint32_t address, const void* data, size_t size, bool invalidate) {
+  memcpy(g_memory->TranslatePhysical<uint8_t*>(address), data, size);
+  if (invalidate && g_graphics) {
+    auto* cp = static_cast<xe::gpu::d3d12::D3D12CommandProcessor*>(g_graphics->command_processor());
+    cp->gow2_shared_memory().MemoryInvalidationCallback(address, uint32_t(size), true);
+  }
+}

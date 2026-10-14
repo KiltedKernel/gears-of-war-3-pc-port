@@ -1648,6 +1648,16 @@ uses build\testdata and build\testmods; the player's saves and mods are never to
 12 s (skips a cutscene; in play it opens and closes the pause menu), walking, turning, firing and taking cover. All 31
 chapters load (SP_Nightmare_P .. SP_Rooftop_P, with their intro/cine persistent levels: SP_Stadium_ColeCine_P,
 SP_Imulsion_P, SP_OldShipyard_Intro_P, SP_Azura_Intro_P), render, and run without a crash, black or frozen screen;
-when the aimless player dies the checkpoint reloads. Also seen: on a brand-new profile the main menu takes input a few
-seconds later than usual after Start (the profile storage is being created), and GearCampaignChapterData's
+when the aimless player dies the checkpoint reloads. Also seen: a brand-new profile shows the brightness calibration screen
+("Adjust the slider so the left-most cog is barely visible") after Start, before the main menu: scripts for a fresh
+profile press A once more (this looked like a dropped press at first), and GearCampaignChapterData's
 IsAlwaysUnlocked (config) unlocks a chapter in Select Chapter (examples/mods/UnlockAllChapters).
+
+## 2026-10-13: Versus with bots; drawn prompts by default
+
+tests/versus_bots.txt (fresh profile): Start, brightness screen (A), VERSUS > PRIVATE > TEAM DEATHMATCH > START GAME
+> Yes > pregame lobby (map selection: Start selects the map, Start again starts the match; the right trigger cycles
+maps, as in Horde). Character setup, then Team Deathmatch on Checkout: the player with Baird, Griffin, Cole and Clayton
+Carmine against five Locust bots; the bots fight (team respawns 15 -> 12, kill feed), 60 fps with default settings.
+Casual and Standard need Xbox LIVE (the game says so). Keyboard prompts are now drawn by default
+(tools/make_prompts.py drawn; Gears of War: Reloaded's keycaps are an opt-in), so only the Gears 3 disc is needed.

@@ -1,0 +1,37 @@
+# Versus with bots, offline: fresh profile (tools/playtest.ps1 -Fresh): Start, the brightness screen (A), main menu ->
+# VERSUS (1 down) -> PRIVATE (2 down) -> TEAM DEATHMATCH -> START GAME (A) -> Start Match: Yes (A) -> pregame lobby
+# (9 AI players, map CHECKOUT) -> Start (select the map) -> Start (start the match); then play: walk, look, fire
+45 pad 0010 250
+54 pad 1000 200
+60 pad 0002 150
+63 pad 1000 200
+67 pad 0002 150
+69 pad 0002 150
+72 pad 1000 200
+78 pad 1000 200
+84 pad 1000 200
+90 pad 1000 200
+116 pad 0010 250
+122 pad 0010 250
+150 capture
+155 key 57 3000
+159 mouse 400 0 600
+161 trig R 900
+167 key 57 3000
+171 mouse 400 0 600
+173 trig R 900
+179 key 57 3000
+183 mouse 400 0 600
+185 trig R 900
+191 key 57 3000
+195 mouse 400 0 600
+197 trig R 900
+203 key 57 3000
+207 mouse 400 0 600
+209 trig R 900
+215 key 57 3000
+219 mouse 400 0 600
+221 trig R 900
+227 key 57 3000
+231 mouse 400 0 600
+233 trig R 900

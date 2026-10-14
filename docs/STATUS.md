@@ -8,6 +8,8 @@
 - Campaign: Act 1 Prologue "Troubled Past" through the flashback and waking on the Raven's Nest, combat, checkpoint
   saves, Continue (tests/new_campaign.txt, combat.txt, continue.txt; minutes-long runs without a crash).
 - Horde private matches start and play waves.
+- Versus with bots, offline (Private > Team Deathmatch on Checkout, 9 AI players): the match starts, bots fight and
+  score, 60 fps (tests/versus_bots.txt).
 - 60 fps (frame-rate unlock), 16x anisotropy, effect toggles, resolution scaling, native mouse look, keyboard/mouse
   button prompts, launcher with options.
 - Mods: folders with `mod.ini`, priorities and conflicts, merged table of contents, configuration fragments merged
@@ -20,7 +22,6 @@
   party features).
 - Acts 2-5: every chapter loads and plays its first minutes (tools/chapter_test.py); none has been played through
   to its end in tests.
-- Versus with bots: not tested.
 - `tools/xpack` does not decode every LZX block (GearGame.xxx blocks 340-347): packages compressed as a whole cannot
   be rewritten offline yet.
 

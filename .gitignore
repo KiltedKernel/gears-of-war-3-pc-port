@@ -20,3 +20,7 @@ __pycache__/
 *.bin
 *.iso
 *.sav
+# this install's folders (tools/setup.ps1)
+/tools/local.cmd
+/game/
+/xenia/

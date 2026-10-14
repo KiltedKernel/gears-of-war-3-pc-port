@@ -1,6 +1,0 @@
-# hover latency: in the main menu, the cursor glides down the options (CAMPAIGN 373 .. XBOX LIVE 527, rows ~25.6 px
-# apart) over 1.5 s, rests, then jumps back up to VERSUS. Log: "input: glide ... from t", "hover ... select ... t y"
-52 pad 0010 250
-62 cursor 300 373
-64 glide 300 527 1500
-68 cursor 300 399

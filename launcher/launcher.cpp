@@ -648,7 +648,7 @@ void Build()
 {
     const int left = 28, labelW = 220, ctrlX = 260, ctrlW = 320, top = 118, rowH = 50;
     Make(L"STATIC", L"GEARS OF WAR 3", SS_LEFT | WS_VISIBLE, 24, 14, 500, 34, 0, g_fontTitle);
-    Make(L"STATIC", L"PC port \x2014 options", SS_LEFT | WS_VISIBLE, 26, 48, 400, 20, 0, g_fontSmall);
+    Make(L"STATIC", L"PC port " GOW3_VERSION L" \x2014 options, mods and Play", SS_LEFT | WS_VISIBLE, 26, 48, 400, 20, 0, g_fontSmall);
     g_tabs = Make(WC_TABCONTROLW, L"", WS_VISIBLE | WS_CLIPSIBLINGS, 16, 76, 608, 494, ID_TABS, g_font);
     for (int i = 0; i < kPageCount; i++)
     {

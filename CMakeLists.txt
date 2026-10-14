@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(GoW3Recomp C CXX)
+# the release version (VERSION), shown by the launcher and logged by the game
+file(READ ${CMAKE_SOURCE_DIR}/VERSION GOW3_VERSION)
+string(STRIP "${GOW3_VERSION}" GOW3_VERSION)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/VERSION)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 cmake_policy(SET CMP0091 NEW)
@@ -19,7 +23,7 @@ list(FILTER RT_SOURCES EXCLUDE REGEX ".*/thirdparty/.*")
 add_executable(gow3 ${RT_SOURCES} ${RT}/thirdparty/o1heap/o1heap.c)
 target_include_directories(gow3 PRIVATE ${RT} ${RT}/thirdparty/o1heap ${RT}/thirdparty/unordered_dense
     ${XENON}/XenonUtils ${XENON}/thirdparty/fmt/include ${XENON}/thirdparty/xxHash)
-target_compile_definitions(gow3 PRIVATE FMT_HEADER_ONLY NOMINMAX)
+target_compile_definitions(gow3 PRIVATE FMT_HEADER_ONLY NOMINMAX GOW3_VERSION="${GOW3_VERSION}")
 target_compile_options(gow3 PRIVATE -march=x86-64-v3 -Wno-everything -fms-extensions /Z7 $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
 # a windowed program (no console window); the log is build/gow3.log
 target_link_options(gow3 PRIVATE /DEBUG /SUBSYSTEM:WINDOWS /ENTRY:wmainCRTStartup)
@@ -42,6 +46,6 @@ set_source_files_properties(${RT}/thirdparty/o1heap/o1heap.c PROPERTIES COMPILE_
 # ---- launcher: options window for gow3.ini + Play (launcher/) ----
 add_executable(gow3_launcher WIN32 ${CMAKE_SOURCE_DIR}/launcher/launcher.cpp ${CMAKE_SOURCE_DIR}/launcher/launcher.rc)
 target_compile_options(gow3_launcher PRIVATE /W3 -Wno-everything $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
-target_compile_definitions(gow3_launcher PRIVATE UNICODE _UNICODE)
+target_compile_definitions(gow3_launcher PRIVATE UNICODE _UNICODE GOW3_VERSION=L"${GOW3_VERSION}")
 set_target_properties(gow3_launcher PROPERTIES LINK_FLAGS "/MANIFEST:NO")
 target_link_libraries(gow3_launcher PRIVATE comctl32 shcore shell32)

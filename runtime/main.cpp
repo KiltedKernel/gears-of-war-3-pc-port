@@ -105,7 +105,7 @@ int wmain(int argc, wchar_t* argv[])
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
         g_gamePath = std::filesystem::path(exe).parent_path().parent_path().parent_path() / "gow3-decomp" / "disc";
     }
-    LOGFN("Gears of War 3 recompiled; game files: {}", g_gamePath.string());
+    LOGFN("Gears of War 3 PC port {}; game files: {}", GOW3_VERSION, g_gamePath.string());
 
     KiSystemStartup();
     gpu::Initialize();   // window + Direct3D 12 (Xenia's GPU), before the game touches the GPU

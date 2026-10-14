@@ -310,7 +310,7 @@ No game files are in this repository; everything game-derived is made from the d
 
 ## 2026-10-11: Hover selects directly; clicks on sliders and steppers (all CLIK lists)
 - Read the menus' ActionScript: the SwfMovie exports in GearStart.xxx (UI_Frontend.UI_FrontEndAssets, UI_Options.*,
-  ...) hold uncompressed GFX files (tag "GFX", after the export's properties); JPEXS FFDec (offline, D:	oolsfdec)
+  ...) hold uncompressed GFX files (tag "GFX", after the export's properties); JPEXS FFDec (offline)
   decompiles them. Findings:
   - The menus are CLIK ScrollingLists (gears.controls.MainMenuList, OptionsMenuScrollingList, OptionsScrollingList,
     GearDialog.List). The selection is the list's selectedIndex property; ScrollingList.handleInput sets it for a

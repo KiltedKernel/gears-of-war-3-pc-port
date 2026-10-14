@@ -1,6 +1,0 @@
-# main menu -> Options (Start), hover the fourth entry, click
-52 pad 0010 250
-60 pad 0010 250
-66 cursor 300 300
-70 cursor 300 420
-75 click L 120

@@ -1,8 +1,0 @@
-# continue into gameplay, Esc pauses, the cursor hovers down the pause menu (screenshots at 113-118)
-45 pad 0010 250
-53 pad 1000 250
-58 pad 1000 250
-63 pad 1000 250
-110 key 1B 150
-113 cursor 250 394
-116 cursor 250 446

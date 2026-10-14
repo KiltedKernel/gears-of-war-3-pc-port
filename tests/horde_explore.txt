@@ -1,8 +1,0 @@
-# main menu -> HORDE (third entry), then A through the first screens, looking at each
-45 pad 0010 250
-53 pad 0002 150
-55 pad 0002 150
-58 pad 1000 250
-66 pad 1000 250
-74 pad 1000 250
-82 pad 1000 250

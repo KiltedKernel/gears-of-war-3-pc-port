@@ -5,9 +5,16 @@
 # mod folders given with -Mods "examples\mods\A,examples\mods\B", copied to build\testmods), so the player's saves in
 # %LOCALAPPDATA%\GoW3Recomp and mods in build\mods are never touched, and their own settings (build	estdata\gow3.ini:
 # the defaults, or -Settings <ini>). -PlayerData uses the player's own saves, mods and settings (careful).
-param([string]$Script, [int]$Seconds = 120, [string]$Shots = "", [string]$Disc = "$PSScriptRoot/../../gow3-decomp/disc",
+param([string]$Script, [int]$Seconds = 120, [string]$Shots = "", [string]$Disc = "",
       [string]$Mods = "", [string]$Settings = "", [switch]$Fresh, [switch]$PlayerData)
 $build = (Resolve-Path "$PSScriptRoot\..\build").Path
+if (-not $Disc) {   # the disc this install uses (tools\local.cmd, from tools\setup.ps1), else the old default
+    $Disc = "$PSScriptRoot/../../gow3-decomp/disc"
+    $local = Join-Path $PSScriptRoot 'local.cmd'
+    if (Test-Path -LiteralPath $local) {
+        foreach ($l in Get-Content -LiteralPath $local) { if ($l -match '^set "GOW3_GAME=(.*)"$') { $Disc = Join-Path $Matches[1] 'disc' } }
+    }
+}
 $env:GOW3_INPUT_SCRIPT = $Script
 $env:GOW3_SCREENSHOTS = $Shots
 if (-not $PlayerData) {

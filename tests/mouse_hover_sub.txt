@@ -1,5 +1,0 @@
-52 pad 0010 250
-60 cursor 160 372
-63 click L 120
-67 cursor 200 398
-71 click L 120

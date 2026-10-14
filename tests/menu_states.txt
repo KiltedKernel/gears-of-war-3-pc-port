@@ -1,7 +1,0 @@
-# menu detection: title, main menu, campaign menus, continue into gameplay, pause (Start), resume (B)
-45 pad 0010 250
-53 pad 1000 250
-58 pad 1000 250
-63 pad 1000 250
-110 pad 0010 250
-118 pad 2000 250

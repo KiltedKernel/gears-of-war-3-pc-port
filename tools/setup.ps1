@@ -10,22 +10,45 @@
 #   1. extract the ISO to <Game>\disc and check default.xex is the version this port was made for
 #   2. decrypt default.xex to <Game>\default.bin (analysis copy for the tools)
 #   3. fetch + patch + build XenonRecomp (tools\XenonRecomp)        4. fetch + patch + build Xenia's GPU (<Xenia>)
-#   5. recompile the game code into ppc\ and run the instruction tests  6. build build\gow3.exe   7. desktop shortcut
+#   5. recompile the game code into ppc\ and run the instruction tests  6. build build\gow3.exe
+#   7. shortcuts (desktop; -StartMenu: the Start menu too)
 # No game files are part of this repository: everything game-derived is made here from the player's disc.
+# Where the game files (<Game>) and Xenia (<Xenia>) go: -Game / -Xenia, else what a previous setup chose
+# (tools\local.cmd, which tools\env.cmd and tools\playtest.ps1 read too), else folders already next to this one
+# (..\gow3-decomp, ..\xenia), else game\ and xenia\ inside this folder.
 param(
     [string]$Iso = "",
-    [string]$Game = "",           # default: gow3-decomp next to the repository
-    [string]$Xenia = "",          # default: xenia next to the repository
+    [string]$Game = "",
+    [string]$Xenia = "",
     [switch]$NoShortcut,
+    [switch]$StartMenu,            # shortcuts in the Start menu as well
     [switch]$InstallPrerequisites, # install missing tools with winget without asking
     [switch]$CheckOnly             # only report missing tools
 )
 $ErrorActionPreference = 'Stop'
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-if (-not $Game) { $Game = [IO.Path]::GetFullPath((Join-Path $Root '..\gow3-decomp')) }
-if (-not $Xenia) { $Xenia = [IO.Path]::GetFullPath((Join-Path $Root '..\xenia')) }
+$Local = Join-Path $Root 'tools\local.cmd'
+$saved = @{}
+if (Test-Path -LiteralPath $Local) {
+    foreach ($l in Get-Content -LiteralPath $Local) { if ($l -match '^set "(GOW3_\w+)=(.*)"$') { $saved[$Matches[1]] = $Matches[2] } }
+}
+function Pick-Folder($given, $key, $sibling, $inside) {
+    if ($given) { return [IO.Path]::GetFullPath($given) }
+    if ($saved[$key]) { return $saved[$key] }
+    $s = [IO.Path]::GetFullPath((Join-Path $Root $sibling))
+    if (Test-Path -LiteralPath $s) { return $s }
+    return [IO.Path]::GetFullPath((Join-Path $Root $inside))
+}
+$Game = Pick-Folder $Game 'GOW3_GAME' '..\gow3-decomp' 'game'
+$Xenia = Pick-Folder $Xenia 'GOW3_XENIA' '..\xenia' 'xenia'
 $env:GOW3_GAME = $Game
 $env:GOW3_XENIA = $Xenia
+if (-not $CheckOnly) {
+    # remembered for the build scripts (tools\env.cmd), tests and later setups
+    Set-Content -LiteralPath $Local -Encoding ASCII -Value @(
+        '@rem written by tools\setup.ps1: where this install keeps the game files and Xenia (not part of the repository)',
+        "set `"GOW3_GAME=$Game`"", "set `"GOW3_XENIA=$Xenia`"")
+}
 
 function Step($n, $text) { Write-Host ""; Write-Host "[$n/7] $text" -ForegroundColor Cyan }
 function Fail($text) { Write-Host "setup failed: $text" -ForegroundColor Red; exit 1 }
@@ -157,26 +180,25 @@ Run cmd @('/c', "`"$Root\tools\build.cmd`"")
 Run $python @('-P', "$Root\tools\make_prompts.py", 'drawn', "$Root\build\prompts")
 
 # ---- 7. shortcut ----
-Step 7 "shortcut"
-if (-not $NoShortcut) {
-    $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Gears of War 3.lnk'
-    $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
-    $s.TargetPath = "$Root\build\gow3.exe"
-    $s.Arguments = "`"$Game\disc`""
-    $s.WorkingDirectory = "$Root\build"
-    $s.Description = 'Gears of War 3 (PC port)'
-    $s.Save()
-    Write-Host "created $lnk"
-    # the launcher: options window (gow3.ini) + Play; forwards its arguments to gow3.exe
-    $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Gears of War 3 Launcher.lnk'
-    $s = (New-Object -ComObject WScript.Shell).CreateShortcut($lnk)
-    $s.TargetPath = "$Root\build\gow3_launcher.exe"
-    $s.Arguments = "`"$Game\disc`""
-    $s.WorkingDirectory = "$Root\build"
-    $s.IconLocation = "$Root\build\gow3.exe,0"
-    $s.Description = 'Gears of War 3 (PC port) - options and Play'
-    $s.Save()
-    Write-Host "created $lnk"
+Step 7 "shortcuts"
+# the game, and the launcher (options window + Play; it forwards its arguments to gow3.exe)
+function New-Shortcuts($folder) {
+    New-Item -ItemType Directory -Force $folder | Out-Null
+    $shell = New-Object -ComObject WScript.Shell
+    foreach ($item in @(@('Gears of War 3', 'gow3.exe', 'Gears of War 3 (PC port)'),
+                        @('Gears of War 3 Launcher', 'gow3_launcher.exe', 'Gears of War 3 (PC port) - options, mods and Play'))) {
+        $lnk = Join-Path $folder "$($item[0]).lnk"
+        $s = $shell.CreateShortcut($lnk)
+        $s.TargetPath = "$Root\build\$($item[1])"
+        $s.Arguments = "`"$Game\disc`""
+        $s.WorkingDirectory = "$Root\build"
+        $s.IconLocation = "$Root\build\gow3.exe,0"
+        $s.Description = $item[2]
+        $s.Save()
+        Write-Host "created $lnk"
+    }
 }
+if (-not $NoShortcut) { New-Shortcuts ([Environment]::GetFolderPath('Desktop')) }
+if ($StartMenu) { New-Shortcuts (Join-Path ([Environment]::GetFolderPath('Programs')) 'Gears of War 3 PC port') }
 Write-Host ""
 Write-Host "done: run build\gow3.exe (settings: build\gow3.ini, saves: %LOCALAPPDATA%\GoW3Recomp)" -ForegroundColor Green

@@ -1,4 +1,4 @@
-// GoW2 audio, kernel side (Xenia's xboxkrnl_audio*.cc semantics). The XDK's XAudio runs inside the title: it mixes its
+// Audio, kernel side (Xenia's xboxkrnl_audio*.cc semantics). The XDK's XAudio runs inside the title: it mixes its
 // voices and hands the "system" 256-sample, 6-channel frames through a render driver callback; XMA-compressed sounds
 // are decoded by the XMA hardware, whose 64-byte contexts the title programs in physical memory and drives through
 // MMIO at 0x7FEA0000. Both are Xenia's audio module (XAudio2 output + FFmpeg XMA decoder) behind xe_glue;
@@ -8,9 +8,9 @@
 #include "function.h"
 #include "memory.h"
 #include <os/logger.h>
-#include "../../xe_glue/gow2_gpu.h"
+#include "../../xe_glue/port_gpu.h"
 
-namespace gow2k
+namespace x360k
 {
 
 namespace
@@ -22,7 +22,7 @@ uint32_t XAudioRegisterRenderDriverClient(be<uint32_t>* callback, be<uint32_t>* 
 {
     if (!callback || !callback[0])
         return 0x80070057; // X_E_INVALIDARG
-    const int index = gow2gpu::AudioRegisterClient(callback[0], callback[1]);
+    const int index = portgpu::AudioRegisterClient(callback[0], callback[1]);
     if (index < 0)
     {
         LOGN_WARNING("audio: no audio output; render driver client not registered");
@@ -36,7 +36,7 @@ uint32_t XAudioRegisterRenderDriverClient(be<uint32_t>* callback, be<uint32_t>* 
 
 uint32_t XAudioUnregisterRenderDriverClient(uint32_t driver)
 {
-    if ((driver & 0xFFFF) != 0xFFFF) gow2gpu::AudioUnregisterClient(int(driver & 0xFFFF));
+    if ((driver & 0xFFFF) != 0xFFFF) portgpu::AudioUnregisterClient(int(driver & 0xFFFF));
     return 0;
 }
 
@@ -76,7 +76,7 @@ uint32_t XAudioSubmitRenderDriverFrame(uint32_t driver, uint32_t samples)
         windowStart = now; frames = 0; peak = 0;
     }
 
-    if ((driver & 0xFFFF) != 0xFFFF) gow2gpu::AudioSubmitFrame(int(driver & 0xFFFF), samples);
+    if ((driver & 0xFFFF) != 0xFFFF) portgpu::AudioSubmitFrame(int(driver & 0xFFFF), samples);
     return 0;
 }
 
@@ -94,7 +94,7 @@ uint32_t XAudioGetVoiceCategoryVolume(uint32_t category, be<float>* volume)
 
 uint32_t XMACreateContext(be<uint32_t>* context)
 {
-    const uint32_t c = gow2gpu::XmaAllocateContext();
+    const uint32_t c = portgpu::XmaAllocateContext();
     *context = c;
     static int logged = 0;
     if (logged++ < 4) LOGFN("audio: XMACreateContext -> {:08X}", c);
@@ -103,16 +103,16 @@ uint32_t XMACreateContext(be<uint32_t>* context)
 
 uint32_t XMAReleaseContext(uint32_t context)
 {
-    gow2gpu::XmaReleaseContext(context);
+    portgpu::XmaReleaseContext(context);
     return 0;
 }
 
-} // namespace gow2k
+} // namespace x360k
 
-GUEST_FUNCTION_HOOK(__imp__XAudioRegisterRenderDriverClient, gow2k::XAudioRegisterRenderDriverClient);
-GUEST_FUNCTION_HOOK(__imp__XAudioUnregisterRenderDriverClient, gow2k::XAudioUnregisterRenderDriverClient);
-GUEST_FUNCTION_HOOK(__imp__XAudioSubmitRenderDriverFrame, gow2k::XAudioSubmitRenderDriverFrame);
-GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolumeChangeMask, gow2k::XAudioGetVoiceCategoryVolumeChangeMask);
-GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolume, gow2k::XAudioGetVoiceCategoryVolume);
-GUEST_FUNCTION_HOOK(__imp__XMACreateContext, gow2k::XMACreateContext);
-GUEST_FUNCTION_HOOK(__imp__XMAReleaseContext, gow2k::XMAReleaseContext);
+GUEST_FUNCTION_HOOK(__imp__XAudioRegisterRenderDriverClient, x360k::XAudioRegisterRenderDriverClient);
+GUEST_FUNCTION_HOOK(__imp__XAudioUnregisterRenderDriverClient, x360k::XAudioUnregisterRenderDriverClient);
+GUEST_FUNCTION_HOOK(__imp__XAudioSubmitRenderDriverFrame, x360k::XAudioSubmitRenderDriverFrame);
+GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolumeChangeMask, x360k::XAudioGetVoiceCategoryVolumeChangeMask);
+GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolume, x360k::XAudioGetVoiceCategoryVolume);
+GUEST_FUNCTION_HOOK(__imp__XMACreateContext, x360k::XMACreateContext);
+GUEST_FUNCTION_HOOK(__imp__XMAReleaseContext, x360k::XMAReleaseContext);

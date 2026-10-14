@@ -1,4 +1,4 @@
-// Input for the GoW2 runtime: XInput controllers, plus keyboard and mouse mapped onto player 1's controller.
+// Input for the port's runtime: XInput controllers, plus keyboard and mouse mapped onto player 1's controller.
 //
 // Player 1 (user 0) is always connected: a real pad in XInput slot 0 if present, merged with keyboard/mouse.
 // Players 2-4 are connected only when a real pad is in their slot.
@@ -22,7 +22,7 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
-#include "../../xe_glue/gow2_gpu.h"
+#include "../../xe_glue/port_gpu.h"
 
 void XamNotifyEnqueueEvent(uint32_t dwId, uint32_t dwParam);   // kernel/xam.cpp
 #pragma comment(lib, "xinput.lib")
@@ -68,7 +68,7 @@ namespace
         return (GetAsyncKeyState(vk) & 0x8000) != 0;
     }
 
-    HWND Window() { return (HWND)gow2gpu::GetWindowHandle(); }
+    HWND Window() { return (HWND)portgpu::GetWindowHandle(); }
     bool Focused() { HWND w = Window(); return w && (g_scripted || GetForegroundWindow() == w); }
 
     // ---- mouse ----
@@ -94,7 +94,7 @@ namespace
     {
         if (g_scripted) { g_captured = true; return; }   // scripted: always captured, the real cursor untouched
         if (g_captured.exchange(on) == on) return;
-        gow2gpu::SetMouseCaptured(on);   // hides the cursor over the window
+        portgpu::SetMouseCaptured(on);   // hides the cursor over the window
         if (on) { POINT c = WindowCenter(); SetCursorPos(c.x, c.y); }
         else ClipCursor(nullptr);        // release the pin (MouseThread)
     }
@@ -143,7 +143,7 @@ namespace
         WNDCLASSW wc{};
         wc.lpfnWndProc = RawInputProc;
         wc.hInstance = GetModuleHandleW(nullptr);
-        wc.lpszClassName = L"GoW2RawInput";
+        wc.lpszClassName = L"GoW3RawInput";
         RegisterClassW(&wc);
         HWND hwnd = CreateWindowExW(0, wc.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, wc.hInstance, nullptr);
         RAWINPUTDEVICE rid{ 0x01, 0x02, RIDEV_INPUTSINK, hwnd };   // generic desktop / mouse, also when not focused
@@ -164,7 +164,7 @@ namespace
             Sleep(2);
             if (!Window()) continue;
             const bool hotkey = Focused() && (Down(VK_F11) || (Down(VK_MENU) && Down(VK_RETURN)));
-            if (hotkey && !hotkeyWasDown) { SetCaptured(false); gow2gpu::ToggleFullscreen(); }
+            if (hotkey && !hotkeyWasDown) { SetCaptured(false); portgpu::ToggleFullscreen(); }
             hotkeyWasDown = hotkey;
             static bool wasMenu = false;
             const bool menu = g_menuMode;
@@ -455,14 +455,13 @@ uint32_t hid::GetCapabilities(uint32_t userIndex, XAMINPUT_CAPABILITIES* caps)
 }
 
 // host-endian here; the XAM layer byte-swaps
-namespace mouse_menu { void OnGameThread(); }   // ui/mouse_menu.cpp
 namespace gfx_menu { void OnGameThread(); }     // ui/gfx_menu.cpp
 namespace navmesh_build { void OnGameThread(); }   // ue3/navmesh_build.cpp
 namespace campaign_chapters { void OnGameThread(); }   // ue3/campaign_chapters.cpp
 
 uint32_t hid::GetState(uint32_t userIndex, XAMINPUT_STATE* state)
 {
-    if (userIndex == 0) { mouse_menu::OnGameThread(); gfx_menu::OnGameThread(); navmesh_build::OnGameThread(); campaign_chapters::OnGameThread(); }   // the game thread, once a frame
+    if (userIndex == 0) { gfx_menu::OnGameThread(); navmesh_build::OnGameThread(); campaign_chapters::OnGameThread(); }   // the game thread, once a frame
     XINPUT_GAMEPAD g;
     if (userIndex >= 4)
         return ERROR_DEVICE_NOT_CONNECTED;

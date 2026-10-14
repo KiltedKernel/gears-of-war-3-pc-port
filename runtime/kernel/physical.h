@@ -1,7 +1,7 @@
 #pragma once
-// Physical memory allocator for the Xbox 360's 512 MB (GoW2 runtime). Address-ordered first fit with 4 KB granularity:
+// Physical memory allocator for the Xbox 360's 512 MB (port runtime). Address-ordered first fit with 4 KB granularity:
 // it serves MmAllocatePhysicalMemoryEx (any size; UE3 takes one 140 MB pool) and the 64 KB frames that back committed
-// virtual memory (kernel/gow2_memory.cpp). Offsets are physical (0x00000000-0x1FFFFFFF); guest virtual = 0xA0000000 | offset.
+// virtual memory (kernel/x360_memory.cpp). Offsets are physical (0x00000000-0x1FFFFFFF); guest virtual = 0xA0000000 | offset.
 #include <cstdint>
 
 namespace physical

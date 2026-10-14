@@ -1,5 +1,5 @@
 #pragma once
-// Timed waits for kernel objects (GoW2 runtime). std::atomic::wait has no timeout; on Windows it is built on
+// Timed waits for kernel objects (port runtime). std::atomic::wait has no timeout; on Windows it is built on
 // WaitOnAddress, so waiting here with WaitOnAddress is woken by the same notify_one/notify_all calls.
 #include <atomic>
 #include <cstdint>

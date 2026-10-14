@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.1 (2026-10-13)
+
+Housekeeping: names, license notices, and the XEX decryption key no longer stored in the repository.
+
+- The decryption key for the game's executable is no longer in this repository: tools/xex_unpack.py reads it from
+  XenonRecomp's sources, which the setup downloads (the setup now builds XenonRecomp before decrypting). Old commits
+  were rewritten without it.
+- THIRD_PARTY_NOTICES.md: the licenses of Xenia (BSD-3-Clause), XenonRecomp (MIT), o1heap and unordered_dense (MIT),
+  and the components the setup downloads (FFmpeg's LGPL among them).
+- Names inherited from the Gears of War 2 port this runtime started from are gone: kernel files are x360_*.cpp, the
+  recompiled game code library is gow3_ppc, the GPU bridge is port_gpu.h / portgpu, Xenia's build options are XE_PORT*
+  (patch tools/xenia-gow3.patch), its build folder build-gow3. Two dead Gears 2 modules (its menu mouse and settings
+  code, never started in Gears 3) were removed, with three gow3.ini keys that only they read (distortion, fog_volumes,
+  self_shadowing: they had no effect in Gears 3).
+- Scripts read the install's folders from tools/local.cmd (tools/local.sh for bash, modtool.py).
+
 ## 0.1.0 (2026-10-13)
 
 First release: Gears of War 3 as a native Windows program, made from the player's own disc image.

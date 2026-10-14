@@ -42,7 +42,7 @@ struct Event final : KernelObject, HostObject<XKEVENT>
         return signaled.compare_exchange_strong(expected, false);
     }
 
-    // GoW2: finite timeouts too (Unleashed only had 0 and INFINITE)
+    // Port: finite timeouts too (Unleashed only had 0 and INFINITE)
     uint32_t Wait(uint32_t timeout) override
     {
         kwait::Deadline d(timeout);
@@ -97,7 +97,7 @@ struct Semaphore final : KernelObject, HostObject<XKSEMAPHORE>
         return false;
     }
 
-    // GoW2: finite timeouts too
+    // Port: finite timeouts too
     uint32_t Wait(uint32_t timeout) override
     {
         kwait::Deadline d(timeout);
@@ -484,7 +484,7 @@ void MmQueryStatistics()
     LOG_UTILITY("!!! STUB !!!");
 }
 
-// GoW2: completion events of I/O calls (kernel/gow2_files.cpp)
+// Port: completion events of I/O calls (kernel/x360_files.cpp)
 uint32_t SignalGuestEvent(uint32_t handle)
 {
     if (!IsKernelObject(handle))
@@ -1474,7 +1474,7 @@ uint32_t ExCreateThread(be<uint32_t>* handle, uint32_t stackSize, be<uint32_t>* 
 
     uint32_t hostThreadId;
 
-    // GoW2: with an XAPI startup routine the kernel calls xApiThreadStartup(startAddress, startContext); it sets up
+    // Port: with an XAPI startup routine the kernel calls xApiThreadStartup(startAddress, startContext); it sets up
     // the per-thread runtime data (TLS, CRT) before calling the thread function
     GuestThreadParams params = xApiThreadStartup
         ? GuestThreadParams{ xApiThreadStartup, startAddress, creationFlags, startContext }
@@ -1643,21 +1643,21 @@ void XMACreateContext()
 GUEST_FUNCTION_HOOK(__imp__XGetVideoMode, VdQueryVideoMode); // XGetVideoMode
 GUEST_FUNCTION_HOOK(__imp__XNotifyGetNext, XNotifyGetNext);
 GUEST_FUNCTION_HOOK(__imp__XGetGameRegion, XGetGameRegion);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMsgStartIORequest, XMsgStartIORequest);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninState, XamUserGetSigninState);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMsgStartIORequest, XMsgStartIORequest);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninState, XamUserGetSigninState);
 GUEST_FUNCTION_HOOK(__imp__XamGetSystemVersion, XamGetSystemVersion);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentCreateEx, XamContentCreateEx);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentDelete, XamContentDelete);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentClose, XamContentClose);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentGetCreator, XamContentGetCreator);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentCreateEnumerator, XamContentCreateEnumerator);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceState, XamContentGetDeviceState);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceData, XamContentGetDeviceData);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentCreateEx, XamContentCreateEx);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentDelete, XamContentDelete);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentClose, XamContentClose);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentGetCreator, XamContentGetCreator);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentCreateEnumerator, XamContentCreateEnumerator);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceState, XamContentGetDeviceState);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceData, XamContentGetDeviceData);
 GUEST_FUNCTION_HOOK(__imp__XamEnumerate, XamEnumerate);
 GUEST_FUNCTION_HOOK(__imp__XamNotifyCreateListener, XamNotifyCreateListener);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninInfo, XamUserGetSigninInfo);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninInfo, XamUserGetSigninInfo);
 GUEST_FUNCTION_HOOK(__imp__XamShowSigninUI, XamShowSigninUI);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamShowDeviceSelectorUI, XamShowDeviceSelectorUI);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamShowDeviceSelectorUI, XamShowDeviceSelectorUI);
 GUEST_FUNCTION_HOOK(__imp__XamShowMessageBoxUI, XamShowMessageBoxUI);
 GUEST_FUNCTION_HOOK(__imp__XamShowDirtyDiscErrorUI, XamShowDirtyDiscErrorUI);
 GUEST_FUNCTION_HOOK(__imp__XamEnableInactivityProcessing, XamEnableInactivityProcessing);
@@ -1666,37 +1666,37 @@ GUEST_FUNCTION_HOOK(__imp__XamShowMessageBoxUIEx, XamShowMessageBoxUIEx);
 GUEST_FUNCTION_HOOK(__imp__XGetLanguage, XGetLanguage);
 GUEST_FUNCTION_HOOK(__imp__XGetAVPack, XGetAVPack);
 GUEST_FUNCTION_HOOK(__imp__XamLoaderTerminateTitle, XamLoaderTerminateTitle);
-// replaced by kernel/gow2_xex.cpp: GUEST_FUNCTION_HOOK(__imp__XamGetExecutionId, XamGetExecutionId);
+// replaced by kernel/x360_xex.cpp: GUEST_FUNCTION_HOOK(__imp__XamGetExecutionId, XamGetExecutionId);
 GUEST_FUNCTION_HOOK(__imp__XamLoaderLaunchTitle, XamLoaderLaunchTitle);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtOpenFile, NtOpenFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtOpenFile, NtOpenFile);
 GUEST_FUNCTION_HOOK(__imp__RtlInitAnsiString, RtlInitAnsiString);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtCreateFile, NtCreateFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtCreateFile, NtCreateFile);
 GUEST_FUNCTION_HOOK(__imp__NtClose, NtClose);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtSetInformationFile, NtSetInformationFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtSetInformationFile, NtSetInformationFile);
 GUEST_FUNCTION_HOOK(__imp__FscSetCacheElementCount, FscSetCacheElementCount);
 GUEST_FUNCTION_HOOK(__imp__NtWaitForSingleObjectEx, NtWaitForSingleObjectEx);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtWriteFile, NtWriteFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtWriteFile, NtWriteFile);
 GUEST_FUNCTION_HOOK(__imp__ExGetXConfigSetting, ExGetXConfigSetting);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryVirtualMemory, NtQueryVirtualMemory);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__MmQueryStatistics, MmQueryStatistics);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryVirtualMemory, NtQueryVirtualMemory);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__MmQueryStatistics, MmQueryStatistics);
 GUEST_FUNCTION_HOOK(__imp__NtCreateEvent, NtCreateEvent);
 GUEST_FUNCTION_HOOK(__imp__XexCheckExecutablePrivilege, XexCheckExecutablePrivilege);
 GUEST_FUNCTION_HOOK(__imp__DbgPrint, DbgPrint);
 GUEST_FUNCTION_HOOK(__imp____C_specific_handler, __C_specific_handler_x);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlNtStatusToDosError, RtlNtStatusToDosError);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XexGetProcedureAddress, XexGetProcedureAddress);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XexGetModuleSection, XexGetModuleSection);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlNtStatusToDosError, RtlNtStatusToDosError);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XexGetProcedureAddress, XexGetProcedureAddress);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XexGetModuleSection, XexGetModuleSection);
 GUEST_FUNCTION_HOOK(__imp__RtlUnicodeToMultiByteN, RtlUnicodeToMultiByteN);
 GUEST_FUNCTION_HOOK(__imp__KeDelayExecutionThread, KeDelayExecutionThread);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__ExFreePool, ExFreePool);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryInformationFile, NtQueryInformationFile);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryVolumeInformationFile, NtQueryVolumeInformationFile);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryDirectoryFile, NtQueryDirectoryFile);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtReadFileScatter, NtReadFileScatter);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtReadFile, NtReadFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__ExFreePool, ExFreePool);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryInformationFile, NtQueryInformationFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryVolumeInformationFile, NtQueryVolumeInformationFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryDirectoryFile, NtQueryDirectoryFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtReadFileScatter, NtReadFileScatter);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtReadFile, NtReadFile);
 GUEST_FUNCTION_HOOK(__imp__NtDuplicateObject, NtDuplicateObject);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtAllocateVirtualMemory, NtAllocateVirtualMemory);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtFreeVirtualMemory, NtFreeVirtualMemory);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtAllocateVirtualMemory, NtAllocateVirtualMemory);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtFreeVirtualMemory, NtFreeVirtualMemory);
 GUEST_FUNCTION_HOOK(__imp__ObDereferenceObject, ObDereferenceObject);
 GUEST_FUNCTION_HOOK(__imp__KeSetBasePriorityThread, KeSetBasePriorityThread);
 GUEST_FUNCTION_HOOK(__imp__ObReferenceObjectByHandle, ObReferenceObjectByHandle);
@@ -1705,9 +1705,9 @@ GUEST_FUNCTION_HOOK(__imp__NtSuspendThread, NtSuspendThread);
 GUEST_FUNCTION_HOOK(__imp__KeSetAffinityThread, KeSetAffinityThread);
 GUEST_FUNCTION_HOOK(__imp__RtlLeaveCriticalSection, RtlLeaveCriticalSection);
 GUEST_FUNCTION_HOOK(__imp__RtlEnterCriticalSection, RtlEnterCriticalSection);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlImageXexHeaderField, RtlImageXexHeaderField);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlImageXexHeaderField, RtlImageXexHeaderField);
 GUEST_FUNCTION_HOOK(__imp__HalReturnToFirmware, HalReturnToFirmware);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlFillMemoryUlong, RtlFillMemoryUlong);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlFillMemoryUlong, RtlFillMemoryUlong);
 GUEST_FUNCTION_HOOK(__imp__KeBugCheckEx, KeBugCheckEx);
 GUEST_FUNCTION_HOOK(__imp__KeGetCurrentProcessType, KeGetCurrentProcessType);
 GUEST_FUNCTION_HOOK(__imp__RtlCompareMemoryUlong, RtlCompareMemoryUlong);
@@ -1717,37 +1717,37 @@ GUEST_FUNCTION_HOOK(__imp__KfReleaseSpinLock, KfReleaseSpinLock);
 GUEST_FUNCTION_HOOK(__imp__KfAcquireSpinLock, KfAcquireSpinLock);
 GUEST_FUNCTION_HOOK(__imp__KeQueryPerformanceFrequency, KeQueryPerformanceFrequency);
 GUEST_FUNCTION_HOOK(__imp__MmFreePhysicalMemory, MmFreePhysicalMemory);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdPersistDisplay, VdPersistDisplay);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdSwap, VdSwap);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdGetSystemCommandBuffer, VdGetSystemCommandBuffer);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdPersistDisplay, VdPersistDisplay);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdSwap, VdSwap);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdGetSystemCommandBuffer, VdGetSystemCommandBuffer);
 GUEST_FUNCTION_HOOK(__imp__KeReleaseSpinLockFromRaisedIrql, KeReleaseSpinLockFromRaisedIrql);
 GUEST_FUNCTION_HOOK(__imp__KeAcquireSpinLockAtRaisedIrql, KeAcquireSpinLockAtRaisedIrql);
 GUEST_FUNCTION_HOOK(__imp__KiApcNormalRoutineNop, KiApcNormalRoutineNop);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdEnableRingBufferRPtrWriteBack, VdEnableRingBufferRPtrWriteBack);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdInitializeRingBuffer, VdInitializeRingBuffer);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__MmGetPhysicalAddress, MmGetPhysicalAddress);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdSetSystemCommandBufferGpuIdentifierAddress, VdSetSystemCommandBufferGpuIdentifierAddress);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdEnableRingBufferRPtrWriteBack, VdEnableRingBufferRPtrWriteBack);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdInitializeRingBuffer, VdInitializeRingBuffer);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__MmGetPhysicalAddress, MmGetPhysicalAddress);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdSetSystemCommandBufferGpuIdentifierAddress, VdSetSystemCommandBufferGpuIdentifierAddress);
 GUEST_FUNCTION_HOOK(__imp__ExRegisterTitleTerminateNotification, ExRegisterTitleTerminateNotification);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdShutdownEngines, VdShutdownEngines);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdQueryVideoMode, VdQueryVideoMode);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdGetCurrentDisplayInformation, VdGetCurrentDisplayInformation);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdSetDisplayMode, VdSetDisplayMode);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdSetGraphicsInterruptCallback, VdSetGraphicsInterruptCallback);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdInitializeEngines, VdInitializeEngines);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdIsHSIOTrainingSucceeded, VdIsHSIOTrainingSucceeded);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdGetCurrentDisplayGamma, VdGetCurrentDisplayGamma);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdQueryVideoFlags, VdQueryVideoFlags);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdCallGraphicsNotificationRoutines, VdCallGraphicsNotificationRoutines);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdInitializeScalerCommandBuffer, VdInitializeScalerCommandBuffer);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__KeLeaveCriticalRegion, KeLeaveCriticalRegion);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAM, VdRetrainEDRAM);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAMWorker, VdRetrainEDRAMWorker);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__KeEnterCriticalRegion, KeEnterCriticalRegion);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdShutdownEngines, VdShutdownEngines);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdQueryVideoMode, VdQueryVideoMode);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdGetCurrentDisplayInformation, VdGetCurrentDisplayInformation);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdSetDisplayMode, VdSetDisplayMode);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdSetGraphicsInterruptCallback, VdSetGraphicsInterruptCallback);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdInitializeEngines, VdInitializeEngines);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdIsHSIOTrainingSucceeded, VdIsHSIOTrainingSucceeded);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdGetCurrentDisplayGamma, VdGetCurrentDisplayGamma);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdQueryVideoFlags, VdQueryVideoFlags);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdCallGraphicsNotificationRoutines, VdCallGraphicsNotificationRoutines);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdInitializeScalerCommandBuffer, VdInitializeScalerCommandBuffer);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__KeLeaveCriticalRegion, KeLeaveCriticalRegion);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAM, VdRetrainEDRAM);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAMWorker, VdRetrainEDRAMWorker);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__KeEnterCriticalRegion, KeEnterCriticalRegion);
 GUEST_FUNCTION_HOOK(__imp__MmAllocatePhysicalMemoryEx, MmAllocatePhysicalMemoryEx);
 GUEST_FUNCTION_HOOK(__imp__ObDeleteSymbolicLink, ObDeleteSymbolicLink);
 GUEST_FUNCTION_HOOK(__imp__ObCreateSymbolicLink, ObCreateSymbolicLink);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__MmQueryAddressProtect, MmQueryAddressProtect);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdEnableDisableClockGating, VdEnableDisableClockGating);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__MmQueryAddressProtect, MmQueryAddressProtect);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__VdEnableDisableClockGating, VdEnableDisableClockGating);
 GUEST_FUNCTION_HOOK(__imp__KeBugCheck, KeBugCheck);
 GUEST_FUNCTION_HOOK(__imp__KeLockL2, KeLockL2);
 GUEST_FUNCTION_HOOK(__imp__KeUnlockL2, KeUnlockL2);
@@ -1758,27 +1758,27 @@ GUEST_FUNCTION_HOOK(__imp__KeTlsGetValue, KeTlsGetValue);
 GUEST_FUNCTION_HOOK(__imp__KeTlsSetValue, KeTlsSetValue);
 GUEST_FUNCTION_HOOK(__imp__KeTlsAlloc, KeTlsAlloc);
 GUEST_FUNCTION_HOOK(__imp__KeTlsFree, KeTlsFree);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMsgInProcessCall, XMsgInProcessCall);
-// XamUserReadProfileSettings: kernel/gow2_profile.cpp
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_WSAStartup, NetDll_WSAStartup);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_WSACleanup, NetDll_WSACleanup);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_socket, NetDll_socket);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_closesocket, NetDll_closesocket);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_setsockopt, NetDll_setsockopt);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_bind, NetDll_bind);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_connect, NetDll_connect);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_listen, NetDll_listen);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_accept, NetDll_accept);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_select, NetDll_select);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_recv, NetDll_recv);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_send, NetDll_send);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_inet_addr, NetDll_inet_addr);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll___WSAFDIsSet, NetDll___WSAFDIsSet);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMsgStartIORequestEx, XMsgStartIORequestEx);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamInputGetCapabilities, XamInputGetCapabilities);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamInputGetState, XamInputGetState);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamInputSetState, XamInputSetState);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XexGetModuleHandle, XexGetModuleHandle);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMsgInProcessCall, XMsgInProcessCall);
+// XamUserReadProfileSettings: kernel/x360_profile.cpp
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_WSAStartup, NetDll_WSAStartup);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_WSACleanup, NetDll_WSACleanup);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_socket, NetDll_socket);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_closesocket, NetDll_closesocket);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_setsockopt, NetDll_setsockopt);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_bind, NetDll_bind);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_connect, NetDll_connect);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_listen, NetDll_listen);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_accept, NetDll_accept);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_select, NetDll_select);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_recv, NetDll_recv);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_send, NetDll_send);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_inet_addr, NetDll_inet_addr);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll___WSAFDIsSet, NetDll___WSAFDIsSet);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMsgStartIORequestEx, XMsgStartIORequestEx);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamInputGetCapabilities, XamInputGetCapabilities);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamInputGetState, XamInputGetState);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XamInputSetState, XamInputSetState);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XexGetModuleHandle, XexGetModuleHandle);
 GUEST_FUNCTION_HOOK(__imp__RtlTryEnterCriticalSection, RtlTryEnterCriticalSection);
 GUEST_FUNCTION_HOOK(__imp__RtlInitializeCriticalSectionAndSpinCount, RtlInitializeCriticalSectionAndSpinCount);
 GUEST_FUNCTION_HOOK(__imp__XeCryptBnQwBeSigVerify, XeCryptBnQwBeSigVerify);
@@ -1788,7 +1788,7 @@ GUEST_FUNCTION_HOOK(__imp__XeCryptSha, XeCryptSha);
 GUEST_FUNCTION_HOOK(__imp__KeEnableFpuExceptions, KeEnableFpuExceptions);
 GUEST_FUNCTION_HOOK(__imp__RtlUnwind, RtlUnwind_x);
 GUEST_FUNCTION_HOOK(__imp__RtlCaptureContext, RtlCaptureContext_x);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryFullAttributesFile, NtQueryFullAttributesFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtQueryFullAttributesFile, NtQueryFullAttributesFile);
 GUEST_FUNCTION_HOOK(__imp__RtlMultiByteToUnicodeN, RtlMultiByteToUnicodeN);
 GUEST_FUNCTION_HOOK(__imp__DbgBreakPoint, DbgBreakPoint);
 GUEST_FUNCTION_HOOK(__imp__MmQueryAllocationSize, MmQueryAllocationSize);
@@ -1797,42 +1797,42 @@ GUEST_FUNCTION_HOOK(__imp__NtResumeThread, NtResumeThread);
 GUEST_FUNCTION_HOOK(__imp__NtSetEvent, NtSetEvent);
 GUEST_FUNCTION_HOOK(__imp__NtCreateSemaphore, NtCreateSemaphore);
 GUEST_FUNCTION_HOOK(__imp__NtReleaseSemaphore, NtReleaseSemaphore);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtWaitForMultipleObjectsEx, NtWaitForMultipleObjectsEx);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtWaitForMultipleObjectsEx, NtWaitForMultipleObjectsEx);
 GUEST_FUNCTION_HOOK(__imp__RtlCompareStringN, RtlCompareStringN);
 GUEST_FUNCTION_HOOK(__imp__StfsControlDevice, StfsControlDevice);
 GUEST_FUNCTION_HOOK(__imp__StfsCreateDevice, StfsCreateDevice);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtFlushBuffersFile, NtFlushBuffersFile);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NtFlushBuffersFile, NtFlushBuffersFile);
 GUEST_FUNCTION_HOOK(__imp__KeQuerySystemTime, KeQuerySystemTime);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlTimeToTimeFields, RtlTimeToTimeFields);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlTimeToTimeFields, RtlTimeToTimeFields);
 GUEST_FUNCTION_HOOK(__imp__RtlFreeAnsiString, RtlFreeAnsiString);
 GUEST_FUNCTION_HOOK(__imp__RtlUnicodeStringToAnsiString, RtlUnicodeStringToAnsiString);
 GUEST_FUNCTION_HOOK(__imp__RtlInitUnicodeString, RtlInitUnicodeString);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__ExTerminateThread, ExTerminateThread);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__ExTerminateThread, ExTerminateThread);
 GUEST_FUNCTION_HOOK(__imp__ExCreateThread, ExCreateThread);
 GUEST_FUNCTION_HOOK(__imp__IoInvalidDeviceRequest, IoInvalidDeviceRequest);
 GUEST_FUNCTION_HOOK(__imp__ObReferenceObject, ObReferenceObject);
 GUEST_FUNCTION_HOOK(__imp__IoCreateDevice, IoCreateDevice);
 GUEST_FUNCTION_HOOK(__imp__IoDeleteDevice, IoDeleteDevice);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__ExAllocatePoolTypeWithTag, ExAllocatePoolTypeWithTag);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlTimeFieldsToTime, RtlTimeFieldsToTime);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__ExAllocatePoolTypeWithTag, ExAllocatePoolTypeWithTag);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__RtlTimeFieldsToTime, RtlTimeFieldsToTime);
 GUEST_FUNCTION_HOOK(__imp__IoCompleteRequest, IoCompleteRequest);
 GUEST_FUNCTION_HOOK(__imp__RtlUpcaseUnicodeChar, RtlUpcaseUnicodeChar);
 GUEST_FUNCTION_HOOK(__imp__ObIsTitleObject, ObIsTitleObject);
 GUEST_FUNCTION_HOOK(__imp__IoCheckShareAccess, IoCheckShareAccess);
 GUEST_FUNCTION_HOOK(__imp__IoSetShareAccess, IoSetShareAccess);
 GUEST_FUNCTION_HOOK(__imp__IoRemoveShareAccess, IoRemoveShareAccess);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_XNetStartup, NetDll_XNetStartup);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_XNetGetTitleXnAddr, NetDll_XNetGetTitleXnAddr);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_XNetStartup, NetDll_XNetStartup);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__NetDll_XNetGetTitleXnAddr, NetDll_XNetGetTitleXnAddr);
 GUEST_FUNCTION_HOOK(__imp__KeWaitForMultipleObjects, KeWaitForMultipleObjects);
 GUEST_FUNCTION_HOOK(__imp__KeRaiseIrqlToDpcLevel, KeRaiseIrqlToDpcLevel);
 GUEST_FUNCTION_HOOK(__imp__KfLowerIrql, KfLowerIrql);
 GUEST_FUNCTION_HOOK(__imp__KeReleaseSemaphore, KeReleaseSemaphore);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolume, XAudioGetVoiceCategoryVolume);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolumeChangeMask, XAudioGetVoiceCategoryVolumeChangeMask);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolume, XAudioGetVoiceCategoryVolume);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioGetVoiceCategoryVolumeChangeMask, XAudioGetVoiceCategoryVolumeChangeMask);
 GUEST_FUNCTION_HOOK(__imp__KeResumeThread, KeResumeThread);
 GUEST_FUNCTION_HOOK(__imp__KeInitializeSemaphore, KeInitializeSemaphore);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMAReleaseContext, XMAReleaseContext);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMACreateContext, XMACreateContext);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioRegisterRenderDriverClient, XAudioRegisterRenderDriverClient);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioUnregisterRenderDriverClient, XAudioUnregisterRenderDriverClient);
-// replaced by kernel/gow2_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioSubmitRenderDriverFrame, XAudioSubmitRenderDriverFrame);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMAReleaseContext, XMAReleaseContext);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XMACreateContext, XMACreateContext);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioRegisterRenderDriverClient, XAudioRegisterRenderDriverClient);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioUnregisterRenderDriverClient, XAudioUnregisterRenderDriverClient);
+// replaced by kernel/x360_*.cpp: GUEST_FUNCTION_HOOK(__imp__XAudioSubmitRenderDriverFrame, XAudioSubmitRenderDriverFrame);

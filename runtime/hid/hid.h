@@ -1,5 +1,5 @@
 #pragma once
-// Input for the GoW2 runtime: XInput pads (hid.cpp)
+// Input for the port's runtime: XInput pads (hid.cpp)
 namespace hid
 {
     inline uint16_t g_prohibitedButtons = 0;
@@ -17,7 +17,7 @@ namespace hid
     enum class Device { KeyboardMouse, Controller };
     Device ActiveDevice();
 
-    // menus (runtime/ui/mouse_menu.cpp): while a menu has focus the mouse is not captured and the cursor shows;
+    // menus (runtime/ui/gfx_menu.cpp): while a menu has focus the mouse is not captured and the cursor shows;
     // the menu code reads it in UI space (1280x720) and presses virtual controller buttons for hover and clicks
     void SetMenuMode(bool on);
     bool MenuMode();

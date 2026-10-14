@@ -89,7 +89,7 @@ std::array<xxHashMap<XHOSTCONTENT_DATA>, 3> gContentRegistry{};
 std::unordered_set<XamListener*> gListeners{};
 xxHashMap<std::string> gRootMap;
 
-// GoW2: root names are case-insensitive, a root can be remounted elsewhere and unmounted (XamContentClose), and
+// Port: root names are case-insensitive, a root can be remounted elsewhere and unmounted (XamContentClose), and
 // lookups come from many threads
 static std::mutex gRootMutex;
 static uint64_t RootKey(std::string_view root)
@@ -159,7 +159,7 @@ void XamRegisterContent(uint32_t type, const std::string_view name, const std::s
     XamRegisterContent(data, root);
 }
 
-// GoW2: notifications follow Xenia (kernel_state.cc / xnotifylistener.cc). An id's listener-mask index is bits 25-30
+// Port: notifications follow Xenia (kernel_state.cc / xnotifylistener.cc). An id's listener-mask index is bits 25-30
 // and its version bits 16-24; the first system listener gets the startup notifications titles wait for (UI not
 // active, user 0 signed in) and the first Live listener is told Live is disconnected.
 namespace
@@ -310,7 +310,7 @@ uint32_t XamContentCreateEnumerator(uint32_t dwUserIndex, uint32_t DeviceID, uin
 
 uint32_t SignalGuestEvent(uint32_t handle);   // imports.cpp
 
-// GoW2: finish an asynchronous XAM call at once (Xenia's CompleteOverlappedImmediate): the caller reads the result from
+// Port: finish an asynchronous XAM call at once (Xenia's CompleteOverlappedImmediate): the caller reads the result from
 // the XOVERLAPPED and may wait on its event
 uint32_t CompleteOverlapped(XXOVERLAPPED* ov, uint32_t result, uint32_t length)
 {
@@ -322,7 +322,7 @@ uint32_t CompleteOverlapped(XXOVERLAPPED* ov, uint32_t result, uint32_t length)
     return 997; // ERROR_IO_PENDING
 }
 
-// GoW2: XamCreateEnumeratorHandle's enumerator: a zeroed private structure the title fills (XamGetPrivateEnumStructureFromHandle);
+// Port: XamCreateEnumeratorHandle's enumerator: a zeroed private structure the title fills (XamGetPrivateEnumStructureFromHandle);
 // the items would come from the XMsg app it names, which is offline here, so there are none
 struct XamPrivateEnumerator final : XamEnumeratorBase
 {
@@ -361,7 +361,7 @@ uint32_t XamGetPrivateEnumStructureFromHandle(uint32_t handle, be<uint32_t>* out
 GUEST_FUNCTION_HOOK(__imp__XamCreateEnumeratorHandle, XamCreateEnumeratorHandle);
 GUEST_FUNCTION_HOOK(__imp__XamGetPrivateEnumStructureFromHandle, XamGetPrivateEnumStructureFromHandle);
 
-// GoW2: an enumerator over a fixed list of items (content packages)
+// Port: an enumerator over a fixed list of items (content packages)
 struct XamItemEnumerator final : XamEnumeratorBase
 {
     std::vector<uint8_t> items;
@@ -388,7 +388,7 @@ uint32_t XamCreateItemEnumerator(std::vector<uint8_t> items, uint32_t itemSize, 
     return GetKernelHandle(e);
 }
 
-// GoW2: an enumerator with no items (achievements, stats: nothing to list offline)
+// Port: an enumerator with no items (achievements, stats: nothing to list offline)
 uint32_t XamCreateEmptyEnumerator()
 {
     static std::vector<_XCONTENT_DATA> none;
@@ -528,7 +528,7 @@ uint32_t XamInputGetState(uint32_t userIndex, uint32_t flags, XAMINPUT_STATE* st
     if (hid::IsInputAllowed())
         hid::GetState(userIndex, state);
 
-    // keyboard mapping lives in hid.cpp (GoW2 runtime)
+    // keyboard mapping lives in hid.cpp (port runtime)
 
     state->Gamepad.wButtons &= ~hid::g_prohibitedButtons;
 

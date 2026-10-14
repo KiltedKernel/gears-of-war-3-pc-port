@@ -1,4 +1,4 @@
-// GoW2 port: the Xbox 360 timebase (mftb) at 49.875 MHz, the rate KeQueryPerformanceFrequency reports, from the host's
+// Port: the Xbox 360 timebase (mftb) at 49.875 MHz, the rate KeQueryPerformanceFrequency reports, from the host's
 // QueryPerformanceCounter. Recompiled mftb calls this (XenonRecomp emits PPCQueryTimebase()).
 #include <stdafx.h>
 

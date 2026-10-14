@@ -1,4 +1,4 @@
-"""Which GoW2 imports are really implemented by the runtime, which are Unleashed '!!! STUB !!!' bodies, and which are
+"""Which of the game's imports are really implemented by the runtime, which are Unleashed '!!! STUB !!!' bodies, and which are
 missing entirely (fall to runtime/import_stubs.cpp). usage: import_coverage.py"""
 import glob, re
 import os

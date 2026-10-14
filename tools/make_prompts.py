@@ -6,13 +6,13 @@ font, Steam version; mouse icons are still drawn), falling back to drawn ones wh
 output is generated on the player's PC and never committed.
 usage: python -P make_prompts.py [drawn | reloaded | <Reloaded install folder>] [out folder]
   ("auto", the old default, now means drawn)
-Each glyph replaces one character of GoW2's Warfare_HUD.Xbox360_18pt font (see runtime/ui/prompts.cpp)."""
+Each glyph replaces one character of the game's Warfare_HUD.Xbox360_18pt font (see runtime/ui/prompts.cpp)."""
 import importlib.util, json, os, sys
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-H = 26                       # GoW2 glyph height (Xbox360_18pt cells are 26 texels tall)
+H = 26                       # glyph height (Xbox360_18pt cells are 26 texels tall)
 SS = 4                       # supersampling for the drawn icons
 
 def load_tool(name):

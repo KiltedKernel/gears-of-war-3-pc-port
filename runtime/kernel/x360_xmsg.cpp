@@ -1,4 +1,4 @@
-// GoW2 XMsg: requests to the console's system apps (Xenia's xam_msg.cc / AppManager). Each app answers synchronously;
+// XMsg: requests to the console's system apps (Xenia's xam_msg.cc / AppManager). Each app answers synchronously;
 // an overlapped request is completed at once with the app's result. Apps: 0xFA XMP (music player), 0xFB XGI
 // (achievements/contexts), 0xFC XLiveBase (Live, offline here), 0xFE XAM. Every request is logged (first few per
 // message) so new ones show up in the boot log.
@@ -11,7 +11,7 @@
 
 uint32_t CompleteOverlapped(XXOVERLAPPED* ov, uint32_t result, uint32_t length);   // xam.cpp
 
-namespace gow2k
+namespace x360k
 {
 
 namespace
@@ -92,8 +92,8 @@ uint32_t XMsgInProcessCall(uint32_t app, uint32_t message, uint32_t param1, uint
     return result;
 }
 
-} // namespace gow2k
+} // namespace x360k
 
-GUEST_FUNCTION_HOOK(__imp__XMsgInProcessCall, gow2k::XMsgInProcessCall);
-GUEST_FUNCTION_HOOK(__imp__XMsgStartIORequestEx, gow2k::XMsgStartIORequestEx);
-GUEST_FUNCTION_HOOK(__imp__XMsgStartIORequest, gow2k::XMsgStartIORequest);
+GUEST_FUNCTION_HOOK(__imp__XMsgInProcessCall, x360k::XMsgInProcessCall);
+GUEST_FUNCTION_HOOK(__imp__XMsgStartIORequestEx, x360k::XMsgStartIORequestEx);
+GUEST_FUNCTION_HOOK(__imp__XMsgStartIORequest, x360k::XMsgStartIORequest);

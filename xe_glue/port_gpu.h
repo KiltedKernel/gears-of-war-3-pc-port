@@ -1,10 +1,10 @@
 #pragma once
-// Interface between the GoW2 runtime (clang-cl) and the Xenia GPU glue (xe_glue, built with MSVC inside Xenia's build).
+// Interface between the port's runtime (clang-cl) and the Xenia GPU glue (xe_glue, built with MSVC inside Xenia's build).
 // Plain C++ types only, so neither side needs the other's headers.
 #include <cstddef>
 #include <cstdint>
 
-namespace gow2gpu
+namespace portgpu
 {
     struct Host
     {
@@ -17,7 +17,7 @@ namespace gow2gpu
         // system heap for Xenia's own guest-visible allocations (physical: in a 0xA0000000+ window); 0 = failed
         uint32_t (*systemAlloc)(uint32_t size, uint32_t alignment, bool physical);
         void (*systemFree)(uint32_t address);
-        // display options (gow2.ini)
+        // display options (gow3.ini)
         int resolutionScale;   // 1..3
         bool vsync;
         bool fullscreen;

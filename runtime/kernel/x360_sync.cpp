@@ -1,4 +1,4 @@
-// GoW2 kernel: mutants, timers, multi-object waits, thread exit, Rtl time/memory helpers (Xenia semantics as reference).
+// Kernel: mutants, timers, multi-object waits, thread exit, Rtl time/memory helpers (Xenia semantics as reference).
 #include <stdafx.h>
 #include <cpu/ppc_context.h>
 #include <cpu/guest_thread.h>
@@ -14,7 +14,7 @@
 uint32_t GuestTimeoutToMilliseconds(be<int64_t>* timeout);                                  // imports.cpp
 uint32_t WaitForObjects(KernelObject** objs, uint32_t count, bool waitAll, uint32_t timeout); // imports.cpp
 
-namespace gow2k
+namespace x360k
 {
 
 // handle -> object of type T, or nullptr for a bad handle or another object type
@@ -276,19 +276,19 @@ uint32_t InterlockedFlushSList(uint32_t list)
 void KeEnterCriticalRegion() {}
 void KeLeaveCriticalRegion() {}
 
-} // namespace gow2k
+} // namespace x360k
 
-GUEST_FUNCTION_HOOK(__imp__NtCreateMutant, gow2k::NtCreateMutant);
-GUEST_FUNCTION_HOOK(__imp__NtReleaseMutant, gow2k::NtReleaseMutant);
-GUEST_FUNCTION_HOOK(__imp__NtCreateTimer, gow2k::NtCreateTimer);
-GUEST_FUNCTION_HOOK(__imp__NtSetTimerEx, gow2k::NtSetTimerEx);
-GUEST_FUNCTION_HOOK(__imp__NtCancelTimer, gow2k::NtCancelTimer);
-GUEST_FUNCTION_HOOK(__imp__NtWaitForMultipleObjectsEx, gow2k::NtWaitForMultipleObjectsEx);
-GUEST_FUNCTION_HOOK(__imp__ExTerminateThread, gow2k::ExTerminateThread);
-GUEST_FUNCTION_HOOK(__imp__RtlFillMemoryUlong, gow2k::RtlFillMemoryUlong);
-GUEST_FUNCTION_HOOK(__imp__RtlTimeToTimeFields, gow2k::RtlTimeToTimeFields);
-GUEST_FUNCTION_HOOK(__imp__RtlTimeFieldsToTime, gow2k::RtlTimeFieldsToTime);
-GUEST_FUNCTION_HOOK(__imp__InterlockedPopEntrySList, gow2k::InterlockedPopEntrySList);
-GUEST_FUNCTION_HOOK(__imp__InterlockedFlushSList, gow2k::InterlockedFlushSList);
-GUEST_FUNCTION_HOOK(__imp__KeEnterCriticalRegion, gow2k::KeEnterCriticalRegion);
-GUEST_FUNCTION_HOOK(__imp__KeLeaveCriticalRegion, gow2k::KeLeaveCriticalRegion);
+GUEST_FUNCTION_HOOK(__imp__NtCreateMutant, x360k::NtCreateMutant);
+GUEST_FUNCTION_HOOK(__imp__NtReleaseMutant, x360k::NtReleaseMutant);
+GUEST_FUNCTION_HOOK(__imp__NtCreateTimer, x360k::NtCreateTimer);
+GUEST_FUNCTION_HOOK(__imp__NtSetTimerEx, x360k::NtSetTimerEx);
+GUEST_FUNCTION_HOOK(__imp__NtCancelTimer, x360k::NtCancelTimer);
+GUEST_FUNCTION_HOOK(__imp__NtWaitForMultipleObjectsEx, x360k::NtWaitForMultipleObjectsEx);
+GUEST_FUNCTION_HOOK(__imp__ExTerminateThread, x360k::ExTerminateThread);
+GUEST_FUNCTION_HOOK(__imp__RtlFillMemoryUlong, x360k::RtlFillMemoryUlong);
+GUEST_FUNCTION_HOOK(__imp__RtlTimeToTimeFields, x360k::RtlTimeToTimeFields);
+GUEST_FUNCTION_HOOK(__imp__RtlTimeFieldsToTime, x360k::RtlTimeFieldsToTime);
+GUEST_FUNCTION_HOOK(__imp__InterlockedPopEntrySList, x360k::InterlockedPopEntrySList);
+GUEST_FUNCTION_HOOK(__imp__InterlockedFlushSList, x360k::InterlockedFlushSList);
+GUEST_FUNCTION_HOOK(__imp__KeEnterCriticalRegion, x360k::KeEnterCriticalRegion);
+GUEST_FUNCTION_HOOK(__imp__KeLeaveCriticalRegion, x360k::KeLeaveCriticalRegion);

@@ -19,7 +19,7 @@ void InstallHangDump();
 #include <thread>
 
 Memory g_memory;
-bool g_skipIntroArg = false;   // -nointro (kernel/gow2_files.cpp)
+bool g_skipIntroArg = false;   // -nointro (kernel/x360_files.cpp)
 Heap g_userHeap;
 
 static std::filesystem::path g_gamePath;

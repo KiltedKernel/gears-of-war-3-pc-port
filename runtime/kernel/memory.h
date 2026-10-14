@@ -42,7 +42,7 @@ struct Memory
         PPC_LOOKUP_FUNC(base, guest) = host;
     }
 
-    // GoW2: title virtual memory is backed by views of physical memory (kernel/memory.cpp)
+    // Port: title virtual memory is backed by views of physical memory (kernel/memory.cpp)
     bool MapPhysical(uint32_t virtualAddress, uint32_t physicalOffset, uint32_t size);
     void UnmapPhysical(uint32_t virtualAddress);
 };

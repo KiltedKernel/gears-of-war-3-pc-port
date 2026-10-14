@@ -1,4 +1,4 @@
-"""UE3 reflection over a GoW2 memory dump (GOW3_MEM_DUMP -> build/memdump): names (GNames), objects (GObjObjects),
+"""UE3 reflection over a memory dump of the game (GOW3_MEM_DUMP -> build/memdump): names (GNames), objects (GObjObjects),
 classes and their properties (name, offset), instances by class. Addresses of the two tables vary by run, so they
 are found from a known name entry ("GameViewportClient" = index 1968) and a known object.
 usage: python -P ue3dump.py <memdump folder> objects <class> | props <class> | obj <address> [count]"""

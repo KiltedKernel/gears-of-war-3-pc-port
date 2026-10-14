@@ -44,7 +44,7 @@ disassembler dialect (PPC 403 multiply-accumulate ops shadowed VMX128).
 
 | folder | what |
 |---|---|
-| `kernel/` | the Xbox 360 kernel and XAM the game imports: threads, events, files (`gow2_files.cpp`, guest paths to host paths), memory, XContent saves, network stubs (link up, no Live), `gow3_patches.cpp` (game patches), `gow3_imports.cpp`, `mods.cpp` |
+| `kernel/` | the Xbox 360 kernel and XAM the game imports: threads, events, files (`x360_files.cpp`, guest paths to host paths), memory, XContent saves, network stubs (link up, no Live), `gow3_patches.cpp` (game patches), `gow3_imports.cpp`, `mods.cpp` |
 | `cpu/` | the guest context, guest/host calls |
 | `gpu/` | the bridge to Xenia's D3D12 GPU emulation (`xe_glue/`); startup of the runtime's services |
 | `apu/` | audio (XMA through Xenia) |

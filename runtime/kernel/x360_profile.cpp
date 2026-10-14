@@ -1,4 +1,4 @@
-// GoW2 profile settings (XamUserRead/WriteProfileSettings), Xenia semantics: the game's options (title-specific
+// Profile settings (XamUserRead/WriteProfileSettings), Xenia semantics: the game's options (title-specific
 // binaries), sensitivity, invert and the dashboard settings it asks for. Values the game writes are kept per
 // (title, setting id) in %LOCALAPPDATA%\GoW3Recomp\profile_settings.bin; anything never written reads as the default.
 //
@@ -104,7 +104,7 @@ namespace
     }
 }
 
-namespace gow2k
+namespace x360k
 {
 
 uint32_t XamUserReadProfileSettingsImpl(uint32_t titleId, uint32_t userIndex, uint32_t xuidCount, be<uint64_t>* xuids,
@@ -205,7 +205,7 @@ uint32_t XamUserWriteProfileSettingsImpl(uint32_t titleId, uint32_t userIndex, u
     return 0;
 }
 
-} // namespace gow2k
+} // namespace x360k
 
-GUEST_FUNCTION_HOOK(__imp__XamUserReadProfileSettings, gow2k::XamUserReadProfileSettingsImpl);
-GUEST_FUNCTION_HOOK(__imp__XamUserWriteProfileSettings, gow2k::XamUserWriteProfileSettingsImpl);
+GUEST_FUNCTION_HOOK(__imp__XamUserReadProfileSettings, x360k::XamUserReadProfileSettingsImpl);
+GUEST_FUNCTION_HOOK(__imp__XamUserWriteProfileSettings, x360k::XamUserWriteProfileSettingsImpl);

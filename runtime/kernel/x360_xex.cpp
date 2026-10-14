@@ -6,7 +6,7 @@
 #include <loader.h>
 #include <os/logger.h>
 
-namespace gow2k
+namespace x360k
 {
 
 namespace
@@ -99,8 +99,8 @@ uint32_t XexGetProcedureAddress(uint32_t hModule, uint32_t ordinal, be<uint32_t>
 }
 }
 
-GUEST_FUNCTION_HOOK(__imp__RtlImageXexHeaderField, gow2k::RtlImageXexHeaderField);
-GUEST_FUNCTION_HOOK(__imp__XamGetExecutionId, gow2k::XamGetExecutionId);
-GUEST_FUNCTION_HOOK(__imp__XexGetModuleHandle, gow2k::XexGetModuleHandle);
-GUEST_FUNCTION_HOOK(__imp__XexGetModuleSection, gow2k::XexGetModuleSection);
-GUEST_FUNCTION_HOOK(__imp__XexGetProcedureAddress, gow2k::XexGetProcedureAddress);
+GUEST_FUNCTION_HOOK(__imp__RtlImageXexHeaderField, x360k::RtlImageXexHeaderField);
+GUEST_FUNCTION_HOOK(__imp__XamGetExecutionId, x360k::XamGetExecutionId);
+GUEST_FUNCTION_HOOK(__imp__XexGetModuleHandle, x360k::XexGetModuleHandle);
+GUEST_FUNCTION_HOOK(__imp__XexGetModuleSection, x360k::XexGetModuleSection);
+GUEST_FUNCTION_HOOK(__imp__XexGetProcedureAddress, x360k::XexGetProcedureAddress);

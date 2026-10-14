@@ -10,7 +10,7 @@ namespace watch { void ArmCurrentThread(); }   // watch.cpp
 constexpr size_t PCR_SIZE = 0xAB0;
 constexpr size_t TLS_SIZE = 0x100;
 constexpr size_t TEB_SIZE = 0x2E0;
-constexpr size_t STACK_SIZE = 0x100000; // GoW2: 1 MB (UE3 worker threads need more than Sonic did)
+constexpr size_t STACK_SIZE = 0x100000; // Port: 1 MB (UE3 worker threads need more than Sonic did)
 constexpr size_t TOTAL_SIZE = PCR_SIZE + TLS_SIZE + TEB_SIZE + STACK_SIZE;
 
 constexpr size_t TEB_OFFSET = PCR_SIZE + TLS_SIZE;
@@ -265,12 +265,12 @@ uint32_t SetThreadIdealProcessorImpl(GuestThreadHandle* hThread, uint32_t dwIdea
     return 0;
 }
 
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82DFA2E8, SetThreadNameImpl);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD57A8, GetThreadPriorityImpl);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD5910, SetThreadIdealProcessorImpl);
 
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_STUB(sub_82BD58F8); // Some function that updates the TEB, don't really care since the field is not set

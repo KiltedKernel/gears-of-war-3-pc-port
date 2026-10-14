@@ -1,4 +1,4 @@
-// GoW2 XAM input (Xenia semantics): XamInputGetCapabilities has 3 arguments here (Unleashed's took XamInputGetCapabilitiesEx's 4);
+// XAM input (Xenia semantics): XamInputGetCapabilities has 3 arguments here (Unleashed's took XamInputGetCapabilitiesEx's 4);
 // only connected pads report success; user 0xFF (XUSER_INDEX_ANY) is player 1; a null state pointer is a presence query.
 #include <stdafx.h>
 #include <cpu/ppc_context.h>
@@ -7,7 +7,7 @@
 #include <os/logger.h>
 #include <set>
 
-namespace gow2k
+namespace x360k
 {
 
 namespace
@@ -76,8 +76,8 @@ uint32_t XamInputSetState(uint32_t userIndex, uint32_t flags, XAMINPUT_VIBRATION
     return hid::SetState(User(userIndex, flags), &v);
 }
 
-} // namespace gow2k
+} // namespace x360k
 
-GUEST_FUNCTION_HOOK(__imp__XamInputGetCapabilities, gow2k::XamInputGetCapabilities);
-GUEST_FUNCTION_HOOK(__imp__XamInputGetState, gow2k::XamInputGetState);
-GUEST_FUNCTION_HOOK(__imp__XamInputSetState, gow2k::XamInputSetState);
+GUEST_FUNCTION_HOOK(__imp__XamInputGetCapabilities, x360k::XamInputGetCapabilities);
+GUEST_FUNCTION_HOOK(__imp__XamInputGetState, x360k::XamInputGetState);
+GUEST_FUNCTION_HOOK(__imp__XamInputSetState, x360k::XamInputSetState);

@@ -21,7 +21,7 @@ extern bool g_skipIntroArg;   // main.cpp: -nointro
 #pragma comment(lib, "shlwapi.lib")
 uint32_t SignalGuestEvent(uint32_t handle);   // kernel/imports.cpp
 
-namespace gow2k
+namespace x360k
 {
 
 constexpr uint32_t STATUS_SUCCESS_ = 0, STATUS_NO_SUCH_FILE_ = 0xC000000F, STATUS_END_OF_FILE_ = 0xC0000011,
@@ -500,15 +500,15 @@ uint32_t RtlNtStatusToDosError(uint32_t status)
 
 }
 
-GUEST_FUNCTION_HOOK(__imp__NtCreateFile, gow2k::NtCreateFile);
-GUEST_FUNCTION_HOOK(__imp__NtOpenFile, gow2k::NtOpenFile);
-GUEST_FUNCTION_HOOK(__imp__NtReadFile, gow2k::NtReadFile);
-GUEST_FUNCTION_HOOK(__imp__NtReadFileScatter, gow2k::NtReadFileScatter);
-GUEST_FUNCTION_HOOK(__imp__NtWriteFile, gow2k::NtWriteFile);
-GUEST_FUNCTION_HOOK(__imp__NtFlushBuffersFile, gow2k::NtFlushBuffersFile);
-GUEST_FUNCTION_HOOK(__imp__NtQueryInformationFile, gow2k::NtQueryInformationFile);
-GUEST_FUNCTION_HOOK(__imp__NtSetInformationFile, gow2k::NtSetInformationFile);
-GUEST_FUNCTION_HOOK(__imp__NtQueryFullAttributesFile, gow2k::NtQueryFullAttributesFile);
-GUEST_FUNCTION_HOOK(__imp__NtQueryDirectoryFile, gow2k::NtQueryDirectoryFile);
-GUEST_FUNCTION_HOOK(__imp__NtQueryVolumeInformationFile, gow2k::NtQueryVolumeInformationFile);
-GUEST_FUNCTION_HOOK(__imp__RtlNtStatusToDosError, gow2k::RtlNtStatusToDosError);
+GUEST_FUNCTION_HOOK(__imp__NtCreateFile, x360k::NtCreateFile);
+GUEST_FUNCTION_HOOK(__imp__NtOpenFile, x360k::NtOpenFile);
+GUEST_FUNCTION_HOOK(__imp__NtReadFile, x360k::NtReadFile);
+GUEST_FUNCTION_HOOK(__imp__NtReadFileScatter, x360k::NtReadFileScatter);
+GUEST_FUNCTION_HOOK(__imp__NtWriteFile, x360k::NtWriteFile);
+GUEST_FUNCTION_HOOK(__imp__NtFlushBuffersFile, x360k::NtFlushBuffersFile);
+GUEST_FUNCTION_HOOK(__imp__NtQueryInformationFile, x360k::NtQueryInformationFile);
+GUEST_FUNCTION_HOOK(__imp__NtSetInformationFile, x360k::NtSetInformationFile);
+GUEST_FUNCTION_HOOK(__imp__NtQueryFullAttributesFile, x360k::NtQueryFullAttributesFile);
+GUEST_FUNCTION_HOOK(__imp__NtQueryDirectoryFile, x360k::NtQueryDirectoryFile);
+GUEST_FUNCTION_HOOK(__imp__NtQueryVolumeInformationFile, x360k::NtQueryVolumeInformationFile);
+GUEST_FUNCTION_HOOK(__imp__RtlNtStatusToDosError, x360k::RtlNtStatusToDosError);

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch and prepare XenonRecomp (MIT) in tools/XenonRecomp: pinned commit, submodules, the port's patch (GoW2 ops,
+# Fetch and prepare XenonRecomp (MIT) in tools/XenonRecomp: pinned commit, submodules, the port's patch (extra instructions,
 # fused multiply-add, timebase). Then build with tools/build_xenon.cmd.
 set -eu
 T=$(cd "$(dirname "$0")" && pwd)

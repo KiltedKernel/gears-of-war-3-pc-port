@@ -394,27 +394,27 @@ std::filesystem::path FileSystem::ResolvePath(const std::string_view& path, bool
     return std::u8string_view((const char8_t*)builtPath.c_str());
 }
 
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD4668, XCreateFileA);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD4600, XGetFileSizeA);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD5608, XGetFileSizeExA);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD4478, XReadFile);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_831CD3E8, XSetFilePointer);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_831CE888, XSetFilePointerEx);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_831CDC58, XFindFirstFileA);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_831CDC00, XFindNextFileA);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_831CDF40, XReadFileEx);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_831CD6E8, XGetFileAttributesA);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_831CE3F8, XCreateFileA);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD4860, XWriteFile);

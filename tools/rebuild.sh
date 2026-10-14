@@ -3,6 +3,7 @@
 # recompile again with them, regenerate the import stubs, build. GOW3_GAME = folder with default.xex/default.bin.
 set -u
 P=$(cd "$(dirname "$0")/.." && pwd)
+. "$P/tools/local.sh"   # this install's folders (tools/local.cmd)
 GAME=${GOW3_GAME:-$P/../gow3-decomp}
 win() { cygpath -w "$1" 2>/dev/null || echo "$1"; }
 bash "$P/tools/recomp.sh" || exit 1

@@ -4,6 +4,7 @@
 # GOW3_XENIA = where (default: xenia next to this repository).
 set -eu
 T=$(cd "$(dirname "$0")" && pwd)
+. "$T/local.sh"   # this install's folders (tools/local.cmd)
 X=${GOW3_XENIA:-$T/../../xenia}
 COMMIT=$(cat "$T/xenia-commit.txt")
 if [ ! -d "$X/.git" ]; then
@@ -22,7 +23,7 @@ elif git apply --reverse --check "$T/xenia-gow3.patch" 2>/dev/null; then
 else
   echo "xenia patch does not apply: check 'git -C $X status'"; exit 1
 fi
-for d in build-gow2 build; do
+for d in build-gow3 build; do
   mkdir -p $d
   # written only when it changes (a rewrite would rebuild part of Xenia on every setup run)
   printf '#ifndef GENERATED_VERSION_H_\n#define GENERATED_VERSION_H_\n#define XE_BUILD_BRANCH "canary"\n#define XE_BUILD_COMMIT "%s"\n#define XE_BUILD_COMMIT_SHORT "%s"\n#define XE_BUILD_DATE __DATE__\n#endif\n' "$COMMIT" "${COMMIT:0:7}" > $d/version.h.new

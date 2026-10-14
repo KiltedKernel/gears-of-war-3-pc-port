@@ -14,12 +14,11 @@
 #include <map>
 #include <user/settings.h>
 #include <os/logger.h>
-#include "../../xe_glue/gow2_gpu.h"
+#include "../../xe_glue/port_gpu.h"
 #include <filesystem>
 
 std::filesystem::path GetSharedUserPath();   // main.cpp
 namespace prompts { void OnTextureLoad(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, bool); void Start(); }   // ui/prompts.cpp
-namespace mouse_menu { void Start(); }   // ui/mouse_menu.cpp
 namespace gfx_menu { void Start(); }     // ui/gfx_menu.cpp
 namespace pos_log { void Start(); }      // ue3/pos_log.cpp (GOW3_LOG_POS)
 namespace mem_find { void Start(); }     // ue3/mem_find.cpp (GOW3_FIND)
@@ -28,7 +27,6 @@ namespace prop_log { void Start(); }
 namespace campaign_chapters { void Start(); }     // ue3/campaign_chapters.cpp
 namespace navmesh_build { void Init(); }  // ue3/navmesh_build.cpp (GOW3_NAVMESH_BUILD)
 namespace play_area { void Start(); }     // ue3/play_area.cpp (GOW3_NO_PLAY_AREA_KILL)
-namespace system_settings { void Start(); }   // ui/system_settings.cpp
 
 namespace
 {
@@ -65,18 +63,18 @@ namespace
     };
     MmioDevice g_devices[] = {
         { gpu::kMmioBase, gpu::kMmioSize, false, nullptr,
-          [](uint32_t index, uint32_t raw) { gow2gpu::WriteRegister(index, ByteSwap(raw)); } },
+          [](uint32_t index, uint32_t raw) { portgpu::WriteRegister(index, ByteSwap(raw)); } },
         { 0x7FEA0000, 0x10000, true, [](uint32_t index) {
               static std::mutex m; static std::map<uint32_t, uint32_t> seen;
               // XMA registers are little-endian: the title uses lwbrx/stwbrx. Xenia's register file holds the values
               // those see, and its Read/WriteRegister byte-swap for its MMIO handler; in memory, the LE bytes
-              const uint32_t value = ByteSwap(gow2gpu::XmaReadRegister(index));
+              const uint32_t value = ByteSwap(portgpu::XmaReadRegister(index));
               { std::lock_guard lock(m); if (seen[index]++ < 1) LOGFN("audio: XMA read [{:04X}] -> {:08X}", index, value); }
               return value; },
           [](uint32_t index, uint32_t raw) {
               static std::mutex m; static std::map<uint32_t, uint32_t> seen;
               { std::lock_guard lock(m); if (seen[index]++ < 2) LOGFN("audio: XMA write [{:04X}] = {:08X}", index, raw); }
-              gow2gpu::XmaWriteRegister(index, ByteSwap(raw));   // raw = the value stwbrx stored (LE in memory)
+              portgpu::XmaWriteRegister(index, ByteSwap(raw));   // raw = the value stwbrx stored (LE in memory)
           } },
     };
     size_t g_deviceCount = 0;   // armed devices
@@ -104,7 +102,7 @@ namespace
                 info->ContextRecord->EFlags |= 0x100;   // trap after this one instruction
                 return EXCEPTION_CONTINUE_EXECUTION;
             }
-            if (write && gow2gpu::HandleAccessViolation((void*)at, true))
+            if (write && portgpu::HandleAccessViolation((void*)at, true))
                 return EXCEPTION_CONTINUE_EXECUTION;
         }
         else if (rec->ExceptionCode == EXCEPTION_SINGLE_STEP && t_pending.device)
@@ -172,7 +170,7 @@ void gpu::Initialize()
         LOGN("gpu: null command processor (GOW3_NULL_GPU)");
         return;
     }
-    gow2gpu::Host host{};
+    portgpu::Host host{};
     host.guestBase = g_memory.base;
     host.dispatchInterrupt = DispatchInterrupt;
     host.windowTitle = "Gears of War 3";
@@ -194,14 +192,13 @@ void gpu::Initialize()
     host.windowHeight = cfg.windowHeight;
     host.scaleThreshold = uint32_t(cfg.scaleThreshold);
     host.onTextureLoad = prompts::OnTextureLoad;
-    if (!gow2gpu::Start(host))
+    if (!portgpu::Start(host))
     {
         LOGN_WARNING("gpu: Direct3D 12 backend unavailable, using the null command processor");
         return;
     }
     g_xenia = true;
     prompts::Start();
-    // mouse_menu::Start();      // Gears 2 UI object layout (ui/mouse_menu.cpp): not mapped for Gears 3 yet
     gfx_menu::Start();           // Gears 3 menus are Scaleform movies (ui/gfx_menu.cpp)
     pos_log::Start();            // GOW3_LOG_POS: pawn locations every 2 s (placing converted level content)
     mem_find::Start();           // GOW3_FIND: where byte patterns are in guest memory (with GOW3_WATCH ...,rw)
@@ -210,7 +207,6 @@ void gpu::Initialize()
     prop_log::Start();           // GOW3_LOG_PROPS: chosen properties and states of live objects, every 2 s
     navmesh_build::Init();       // GOW3_NAVMESH_BUILD: Gears 3's leftover navmesh generator passes on the Pylons
     play_area::Start();          // GOW3_NO_PLAY_AREA_KILL: no out-of-play-area kill (free-roam converted levels)
-    // system_settings::Start(); // Gears 2 GSystemSettings address (ui/system_settings.cpp): not found in Gears 3 yet
     SeedRegisters();
     AddVectoredExceptionHandler(1, GpuExceptionHandler);   // first: ahead of the crash reporter
     g_deviceCount = 1;
@@ -231,12 +227,12 @@ void gpu::Initialize()
                 pos = comma == std::string::npos ? times.size() : comma + 1;
                 while (GetTickCount64() - start < uint64_t(t) * 1000) Sleep(50);
                 const std::string path = fmt::format("shots/shot_{:03}s.png", t);
-                LOGFN("screenshot {}: {}", path, gow2gpu::CaptureScreenshot(path.c_str()) ? "saved" : "failed");
+                LOGFN("screenshot {}: {}", path, portgpu::CaptureScreenshot(path.c_str()) ? "saved" : "failed");
             }
         }).detach();
     }
 
-    if (!cfg.audio || !gow2gpu::StartAudio())
+    if (!cfg.audio || !portgpu::StartAudio())
         LOGN_WARNING("audio: disabled");
     else
     {
@@ -246,22 +242,22 @@ void gpu::Initialize()
     }
 }
 
-// ---- the Vd* entry points (kernel/gow2_video.cpp) ----
+// ---- the Vd* entry points (kernel/x360_video.cpp) ----
 void gpu::InitializeRingBuffer(uint32_t ptr, uint32_t sizeLog2)
 {
-    if (g_xenia) gow2gpu::InitializeRingBuffer(ptr, sizeLog2);
+    if (g_xenia) portgpu::InitializeRingBuffer(ptr, sizeLog2);
     else null::InitializeRingBuffer(ptr, sizeLog2);
 }
 
 void gpu::EnableReadPointerWriteBack(uint32_t ptr, uint32_t blockLog2)
 {
-    if (g_xenia) gow2gpu::EnableReadPointerWriteBack(ptr, blockLog2);
+    if (g_xenia) portgpu::EnableReadPointerWriteBack(ptr, blockLog2);
     else null::EnableReadPointerWriteBack(ptr, blockLog2);
 }
 
 void gpu::SetInterruptCallback(uint32_t callback, uint32_t userData)
 {
-    if (g_xenia) gow2gpu::SetInterruptCallback(callback, userData);
+    if (g_xenia) portgpu::SetInterruptCallback(callback, userData);
     else null::SetInterruptCallback(callback, userData);
 }
 

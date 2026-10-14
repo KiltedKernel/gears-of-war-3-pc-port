@@ -1,4 +1,4 @@
-// GoW2 XAM: one local, offline profile in slot 0 (Xenia semantics as reference), launch data, notifications, empty
+// XAM: one local, offline profile in slot 0 (Xenia semantics as reference), launch data, notifications, empty
 // achievement/stat enumerators, inet_addr.
 #include <stdafx.h>
 #include <cpu/ppc_context.h>
@@ -11,7 +11,7 @@
 uint32_t XamCreateEmptyEnumerator();   // xam.cpp
 uint32_t CompleteOverlapped(XXOVERLAPPED* ov, uint32_t result, uint32_t length);   // xam.cpp
 
-namespace gow2k
+namespace x360k
 {
 
 namespace
@@ -129,18 +129,18 @@ uint32_t NetDll_inet_addr(uint32_t a1, uint32_t a2)
     return (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3];
 }
 
-} // namespace gow2k
+} // namespace x360k
 
-GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninState, gow2k::XamUserGetSigninState);
-GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninInfo, gow2k::XamUserGetSigninInfo);
-GUEST_FUNCTION_HOOK(__imp__XamUserGetXUID, gow2k::XamUserGetXUID);
-GUEST_FUNCTION_HOOK(__imp__XamUserGetName, gow2k::XamUserGetName);
-GUEST_FUNCTION_HOOK(__imp__XamLoaderGetLaunchDataSize, gow2k::XamLoaderGetLaunchDataSize);
-GUEST_FUNCTION_HOOK(__imp__XamLoaderGetLaunchData, gow2k::XamLoaderGetLaunchData);
-GUEST_FUNCTION_HOOK(__imp__XMsgCancelIORequest, gow2k::XMsgCancelIORequest);
-GUEST_FUNCTION_HOOK(__imp__XNotifyPositionUI, gow2k::XNotifyPositionUI);
-GUEST_FUNCTION_HOOK(__imp__XamUserCreateAchievementEnumerator, gow2k::XamUserCreateAchievementEnumerator);
-// XamUserWriteProfileSettings: gow2_profile.cpp
-GUEST_FUNCTION_HOOK(__imp__XamAlloc, gow2k::XamAlloc);
-GUEST_FUNCTION_HOOK(__imp__XamFree, gow2k::XamFree);
-GUEST_FUNCTION_HOOK(__imp__NetDll_inet_addr, gow2k::NetDll_inet_addr);
+GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninState, x360k::XamUserGetSigninState);
+GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninInfo, x360k::XamUserGetSigninInfo);
+GUEST_FUNCTION_HOOK(__imp__XamUserGetXUID, x360k::XamUserGetXUID);
+GUEST_FUNCTION_HOOK(__imp__XamUserGetName, x360k::XamUserGetName);
+GUEST_FUNCTION_HOOK(__imp__XamLoaderGetLaunchDataSize, x360k::XamLoaderGetLaunchDataSize);
+GUEST_FUNCTION_HOOK(__imp__XamLoaderGetLaunchData, x360k::XamLoaderGetLaunchData);
+GUEST_FUNCTION_HOOK(__imp__XMsgCancelIORequest, x360k::XMsgCancelIORequest);
+GUEST_FUNCTION_HOOK(__imp__XNotifyPositionUI, x360k::XNotifyPositionUI);
+GUEST_FUNCTION_HOOK(__imp__XamUserCreateAchievementEnumerator, x360k::XamUserCreateAchievementEnumerator);
+// XamUserWriteProfileSettings: x360_profile.cpp
+GUEST_FUNCTION_HOOK(__imp__XamAlloc, x360k::XamAlloc);
+GUEST_FUNCTION_HOOK(__imp__XamFree, x360k::XamFree);
+GUEST_FUNCTION_HOOK(__imp__NetDll_inet_addr, x360k::NetDll_inet_addr);

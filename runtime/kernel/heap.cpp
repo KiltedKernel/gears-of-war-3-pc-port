@@ -10,7 +10,7 @@ constexpr size_t RESERVED_END = 0xA0000000;
 
 void Heap::Init()
 {
-    // GoW2: 0x00000000-0x7EFFFFFF is the title's NtAllocateVirtualMemory space (kernel/gow2_memory.cpp); the host-side
+    // Port: 0x00000000-0x7EFFFFFF is the title's NtAllocateVirtualMemory space (kernel/x360_memory.cpp); the host-side
     // heap (kernel objects, thread stacks) uses the otherwise unused 0x90000000-0x9FFFFFFF range. Physical memory has
     // its own allocator (kernel/physical.cpp), shared with the frames that back virtual memory.
     heap = o1heapInit(g_memory.Translate(0x90000000), 0xA0000000 - 0x90000000);
@@ -117,21 +117,21 @@ void XFreeMem(uint32_t baseAddress, uint32_t flags)
         g_userHeap.Free(g_memory.Translate(baseAddress));
 }
 
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_STUB(sub_82BD7788); // HeapCreate
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_STUB(sub_82BD9250); // HeapDestroy
 
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD7D30, RtlAllocateHeap);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD8600, RtlFreeHeap);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD88F0, RtlReAllocateHeap);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_82BD6FD0, RtlSizeHeap);
 
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_831CC9C8, XAllocMem);
-// SWA address (Sonic Unleashed), not GoW2: re-target before enabling
+// SWA address (Sonic Unleashed), not Gears 3: re-target before enabling
 // GUEST_FUNCTION_HOOK(sub_831CCA60, XFreeMem);

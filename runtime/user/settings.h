@@ -27,10 +27,9 @@ namespace settings
         // ambient lighting from a tiny buffer (64 < pitch <= 160) that turns shadowed areas green when it is upscaled
         int scaleThreshold = 160;
         int shadowResolution = 1280;     // max shadow map size; 0 = the game's 800
-        // engine post-processing and effects (GSystemSettings, applied while running: ui/system_settings.cpp)
-        bool motionBlur = true, depthOfField = true, bloom = true, lensFlares = true, distortion = true, fogVolumes = true;
+        // post-processing toggles (hooks in kernel/gow3_patches.cpp)
+        bool motionBlur = true, depthOfField = true, bloom = true, lensFlares = true;
         bool ambientOcclusion = true;
-        bool selfShadowing = false;      // characters cast shadows onto themselves (off on the console)
         // [input]
         float mouseSensitivity = 1.0f;
         bool invertMouseY = false;

@@ -1,5 +1,5 @@
-// GoW2 port: glue between the recompiled game's runtime and Xenia's D3D12 GPU (Xenia is BSD-3, see D:/xenia/LICENSE).
-// Built inside Xenia's CMake build (MSVC), with XE_GOW2=1 (patched Xenia sources: tools/xenia-gow2.patch).
+// Port: glue between the recompiled game's runtime and Xenia's D3D12 GPU (Xenia is BSD-3: THIRD_PARTY_NOTICES.md).
+// Built inside Xenia's CMake build (MSVC), with XE_PORT=1 (patched Xenia sources: tools/xenia-gow3.patch).
 //
 // - xe::Memory: the runtime's guest address space has Xenia's layout (physical memory viewed at 0xA0000000,
 //   0xC0000000 and 0xE0000000, the E0 view shifted by 4 KB), so the GPU's Memory is a zeroed object whose two base
@@ -7,7 +7,7 @@
 // - CPU-write watches: Xenia's caches arm read-only protection on physical pages they mirror on the GPU; the
 //   runtime's exception handler reports faults to HandleAccessViolation, which invalidates and unprotects.
 // - A UI thread owns the window and its message loop; the graphics system presents into it.
-#include "gow2_gpu.h"
+#include "port_gpu.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "third_party/stb/stb_image_write.h"
@@ -38,7 +38,7 @@
 
 namespace {
 
-gow2gpu::Host g_host;
+portgpu::Host g_host;
 alignas(64) uint8_t g_memory_storage[sizeof(xe::Memory)];   // zeroed static: never constructed (see above)
 xe::Memory* g_memory = nullptr;
 
@@ -127,13 +127,13 @@ bool TriggerWrite(uint32_t physical, uint32_t length, bool unwatch_exact_range) 
 }
 
 // the graphics system with register access for the runtime's MMIO forwarding
-class Gow2GraphicsSystem : public xe::gpu::d3d12::D3D12GraphicsSystem {
+class PortGraphicsSystem : public xe::gpu::d3d12::D3D12GraphicsSystem {
  public:
   using GraphicsSystem::ReadRegister;
   using GraphicsSystem::WriteRegister;
 };
 
-std::unique_ptr<Gow2GraphicsSystem> g_graphics;
+std::unique_ptr<PortGraphicsSystem> g_graphics;
 std::thread g_ui_thread;
 xe::ui::Win32WindowedAppContext* g_app_context = nullptr;
 std::unique_ptr<xe::ui::Window> g_window;
@@ -143,7 +143,7 @@ std::unique_ptr<xe::ui::Window> g_window;
 class CloseListener : public xe::ui::WindowListener {
  public:
   void OnClosing(xe::ui::UIEvent& e) override {
-    XELOGI("gow2: window closed, exiting");
+    XELOGI("port: window closed, exiting");
     xe::FlushLog();
     TerminateProcess(GetCurrentProcess(), 0);
   }
@@ -255,15 +255,15 @@ uint32_t Memory::GetPhysicalAddress(uint32_t address) const {
 }  // namespace xe
 
 // ---- glue entry points used by the patched Xenia sources ----
-namespace xe::gow2 {
+namespace xe::port {
 Memory* GuestMemory() { return g_memory; }
 
-// texture hook (texture_cache.cc): GOW2_TEXTURE_DUMP=1 writes each new 2D texture's raw guest data once to
+// texture hook (texture_cache.cc): GOW3_TEXTURE_DUMP=1 writes each new 2D texture's raw guest data once to
 // texdump\<address>_f<format>_<w>x<h>_p<pitch>_<t|l>.bin (decode offline: tools/texdecode.py)
 void OnTextureLoad(uint32_t guest_address, uint32_t size, uint32_t format, uint32_t width, uint32_t height,
                    uint32_t pitch, bool tiled, uint32_t dimension) {
   if (g_host.onTextureLoad && dimension == 1) g_host.onTextureLoad(guest_address, size, format, width, height, tiled);
-  static const bool dump = getenv("GOW2_TEXTURE_DUMP") != nullptr;
+  static const bool dump = getenv("GOW3_TEXTURE_DUMP") != nullptr;
   if (!dump || dimension != 1 || size > (16u << 20)) return;
   static std::mutex m;
   static std::set<uint64_t> seen;
@@ -288,11 +288,11 @@ void CallGuest(uint32_t function, const uint64_t* args, size_t arg_count) {
 void DispatchInterrupt(uint32_t callback, uint32_t user_data, uint32_t source, uint32_t cpu) {
   g_host.dispatchInterrupt(callback, user_data, source, cpu);
 }
-}  // namespace xe::gow2
+}  // namespace xe::port
 
-// startup trace (gow2-gpu-start.txt next to the executable): which step of Start failed
+// startup trace (gow3-gpu-start.txt next to the executable): which step of Start failed
 static void StartTrace(const char* step) {
-  static FILE* f = fopen("gow2-gpu-start.txt", "w");
+  static FILE* f = fopen("gow3-gpu-start.txt", "w");
   if (f) { fprintf(f, "%s\n", step); fflush(f); }
 }
 
@@ -305,10 +305,10 @@ DECLARE_bool(resolve_resolution_scale_fill_half_pixel_offset);
 DECLARE_uint32(draw_resolution_scale_threshold);
 
 // ---- runtime-facing API ----
-bool gow2gpu::Start(const Host& host) {
+bool portgpu::Start(const Host& host) {
   g_host = host;
   StartTrace("logging");
-  xe::InitializeLogging("gow2-gpu");
+  xe::InitializeLogging("gow3-gpu");
   StartTrace("memory");
   // display options, before anything reads them
   cvars::draw_resolution_scale_x = cvars::draw_resolution_scale_y = std::clamp(host.resolutionScale, 1, 3);
@@ -325,12 +325,12 @@ bool gow2gpu::Start(const Host& host) {
 
   StartTrace("d3d12 available?");
   if (!xe::gpu::d3d12::D3D12GraphicsSystem::IsAvailable()) {
-    XELOGE("gow2: Direct3D 12 is not available");
+    XELOGE("port: Direct3D 12 is not available");
     return false;
   }
 
   std::promise<bool> window_ready;
-  g_ui_thread = std::thread([&window_ready, title = std::string(host.windowTitle ? host.windowTitle : "Gears of War 2")]() {
+  g_ui_thread = std::thread([&window_ready, title = std::string(host.windowTitle ? host.windowTitle : "Gears of War 3")]() {
     auto context = std::make_unique<xe::ui::Win32WindowedAppContext>(GetModuleHandleW(nullptr), SW_SHOWDEFAULT);
     if (!context->Initialize()) {
       window_ready.set_value(false);
@@ -351,14 +351,14 @@ bool gow2gpu::Start(const Host& host) {
   });
   StartTrace("window thread started");
   if (!window_ready.get_future().get()) {
-    XELOGE("gow2: could not open the window");
+    XELOGE("port: could not open the window");
     return false;
   }
 
   StartTrace("graphics system");
-  g_graphics = std::make_unique<Gow2GraphicsSystem>();
+  g_graphics = std::make_unique<PortGraphicsSystem>();
   if (g_graphics->Setup(nullptr, nullptr, g_app_context, true) != 0) {   // X_STATUS_SUCCESS
-    XELOGE("gow2: graphics system setup failed");
+    XELOGE("port: graphics system setup failed");
     return false;
   }
   // shaders and pipelines from earlier runs: compiled in the background (draws wait for them, no hitch), and new
@@ -389,7 +389,7 @@ bool gow2gpu::Start(const Host& host) {
   return true;
 }
 
-void gow2gpu::Shutdown() {
+void portgpu::Shutdown() {
   if (g_graphics) {
     if (g_app_context) g_app_context->CallInUIThreadSynchronous([]() { g_window->SetPresenter(nullptr); });
     g_graphics->Shutdown();
@@ -397,17 +397,17 @@ void gow2gpu::Shutdown() {
   }
 }
 
-void gow2gpu::InitializeRingBuffer(uint32_t ptr, uint32_t size_log2) { g_graphics->InitializeRingBuffer(ptr, size_log2); }
-void gow2gpu::EnableReadPointerWriteBack(uint32_t ptr, uint32_t block_size_log2) {
+void portgpu::InitializeRingBuffer(uint32_t ptr, uint32_t size_log2) { g_graphics->InitializeRingBuffer(ptr, size_log2); }
+void portgpu::EnableReadPointerWriteBack(uint32_t ptr, uint32_t block_size_log2) {
   g_graphics->EnableReadPointerWriteBack(ptr, block_size_log2);
 }
-void gow2gpu::SetInterruptCallback(uint32_t callback, uint32_t user_data) {
+void portgpu::SetInterruptCallback(uint32_t callback, uint32_t user_data) {
   g_graphics->SetInterruptCallback(callback, user_data);
 }
-void gow2gpu::WriteRegister(uint32_t index, uint32_t value) { g_graphics->WriteRegister(index * 4, value); }
-uint32_t gow2gpu::ReadRegister(uint32_t index) { return g_graphics->ReadRegister(index * 4); }
+void portgpu::WriteRegister(uint32_t index, uint32_t value) { g_graphics->WriteRegister(index * 4, value); }
+uint32_t portgpu::ReadRegister(uint32_t index) { return g_graphics->ReadRegister(index * 4); }
 
-bool gow2gpu::HandleAccessViolation(void* host_address, bool is_write) {
+bool portgpu::HandleAccessViolation(void* host_address, bool is_write) {
   if (!is_write || !g_memory) return false;
   uintptr_t offset = uintptr_t(host_address) - uintptr_t(g_host.guestBase);
   if (offset < 0xA0000000u || offset >= 0x100000000ull) return false;
@@ -419,50 +419,50 @@ bool gow2gpu::HandleAccessViolation(void* host_address, bool is_write) {
   return VirtualQuery(host_address, &mbi, sizeof(mbi)) && mbi.Protect == PAGE_READWRITE;
 }
 
-bool gow2gpu::IsRunning() { return g_running; }
+bool portgpu::IsRunning() { return g_running; }
 
 // ---- audio ----
 namespace {
 std::unique_ptr<xe::apu::AudioSystem> g_audio;
 }
 
-bool gow2gpu::StartAudio() {
+bool portgpu::StartAudio() {
   if (!g_memory) {
     g_memory = reinterpret_cast<xe::Memory*>(g_memory_storage);
     g_memory->Initialize();
   }
   g_audio = xe::apu::xaudio2::XAudio2AudioSystem::Create(nullptr);
   if (!g_audio || g_audio->Setup(nullptr) != 0) {
-    XELOGE("gow2: audio system setup failed");
+    XELOGE("port: audio system setup failed");
     g_audio.reset();
     return false;
   }
   return true;
 }
 
-int gow2gpu::AudioRegisterClient(uint32_t callback, uint32_t callback_arg) {
+int portgpu::AudioRegisterClient(uint32_t callback, uint32_t callback_arg) {
   if (!g_audio) return -1;
   size_t index = 0;
   return g_audio->RegisterClient(callback, callback_arg, &index) == 0 ? int(index) : -1;
 }
-void gow2gpu::AudioUnregisterClient(int index) {
+void portgpu::AudioUnregisterClient(int index) {
   if (g_audio && index >= 0) g_audio->UnregisterClient(size_t(index));
 }
-void gow2gpu::AudioSubmitFrame(int index, uint32_t samples) {
+void portgpu::AudioSubmitFrame(int index, uint32_t samples) {
   if (g_audio && index >= 0) g_audio->SubmitFrame(size_t(index), g_memory->TranslateVirtual<float*>(samples));
 }
-uint32_t gow2gpu::XmaAllocateContext() { return g_audio ? g_audio->xma_decoder()->AllocateContext() : 0; }
-void gow2gpu::XmaReleaseContext(uint32_t context) {
+uint32_t portgpu::XmaAllocateContext() { return g_audio ? g_audio->xma_decoder()->AllocateContext() : 0; }
+void portgpu::XmaReleaseContext(uint32_t context) {
   if (g_audio) g_audio->xma_decoder()->ReleaseContext(context);
 }
-uint32_t gow2gpu::XmaReadRegister(uint32_t index) {
+uint32_t portgpu::XmaReadRegister(uint32_t index) {
   return g_audio ? g_audio->xma_decoder()->ReadRegister(index * 4) : 0;
 }
-void gow2gpu::XmaWriteRegister(uint32_t index, uint32_t raw_value) {
+void portgpu::XmaWriteRegister(uint32_t index, uint32_t raw_value) {
   if (g_audio) g_audio->xma_decoder()->WriteRegister(index * 4, raw_value);
 }
 
-bool gow2gpu::CaptureScreenshot(const char* png_path) {
+bool portgpu::CaptureScreenshot(const char* png_path) {
   if (!g_graphics || !g_graphics->presenter()) return false;
   xe::ui::RawImage image;
   if (!g_graphics->presenter()->CaptureGuestOutput(image) || !image.width) return false;
@@ -470,14 +470,14 @@ bool gow2gpu::CaptureScreenshot(const char* png_path) {
   return stbi_write_png(png_path, int(image.width), int(image.height), 4, image.data.data(), int(image.stride)) != 0;
 }
 
-void gow2gpu::ToggleFullscreen() {
+void portgpu::ToggleFullscreen() {
   if (!g_app_context || !g_window) return;
   g_app_context->CallInUIThread([]() {
     if (g_window) g_window->SetFullscreen(!g_window->IsFullscreen());
   });
 }
 
-void gow2gpu::SetMouseCaptured(bool captured) {
+void portgpu::SetMouseCaptured(bool captured) {
   if (!g_app_context || !g_window) return;
   g_app_context->CallInUIThread([captured]() {
     if (!g_window) return;
@@ -487,18 +487,18 @@ void gow2gpu::SetMouseCaptured(bool captured) {
   });
 }
 
-void* gow2gpu::GetWindowHandle() {
+void* portgpu::GetWindowHandle() {
   return g_window ? static_cast<xe::ui::Win32Window*>(g_window.get())->hwnd() : nullptr;
 }
 
-void gow2gpu::ReadPhysical(uint32_t address, void* out, size_t size) {
+void portgpu::ReadPhysical(uint32_t address, void* out, size_t size) {
   memcpy(out, g_memory->TranslatePhysical<uint8_t*>(address), size);
 }
 
-void gow2gpu::WritePhysical(uint32_t address, const void* data, size_t size, bool invalidate) {
+void portgpu::WritePhysical(uint32_t address, const void* data, size_t size, bool invalidate) {
   memcpy(g_memory->TranslatePhysical<uint8_t*>(address), data, size);
   if (invalidate && g_graphics) {
     auto* cp = static_cast<xe::gpu::d3d12::D3D12CommandProcessor*>(g_graphics->command_processor());
-    cp->gow2_shared_memory().MemoryInvalidationCallback(address, uint32_t(size), true);
+    cp->port_shared_memory().MemoryInvalidationCallback(address, uint32_t(size), true);
   }
 }

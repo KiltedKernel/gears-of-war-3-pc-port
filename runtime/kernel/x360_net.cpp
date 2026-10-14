@@ -1,4 +1,4 @@
-// GoW2 networking: the Xbox's Winsock/XNet (xam NetDll_*) on the host's Winsock, after Xenia's xam_net.cc / xsocket.cc.
+// Networking: the Xbox's Winsock/XNet (xam NetDll_*) on the host's Winsock, after Xenia's xam_net.cc / xsocket.cc.
 // UE3 opens real sockets even for the single-player campaign (its net driver runs a local listen server), so these
 // must work; there is no Xbox Live. Sockets stay on loopback unless GOW3_LAN=1. Every NetDll_ export takes the caller ("XNCALLER_TITLE") as its first argument.
 //  - guest sockets are small handles mapped to host SOCKETs
@@ -24,7 +24,7 @@ uint32_t WaitForObjects(KernelObject** objs, uint32_t count, bool waitAll, uint3
 uint32_t NtCreateEvent(be<uint32_t>* handle, void* objAttributes, uint32_t eventType, uint32_t initialState);
 uint32_t ResetGuestEvent(uint32_t handle);                                                    // imports.cpp
 
-namespace gow2k
+namespace x360k
 {
 
 namespace
@@ -495,56 +495,56 @@ uint32_t NetDll_XNetQosLookup() { return WSAENETDOWN; }
 uint32_t NetDll_XNetQosRelease(uint32_t caller, uint32_t qos) { return 0; }
 uint32_t XNetLogonGetTitleID() { return 0x4D5308AB; }
 
-} // namespace gow2k
+} // namespace x360k
 
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSAStartup, gow2k::NetDll_WSAStartup);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSACleanup, gow2k::NetDll_WSACleanup);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetStartup, gow2k::NetDll_XNetStartup);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetCleanup, gow2k::NetDll_XNetCleanup);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSAGetLastError, gow2k::NetDll_WSAGetLastError);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSASetLastError, gow2k::NetDll_WSASetLastError);
-GUEST_FUNCTION_HOOK(__imp__NetDll_socket, gow2k::NetDll_socket);
-GUEST_FUNCTION_HOOK(__imp__NetDll_closesocket, gow2k::NetDll_closesocket);
-GUEST_FUNCTION_HOOK(__imp__NetDll_shutdown, gow2k::NetDll_shutdown);
-GUEST_FUNCTION_HOOK(__imp__NetDll_setsockopt, gow2k::NetDll_setsockopt);
-GUEST_FUNCTION_HOOK(__imp__NetDll_getsockopt, gow2k::NetDll_getsockopt);
-GUEST_FUNCTION_HOOK(__imp__NetDll_ioctlsocket, gow2k::NetDll_ioctlsocket);
-GUEST_FUNCTION_HOOK(__imp__NetDll_bind, gow2k::NetDll_bind);
-GUEST_FUNCTION_HOOK(__imp__NetDll_connect, gow2k::NetDll_connect);
-GUEST_FUNCTION_HOOK(__imp__NetDll_listen, gow2k::NetDll_listen);
-GUEST_FUNCTION_HOOK(__imp__NetDll_accept, gow2k::NetDll_accept);
-GUEST_FUNCTION_HOOK(__imp__NetDll_getsockname, gow2k::NetDll_getsockname);
-GUEST_FUNCTION_HOOK(__imp__NetDll_getpeername, gow2k::NetDll_getpeername);
-GUEST_FUNCTION_HOOK(__imp__NetDll_recv, gow2k::NetDll_recv);
-GUEST_FUNCTION_HOOK(__imp__NetDll_recvfrom, gow2k::NetDll_recvfrom);
-GUEST_FUNCTION_HOOK(__imp__NetDll_send, gow2k::NetDll_send);
-GUEST_FUNCTION_HOOK(__imp__NetDll_sendto, gow2k::NetDll_sendto);
-GUEST_FUNCTION_HOOK(__imp__NetDll_select, gow2k::NetDll_select);
-GUEST_FUNCTION_HOOK(__imp__NetDll___WSAFDIsSet, gow2k::NetDll___WSAFDIsSet);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSACreateEvent, gow2k::NetDll_WSACreateEvent);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSACloseEvent, gow2k::NetDll_WSACloseEvent);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSASetEvent, gow2k::NetDll_WSASetEvent);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSAResetEvent, gow2k::NetDll_WSAResetEvent);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSAWaitForMultipleEvents, gow2k::NetDll_WSAWaitForMultipleEvents);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSAEventSelect, gow2k::NetDll_WSAEventSelect);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSARecvFrom, gow2k::NetDll_WSARecvFrom);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSARecv, gow2k::NetDll_WSARecv);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSASendTo, gow2k::NetDll_WSASendTo);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSASend, gow2k::NetDll_WSASend);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSAGetOverlappedResult, gow2k::NetDll_WSAGetOverlappedResult);
-GUEST_FUNCTION_HOOK(__imp__NetDll_WSACancelOverlappedIO, gow2k::NetDll_WSACancelOverlappedIO);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetGetTitleXnAddr, gow2k::NetDll_XNetGetTitleXnAddr);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetGetEthernetLinkStatus, gow2k::NetDll_XNetGetEthernetLinkStatus);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetXnAddrToInAddr, gow2k::NetDll_XNetXnAddrToInAddr);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetServerToInAddr, gow2k::NetDll_XNetServerToInAddr);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetUnregisterInAddr, gow2k::NetDll_XNetUnregisterInAddr);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetRegisterKey, gow2k::NetDll_XNetRegisterKey);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetUnregisterKey, gow2k::NetDll_XNetUnregisterKey);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetRandom, gow2k::NetDll_XNetRandom);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetInAddrToString, gow2k::NetDll_XNetInAddrToString);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetDnsLookup, gow2k::NetDll_XNetDnsLookup);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetDnsRelease, gow2k::NetDll_XNetDnsRelease);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetQosListen, gow2k::NetDll_XNetQosListen);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetQosLookup, gow2k::NetDll_XNetQosLookup);
-GUEST_FUNCTION_HOOK(__imp__NetDll_XNetQosRelease, gow2k::NetDll_XNetQosRelease);
-GUEST_FUNCTION_HOOK(__imp__XNetLogonGetTitleID, gow2k::XNetLogonGetTitleID);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSAStartup, x360k::NetDll_WSAStartup);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSACleanup, x360k::NetDll_WSACleanup);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetStartup, x360k::NetDll_XNetStartup);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetCleanup, x360k::NetDll_XNetCleanup);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSAGetLastError, x360k::NetDll_WSAGetLastError);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSASetLastError, x360k::NetDll_WSASetLastError);
+GUEST_FUNCTION_HOOK(__imp__NetDll_socket, x360k::NetDll_socket);
+GUEST_FUNCTION_HOOK(__imp__NetDll_closesocket, x360k::NetDll_closesocket);
+GUEST_FUNCTION_HOOK(__imp__NetDll_shutdown, x360k::NetDll_shutdown);
+GUEST_FUNCTION_HOOK(__imp__NetDll_setsockopt, x360k::NetDll_setsockopt);
+GUEST_FUNCTION_HOOK(__imp__NetDll_getsockopt, x360k::NetDll_getsockopt);
+GUEST_FUNCTION_HOOK(__imp__NetDll_ioctlsocket, x360k::NetDll_ioctlsocket);
+GUEST_FUNCTION_HOOK(__imp__NetDll_bind, x360k::NetDll_bind);
+GUEST_FUNCTION_HOOK(__imp__NetDll_connect, x360k::NetDll_connect);
+GUEST_FUNCTION_HOOK(__imp__NetDll_listen, x360k::NetDll_listen);
+GUEST_FUNCTION_HOOK(__imp__NetDll_accept, x360k::NetDll_accept);
+GUEST_FUNCTION_HOOK(__imp__NetDll_getsockname, x360k::NetDll_getsockname);
+GUEST_FUNCTION_HOOK(__imp__NetDll_getpeername, x360k::NetDll_getpeername);
+GUEST_FUNCTION_HOOK(__imp__NetDll_recv, x360k::NetDll_recv);
+GUEST_FUNCTION_HOOK(__imp__NetDll_recvfrom, x360k::NetDll_recvfrom);
+GUEST_FUNCTION_HOOK(__imp__NetDll_send, x360k::NetDll_send);
+GUEST_FUNCTION_HOOK(__imp__NetDll_sendto, x360k::NetDll_sendto);
+GUEST_FUNCTION_HOOK(__imp__NetDll_select, x360k::NetDll_select);
+GUEST_FUNCTION_HOOK(__imp__NetDll___WSAFDIsSet, x360k::NetDll___WSAFDIsSet);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSACreateEvent, x360k::NetDll_WSACreateEvent);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSACloseEvent, x360k::NetDll_WSACloseEvent);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSASetEvent, x360k::NetDll_WSASetEvent);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSAResetEvent, x360k::NetDll_WSAResetEvent);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSAWaitForMultipleEvents, x360k::NetDll_WSAWaitForMultipleEvents);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSAEventSelect, x360k::NetDll_WSAEventSelect);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSARecvFrom, x360k::NetDll_WSARecvFrom);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSARecv, x360k::NetDll_WSARecv);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSASendTo, x360k::NetDll_WSASendTo);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSASend, x360k::NetDll_WSASend);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSAGetOverlappedResult, x360k::NetDll_WSAGetOverlappedResult);
+GUEST_FUNCTION_HOOK(__imp__NetDll_WSACancelOverlappedIO, x360k::NetDll_WSACancelOverlappedIO);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetGetTitleXnAddr, x360k::NetDll_XNetGetTitleXnAddr);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetGetEthernetLinkStatus, x360k::NetDll_XNetGetEthernetLinkStatus);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetXnAddrToInAddr, x360k::NetDll_XNetXnAddrToInAddr);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetServerToInAddr, x360k::NetDll_XNetServerToInAddr);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetUnregisterInAddr, x360k::NetDll_XNetUnregisterInAddr);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetRegisterKey, x360k::NetDll_XNetRegisterKey);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetUnregisterKey, x360k::NetDll_XNetUnregisterKey);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetRandom, x360k::NetDll_XNetRandom);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetInAddrToString, x360k::NetDll_XNetInAddrToString);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetDnsLookup, x360k::NetDll_XNetDnsLookup);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetDnsRelease, x360k::NetDll_XNetDnsRelease);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetQosListen, x360k::NetDll_XNetQosListen);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetQosLookup, x360k::NetDll_XNetQosLookup);
+GUEST_FUNCTION_HOOK(__imp__NetDll_XNetQosRelease, x360k::NetDll_XNetQosRelease);
+GUEST_FUNCTION_HOOK(__imp__XNetLogonGetTitleID, x360k::XNetLogonGetTitleID);

@@ -5,7 +5,7 @@
 // write-backs) to the GPU and reads them back through the virtual address, so here virtual pages are real views of the
 // same physical memory, like Xenia does:
 //   0x00000000-0x7EFFFFFF  title virtual memory: address-space placeholders; NtAllocateVirtualMemory maps 64 KB views
-//                          of the physical section on commit (kernel/gow2_memory.cpp)
+//                          of the physical section on commit (kernel/x360_memory.cpp)
 //   0x7F000000-0x9FFFFFFF  ordinary memory: GPU MMIO registers (0x7FC80000), the executable image, the recompiler
 //                          function table, the host-side heap (0x90000000)
 //   0xA0000000/0xC0000000/0xE0000000  three views of the 512 MB physical section (the E0 one shifted by 4 KB)

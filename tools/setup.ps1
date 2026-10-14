@@ -8,8 +8,9 @@
 #   tools\setup.ps1 -CheckOnly        only report the missing tools
 # Steps (each is skipped when already done, so it can be rerun after a failure):
 #   1. extract the ISO to <Game>\disc and check default.xex is the version this port was made for
-#   2. decrypt default.xex to <Game>\default.bin (analysis copy for the tools)
-#   3. fetch + patch + build XenonRecomp (tools\XenonRecomp)        4. fetch + patch + build Xenia's GPU (<Xenia>)
+#   2. fetch + patch + build XenonRecomp (tools\XenonRecomp)
+#   3. decrypt default.xex to <Game>\default.bin (analysis copy for the tools; the key is read from XenonRecomp)
+#   4. fetch + patch + build Xenia's GPU (<Xenia>)
 #   5. recompile the game code into ppc\ and run the instruction tests  6. build build\gow3.exe
 #   7. shortcuts (desktop; -StartMenu: the Start menu too)
 # No game files are part of this repository: everything game-derived is made here from the player's disc.
@@ -155,14 +156,14 @@ if ($have -ne $want) {
 }
 Copy-Item -LiteralPath "$Game\disc\default.xex" -Destination "$Game\default.xex" -Force
 
-# ---- 2. decrypted image ----
-Step 2 "decrypting default.xex"
-if (-not (Test-Path -LiteralPath "$Game\default.bin")) { Run $python @("$Root\tools\xex_unpack.py", "$Game\default.xex", "$Game\default.bin") }
-
-# ---- 3. XenonRecomp ----
-Step 3 "XenonRecomp (tools\XenonRecomp)"
+# ---- 2. XenonRecomp ----
+Step 2 "XenonRecomp (tools\XenonRecomp)"
 Run $bash @("$Root/tools/setup_xenonrecomp.sh")
 Run cmd @('/c', "`"$Root\tools\build_xenon.cmd`"")
+
+# ---- 3. decrypted image (the XEX key comes from XenonRecomp's sources, fetched in step 2) ----
+Step 3 "decrypting default.xex"
+if (-not (Test-Path -LiteralPath "$Game\default.bin")) { Run $python @("$Root\tools\xex_unpack.py", "$Game\default.xex", "$Game\default.bin") }
 
 # ---- 4. Xenia ----
 Step 4 "Xenia GPU and audio ($Xenia) - the first build takes a while"

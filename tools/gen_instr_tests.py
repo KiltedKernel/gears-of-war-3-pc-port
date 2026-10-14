@@ -1,4 +1,4 @@
-"""Extract the recompiler's real output for instructions the GoW2 port added or changed (first use of each in ppc/),
+"""Extract the recompiler's real output for instructions the port added or changed (first use of each in ppc/),
 plus the whole recompiled memset, into build/instr_tests/snippets.inc for tests/instr_tests.cpp.
 Rerun after tools/recomp.sh: the tests then check what the current recompiler emits."""
 import glob, os, re

@@ -1,5 +1,5 @@
 #pragma once
-// GoW2 runtime settings (stand-in for Unleashed's config system; becomes a real config file later)
+// port runtime settings (stand-in for Unleashed's config system; becomes a real config file later)
 enum class ELanguage : uint32_t { English = 1, Japanese = 2, German = 3, French = 4, Spanish = 5, Italian = 6 };
 template<typename T> struct ConfigValue
 {

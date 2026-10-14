@@ -1,6 +1,6 @@
 # Status and roadmap
 
-Current release: **0.1.0** (CHANGELOG.md).
+Current release: **0.1.1** (CHANGELOG.md).
 
 ## Verified (scripted playtests in tests/, see ENGINEERING_LOG.md)
 

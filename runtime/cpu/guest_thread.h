@@ -27,14 +27,14 @@ struct GuestThreadParams
     uint32_t function;
     uint32_t value;
     uint32_t flags;
-    uint32_t value2 = 0;   // GoW2: second argument (r4), used when the kernel starts a thread through XAPI's startup routine
+    uint32_t value2 = 0;   // Port: second argument (r4), used when the kernel starts a thread through XAPI's startup routine
 };
 
 struct GuestThreadHandle : KernelObject
 {
     GuestThreadParams params;
     std::atomic<bool> suspended;
-    std::atomic<bool> finished{ false };   // GoW2: set when the guest function returns or ExTerminateThread runs
+    std::atomic<bool> finished{ false };   // Port: set when the guest function returns or ExTerminateThread runs
     uint32_t exitCode = 0;
 #ifdef USE_PTHREAD
     pthread_t thread;
@@ -61,7 +61,7 @@ struct GuestThread
     static uint32_t GetCurrentThreadId();
     static GuestThreadHandle* CurrentHandle();   // null on the main thread (started without a thread object)
     static void SetLastError(uint32_t error);
-    static uint32_t GetLastError();   // GoW2: TEB Win32LastError (shared with WSA errors on the console)
+    static uint32_t GetLastError();   // Port: TEB Win32LastError (shared with WSA errors on the console)
 
 #ifdef _WIN32
     static void SetThreadName(uint32_t threadId, const char* name);

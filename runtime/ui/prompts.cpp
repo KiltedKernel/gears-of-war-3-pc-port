@@ -15,7 +15,7 @@
 #include <os/logger.h>
 #include <hid/hid.h>
 #include <user/settings.h>
-#include "../../xe_glue/gow2_gpu.h"
+#include "../../xe_glue/port_gpu.h"
 #include <algorithm>
 #include <atomic>
 #include <filesystem>
@@ -335,7 +335,7 @@ namespace
     {
         WriteTables(g_tables, kbm);
         const auto& tex = kbm ? g_page0KbmTex : g_page0Tex;
-        for (uint32_t pg : g_pages0) gow2gpu::WritePhysical(pg, tex.data(), kBytes, true);
+        for (uint32_t pg : g_pages0) portgpu::WritePhysical(pg, tex.data(), kBytes, true);
         g_applied = kbm ? 1 : 0;
         LOGFN("prompts: {} prompts", kbm ? "keyboard/mouse" : "controller");
     }
@@ -360,7 +360,7 @@ namespace
                 if (!g_page1Tex.empty())   // page 1 already uploaded: add the icons now
                 {
                     g_page1KbmTex = WithIcons(g_page1Tex);
-                    for (uint32_t pg : g_pages1) gow2gpu::WritePhysical(pg, g_page1KbmTex.data(), kBytes, true);
+                    for (uint32_t pg : g_pages1) portgpu::WritePhysical(pg, g_page1KbmTex.data(), kBytes, true);
                 }
                 g_built = true;
                 std::string list;
@@ -401,7 +401,7 @@ void OnTextureLoad(uint32_t address, uint32_t size, uint32_t format, uint32_t wi
 {
     if (format != 20 || width != kSize || height != kSize || !tiled || size != kBytes) return;
     std::vector<uint8_t> data(kBytes);
-    gow2gpu::ReadPhysical(address, data.data(), kBytes);
+    portgpu::ReadPhysical(address, data.data(), kBytes);
     const uint64_t h = Fnv(data.data(), kBytes);
     std::lock_guard lock(g_mutex);
     if (h == kPage0Hash)
@@ -410,7 +410,7 @@ void OnTextureLoad(uint32_t address, uint32_t size, uint32_t format, uint32_t wi
         if (g_page0Tex.empty()) g_page0Tex = data;
         if (std::find(g_pages0.begin(), g_pages0.end(), address) == g_pages0.end()) g_pages0.push_back(address);
         // a reload while keyboard prompts are on: the upload that follows reads the icons
-        if (g_built && g_applied == 1) gow2gpu::WritePhysical(address, g_page0KbmTex.data(), kBytes, false);
+        if (g_built && g_applied == 1) portgpu::WritePhysical(address, g_page0KbmTex.data(), kBytes, false);
     }
     else if (h == kPage1Hash)
     {
@@ -420,7 +420,7 @@ void OnTextureLoad(uint32_t address, uint32_t size, uint32_t format, uint32_t wi
         if (g_built)
         {
             if (g_page1KbmTex.empty()) g_page1KbmTex = WithIcons(g_page1Tex);
-            gow2gpu::WritePhysical(address, g_page1KbmTex.data(), kBytes, false);
+            portgpu::WritePhysical(address, g_page1KbmTex.data(), kBytes, false);
         }
     }
 }

@@ -1666,3 +1666,14 @@ Beast (tests/beast_private.txt): BEAST (3 down) > PRIVATE > difficulty Normal > 
 map CHECKOUT): one Start selects the map and starts (a second one opens the pause menu) > "Welcome to Beast Mode",
 $3750 > A (choose your creature) > A (Wild Ticker, $75) > wave 1 with the 1:00 clock; when it runs out, WAVE 1 FAILED
 and the restart menu. Standard (online) asks for Xbox LIVE Gold, like Versus Casual/Standard.
+
+## 2026-10-13: 0.1.1 housekeeping (names, licenses, key)
+
+Names from the Gears of War 2 port this runtime was forked from were replaced (this journal keeps the old ones in the
+entries above): runtime/kernel/gow2_*.cpp -> x360_*.cpp, namespace gow2k -> x360k, xe_glue/gow2_gpu.h -> port_gpu.h
+(namespace portgpu), the gow2_ppc library -> gow3_ppc, Xenia's XE_GOW2* options and xe::gow2 -> XE_PORT* / xe::port,
+build-gow2 -> build-gow3, gow2-xe-glue -> gow3-xe-glue. ui/mouse_menu.cpp and ui/system_settings.cpp (Gears 2 object
+layouts, never started for Gears 3) were removed; so were the distortion / fog_volumes / self_shadowing settings that
+only system_settings applied. The XEX retail key moved out of tools/xex_unpack.py (read from XenonRecomp's
+XenonUtils/xex.h); history rewritten without it. This machine's gears3-pc now has its own XenonRecomp and Xenia
+checkouts (tools/XenonRecomp, xenia/), fetched and built from scratch by the setup scripts as a check.

@@ -44,8 +44,6 @@ namespace
         "shader_cache = true\n"
         "; shadow map size cap: 0 = the game's 800; up to 1536 (more detailed character and world shadows)\n"
         "shadow_resolution = 1280\n"
-        "; characters cast shadows onto themselves (off on the console)\n"
-        "self_shadowing = false\n"
         "; render targets this narrow (pixels) are not upscaled: Gears 3's tiny ambient-light buffer turns shadows green\n"
         "scale_threshold = 160\n"
         "; post-processing and effects\n"
@@ -54,8 +52,6 @@ namespace
         "bloom = true\n"
         "ambient_occlusion = true\n"
         "lens_flares = true\n"
-        "distortion = true\n"
-        "fog_volumes = true\n"
         "\n"
         "[input]\n"
         "; mouse look speed (1.0 = default)\n"
@@ -140,9 +136,6 @@ namespace
             else if (k == "graphics.bloom") s.bloom = ParseBool(value);
             else if (k == "graphics.ambient_occlusion") s.ambientOcclusion = ParseBool(value);
             else if (k == "graphics.lens_flares") s.lensFlares = ParseBool(value);
-            else if (k == "graphics.distortion") s.distortion = ParseBool(value);
-            else if (k == "graphics.fog_volumes") s.fogVolumes = ParseBool(value);
-            else if (k == "graphics.self_shadowing") s.selfShadowing = ParseBool(value);
             else if (k == "graphics.scale_threshold") s.scaleThreshold = std::clamp(atoi(value.c_str()), 0, 1280);
             else if (k == "input.prompts") s.prompts = value == "keyboard" ? 1 : value == "controller" ? 2 : 0;
             else if (k == "graphics.shadow_resolution") s.shadowResolution = value == "0" ? 0 : std::clamp(atoi(value.c_str()), 256, 1536);

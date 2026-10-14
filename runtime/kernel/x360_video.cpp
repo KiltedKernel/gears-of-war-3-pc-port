@@ -8,7 +8,7 @@
 #include <gpu/gpu.h>
 #include "physical.h"
 
-namespace gow2k
+namespace x360k
 {
 
 struct X_VIDEO_MODE
@@ -130,23 +130,23 @@ void VdSwap(be<uint32_t>* bufferPtr, be<uint32_t>* fetchPtr, uint32_t unk2, uint
 
 }
 
-GUEST_FUNCTION_HOOK(__imp__VdQueryVideoMode, gow2k::VdQueryVideoMode);
-GUEST_FUNCTION_HOOK(__imp__VdQueryVideoFlags, gow2k::VdQueryVideoFlags);
-GUEST_FUNCTION_HOOK(__imp__VdGetCurrentDisplayInformation, gow2k::VdGetCurrentDisplayInformation);
-GUEST_FUNCTION_HOOK(__imp__VdGetCurrentDisplayGamma, gow2k::VdGetCurrentDisplayGamma);
-GUEST_FUNCTION_HOOK(__imp__VdSetDisplayMode, gow2k::VdSetDisplayMode);
-GUEST_FUNCTION_HOOK(__imp__VdInitializeEngines, gow2k::VdInitializeEngines);
-GUEST_FUNCTION_HOOK(__imp__VdShutdownEngines, gow2k::VdShutdownEngines);
-GUEST_FUNCTION_HOOK(__imp__VdIsHSIOTrainingSucceeded, gow2k::VdIsHSIOTrainingSucceeded);
-GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAM, gow2k::VdRetrainEDRAM);
-GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAMWorker, gow2k::VdRetrainEDRAMWorker);
-GUEST_FUNCTION_HOOK(__imp__VdPersistDisplay, gow2k::VdPersistDisplay);
-GUEST_FUNCTION_HOOK(__imp__VdEnableDisableClockGating, gow2k::VdEnableDisableClockGating);
-GUEST_FUNCTION_HOOK(__imp__VdCallGraphicsNotificationRoutines, gow2k::VdCallGraphicsNotificationRoutines);
-GUEST_FUNCTION_HOOK(__imp__VdGetSystemCommandBuffer, gow2k::VdGetSystemCommandBuffer);
-GUEST_FUNCTION_HOOK(__imp__VdSetSystemCommandBufferGpuIdentifierAddress, gow2k::VdSetSystemCommandBufferGpuIdentifierAddress);
-GUEST_FUNCTION_HOOK(__imp__VdInitializeRingBuffer, gow2k::VdInitializeRingBuffer);
-GUEST_FUNCTION_HOOK(__imp__VdEnableRingBufferRPtrWriteBack, gow2k::VdEnableRingBufferRPtrWriteBack);
-GUEST_FUNCTION_HOOK(__imp__VdSetGraphicsInterruptCallback, gow2k::VdSetGraphicsInterruptCallback);
-GUEST_FUNCTION_HOOK(__imp__VdInitializeScalerCommandBuffer, gow2k::VdInitializeScalerCommandBuffer);
-GUEST_FUNCTION_HOOK(__imp__VdSwap, gow2k::VdSwap);
+GUEST_FUNCTION_HOOK(__imp__VdQueryVideoMode, x360k::VdQueryVideoMode);
+GUEST_FUNCTION_HOOK(__imp__VdQueryVideoFlags, x360k::VdQueryVideoFlags);
+GUEST_FUNCTION_HOOK(__imp__VdGetCurrentDisplayInformation, x360k::VdGetCurrentDisplayInformation);
+GUEST_FUNCTION_HOOK(__imp__VdGetCurrentDisplayGamma, x360k::VdGetCurrentDisplayGamma);
+GUEST_FUNCTION_HOOK(__imp__VdSetDisplayMode, x360k::VdSetDisplayMode);
+GUEST_FUNCTION_HOOK(__imp__VdInitializeEngines, x360k::VdInitializeEngines);
+GUEST_FUNCTION_HOOK(__imp__VdShutdownEngines, x360k::VdShutdownEngines);
+GUEST_FUNCTION_HOOK(__imp__VdIsHSIOTrainingSucceeded, x360k::VdIsHSIOTrainingSucceeded);
+GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAM, x360k::VdRetrainEDRAM);
+GUEST_FUNCTION_HOOK(__imp__VdRetrainEDRAMWorker, x360k::VdRetrainEDRAMWorker);
+GUEST_FUNCTION_HOOK(__imp__VdPersistDisplay, x360k::VdPersistDisplay);
+GUEST_FUNCTION_HOOK(__imp__VdEnableDisableClockGating, x360k::VdEnableDisableClockGating);
+GUEST_FUNCTION_HOOK(__imp__VdCallGraphicsNotificationRoutines, x360k::VdCallGraphicsNotificationRoutines);
+GUEST_FUNCTION_HOOK(__imp__VdGetSystemCommandBuffer, x360k::VdGetSystemCommandBuffer);
+GUEST_FUNCTION_HOOK(__imp__VdSetSystemCommandBufferGpuIdentifierAddress, x360k::VdSetSystemCommandBufferGpuIdentifierAddress);
+GUEST_FUNCTION_HOOK(__imp__VdInitializeRingBuffer, x360k::VdInitializeRingBuffer);
+GUEST_FUNCTION_HOOK(__imp__VdEnableRingBufferRPtrWriteBack, x360k::VdEnableRingBufferRPtrWriteBack);
+GUEST_FUNCTION_HOOK(__imp__VdSetGraphicsInterruptCallback, x360k::VdSetGraphicsInterruptCallback);
+GUEST_FUNCTION_HOOK(__imp__VdInitializeScalerCommandBuffer, x360k::VdInitializeScalerCommandBuffer);
+GUEST_FUNCTION_HOOK(__imp__VdSwap, x360k::VdSwap);

@@ -17,7 +17,7 @@
 #include <os/logger.h>
 #include <map>
 
-namespace gow2k
+namespace x360k
 {
 
 namespace
@@ -306,13 +306,13 @@ uint32_t MmQueryAddressProtect(uint32_t address)
 }
 }
 
-GUEST_FUNCTION_HOOK(__imp__NtAllocateVirtualMemory, gow2k::NtAllocateVirtualMemory);
-GUEST_FUNCTION_HOOK(__imp__NtFreeVirtualMemory, gow2k::NtFreeVirtualMemory);
-GUEST_FUNCTION_HOOK(__imp__NtQueryVirtualMemory, gow2k::NtQueryVirtualMemory);
-GUEST_FUNCTION_HOOK(__imp__ExAllocatePoolTypeWithTag, gow2k::ExAllocatePoolTypeWithTag);
-GUEST_FUNCTION_HOOK(__imp__ExAllocatePool, gow2k::ExAllocatePool);
-GUEST_FUNCTION_HOOK(__imp__ExFreePool, gow2k::ExFreePool);
-GUEST_FUNCTION_HOOK(__imp__MmQueryStatistics, gow2k::MmQueryStatistics);
-GUEST_FUNCTION_HOOK(__imp__MmGetPhysicalAddress, gow2k::MmGetPhysicalAddress);
-GUEST_FUNCTION_HOOK(__imp__MmSetAddressProtect, gow2k::MmSetAddressProtect);
-GUEST_FUNCTION_HOOK(__imp__MmQueryAddressProtect, gow2k::MmQueryAddressProtect);
+GUEST_FUNCTION_HOOK(__imp__NtAllocateVirtualMemory, x360k::NtAllocateVirtualMemory);
+GUEST_FUNCTION_HOOK(__imp__NtFreeVirtualMemory, x360k::NtFreeVirtualMemory);
+GUEST_FUNCTION_HOOK(__imp__NtQueryVirtualMemory, x360k::NtQueryVirtualMemory);
+GUEST_FUNCTION_HOOK(__imp__ExAllocatePoolTypeWithTag, x360k::ExAllocatePoolTypeWithTag);
+GUEST_FUNCTION_HOOK(__imp__ExAllocatePool, x360k::ExAllocatePool);
+GUEST_FUNCTION_HOOK(__imp__ExFreePool, x360k::ExFreePool);
+GUEST_FUNCTION_HOOK(__imp__MmQueryStatistics, x360k::MmQueryStatistics);
+GUEST_FUNCTION_HOOK(__imp__MmGetPhysicalAddress, x360k::MmGetPhysicalAddress);
+GUEST_FUNCTION_HOOK(__imp__MmSetAddressProtect, x360k::MmSetAddressProtect);
+GUEST_FUNCTION_HOOK(__imp__MmQueryAddressProtect, x360k::MmQueryAddressProtect);

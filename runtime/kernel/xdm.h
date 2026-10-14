@@ -98,7 +98,7 @@ template<typename T, typename... Args>
 inline T* CreateKernelObject(Args&&... args)
 {
     static_assert(std::is_base_of_v<KernelObject, T>);
-    // GoW2: kernel objects live in the host-side heap (0x90000000); physical memory is the title's 512 MB
+    // Port: kernel objects live in the host-side heap (0x90000000); physical memory is the title's 512 MB
     return g_userHeap.Alloc<T>(std::forward<Args>(args)...);
 }
 

@@ -219,7 +219,7 @@ index fa91527..1a1a66a 100644
  
      case PPC_INST_MFTB:
 -        println("\t{}.u64 = __rdtsc();", r(insn.operands[0]));
-+        println("\t{}.u64 = PPCQueryTimebase();", r(insn.operands[0]));   // GoW2 port: 49.875 MHz timebase
++        println("\t{}.u64 = PPCQueryTimebase();", r(insn.operands[0]));   // Port: 49.875 MHz timebase
          break;
  
      case PPC_INST_MR:
@@ -403,7 +403,7 @@ index fa91527..1a1a66a 100644
              println("\t{}.u32[{}] = {}.u32;", v(insn.operands[0]), insn.operands[4], temp());
              break;
  
-+        case 3: // float16_2 (GoW2 port): (half(x) << 16) | half(y) into one 32-bit lane; with pack 1 (VPACK_32) the
++        case 3: // float16_2 (this port): (half(x) << 16) | half(y) into one 32-bit lane; with pack 1 (VPACK_32) the
 +                // lane is PPC element 3 - shift, i.e. host u32[shift] (Xenia's vpkd3d128 permute table)
 +            if (insn.operands[3] != 1)
 +                fmt::println("Unexpected float16_2 pack instruction at {:X}", base);
@@ -563,8 +563,8 @@ index 31a86cd..0a134f9 100644
  #   error "Missing implementation for __rdtsc()"
  #endif
  
-+// GoW2 port: mftb reads the Xbox 360 timebase (49.875 MHz, what KeQueryPerformanceFrequency reports), provided by the
-+// runtime (runtime/kernel/gow2_time.cpp). The host TSC runs ~80x faster, so __rdtsc() made guest time race.
++// Port: mftb reads the Xbox 360 timebase (49.875 MHz, what KeQueryPerformanceFrequency reports), provided by the
++// runtime (runtime/kernel/x360_time.cpp). The host TSC runs ~80x faster, so __rdtsc() made guest time race.
 +extern "C" uint64_t PPCQueryTimebase();
 +
  #endif

@@ -1,9 +1,9 @@
-// GoW2 XContent (saves, profile-bound data), after Xenia's xam_content.cc / content_manager.cc. One device: the hard
+// XContent (saves, profile-bound data), after Xenia's xam_content.cc / content_manager.cc. One device: the hard
 // drive (id 1). Each package is a folder:
 //   %LOCALAPPDATA%\GoW3Recomp\content\<owner>\4D5308AB\<content type, 8 hex>\<file name>\
 // owner = the profile's XUID for saved games (type 1), 0000000000000000 otherwise; <folder>.header keeps the
 // package's XCONTENT_DATA (display name) for enumeration. XamContentCreateEx mounts the package under the title's root
-// name (e.g. "save:"), so the title's file I/O lands in the folder (kernel/gow2_files.cpp).
+// name (e.g. "save:"), so the title's file I/O lands in the folder (kernel/x360_files.cpp).
 #include <stdafx.h>
 #include <cpu/ppc_context.h>
 #include "function.h"
@@ -16,13 +16,13 @@
 
 uint32_t CompleteOverlapped(XXOVERLAPPED* ov, uint32_t result, uint32_t length);   // xam.cpp
 
-namespace gow2k
+namespace x360k
 {
 
 namespace
 {
     constexpr uint32_t kDeviceHdd = 1;
-    constexpr uint64_t kXuid = 0xB13EBABEBABEBABEull;   // gow2_xam.cpp's local profile
+    constexpr uint64_t kXuid = 0xB13EBABEBABEBABEull;   // x360_xam.cpp's local profile
     constexpr uint32_t kTitle = 0x4D5308AB;
     constexpr uint32_t X_ERROR_FILE_NOT_FOUND = 2, X_ERROR_PATH_NOT_FOUND = 3, X_ERROR_ALREADY_EXISTS = 183,
                        X_ERROR_DEVICE_NOT_CONNECTED = 0x48F, X_ERROR_NO_SUCH_USER = 0x525;
@@ -192,15 +192,15 @@ uint32_t XamShowDeviceSelectorUI(uint32_t userIndex, uint32_t contentType, uint3
     return Finish(overlapped, 0);
 }
 
-} // namespace gow2k
+} // namespace x360k
 
-GUEST_FUNCTION_HOOK(__imp__XamContentCreateEx, gow2k::XamContentCreateEx);
-GUEST_FUNCTION_HOOK(__imp__XamContentClose, gow2k::XamContentClose);
-GUEST_FUNCTION_HOOK(__imp__XamContentFlush, gow2k::XamContentFlush);
-GUEST_FUNCTION_HOOK(__imp__XamContentDelete, gow2k::XamContentDelete);
-GUEST_FUNCTION_HOOK(__imp__XamContentGetCreator, gow2k::XamContentGetCreator);
-GUEST_FUNCTION_HOOK(__imp__XamContentSetThumbnail, gow2k::XamContentSetThumbnail);
-GUEST_FUNCTION_HOOK(__imp__XamContentCreateEnumerator, gow2k::XamContentCreateEnumerator);
-GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceState, gow2k::XamContentGetDeviceState);
-GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceData, gow2k::XamContentGetDeviceData);
-GUEST_FUNCTION_HOOK(__imp__XamShowDeviceSelectorUI, gow2k::XamShowDeviceSelectorUI);
+GUEST_FUNCTION_HOOK(__imp__XamContentCreateEx, x360k::XamContentCreateEx);
+GUEST_FUNCTION_HOOK(__imp__XamContentClose, x360k::XamContentClose);
+GUEST_FUNCTION_HOOK(__imp__XamContentFlush, x360k::XamContentFlush);
+GUEST_FUNCTION_HOOK(__imp__XamContentDelete, x360k::XamContentDelete);
+GUEST_FUNCTION_HOOK(__imp__XamContentGetCreator, x360k::XamContentGetCreator);
+GUEST_FUNCTION_HOOK(__imp__XamContentSetThumbnail, x360k::XamContentSetThumbnail);
+GUEST_FUNCTION_HOOK(__imp__XamContentCreateEnumerator, x360k::XamContentCreateEnumerator);
+GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceState, x360k::XamContentGetDeviceState);
+GUEST_FUNCTION_HOOK(__imp__XamContentGetDeviceData, x360k::XamContentGetDeviceData);
+GUEST_FUNCTION_HOOK(__imp__XamShowDeviceSelectorUI, x360k::XamShowDeviceSelectorUI);

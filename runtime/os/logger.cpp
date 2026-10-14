@@ -1,4 +1,4 @@
-// Logger for the GoW2 runtime: stdout + gow3.log next to the executable. Repeated identical lines are collapsed.
+// Logger for the port's runtime: stdout + gow3.log next to the executable. Repeated identical lines are collapsed.
 #include <stdafx.h>
 #include "logger.h"
 #include <cstdio>

@@ -3,6 +3,7 @@
 # instruction tests. GOW3_GAME = the folder holding default.xex (default: gow3-decomp next to this repository).
 set -u
 P=$(cd "$(dirname "$0")/.." && pwd)
+. "$P/tools/local.sh"   # this install's folders (tools/local.cmd)
 GAME=${GOW3_GAME:-$P/../gow3-decomp}
 GAME=$(cd "$GAME" 2>/dev/null && pwd) || { echo "game folder not found: ${GOW3_GAME:-$P/../gow3-decomp} (run tools/setup.ps1)"; exit 1; }
 [ -f "$GAME/default.xex" ] || { echo "no default.xex in $GAME (run tools/setup.ps1)"; exit 1; }

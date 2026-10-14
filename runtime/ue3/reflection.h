@@ -1,6 +1,6 @@
 #pragma once
 // UE3 reflection over the running game's memory (GNames / GObjObjects / UClass property chains), for features that
-// read engine objects without hardcoding layouts (menus: runtime/ui/mouse_menu.cpp). Read-only; every read is
+// read engine objects without hardcoding layouts (menus: runtime/ui/gfx_menu.cpp, campaign chapters). Read-only; every read is
 // guarded, so a stale pointer from another thread returns 0 instead of crashing.
 #include <cstdint>
 #include <string>

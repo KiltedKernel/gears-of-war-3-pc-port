@@ -348,7 +348,7 @@ T GuestToHostFunction(const TFunction& func, TArgs&&... argv)
     }
 }
 
-// GoW2: optional per-call trace (debug: GOW3_TRACE_IMPORTS / GOW3_CHECK_HEAP), see runtime/trace.cpp
+// Port: optional per-call trace (debug: GOW3_TRACE_IMPORTS / GOW3_CHECK_HEAP), see runtime/trace.cpp
 void TraceImport(const char* name, bool after);
 #define GUEST_FUNCTION_HOOK(subroutine, function) \
     PPC_FUNC(subroutine) { TraceImport(#subroutine, false); HostToGuestFunction<function>(ctx, base); TraceImport(#subroutine, true); }

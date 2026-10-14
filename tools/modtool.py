@@ -11,16 +11,26 @@ Locations (override with options or environment variables):
   --mods     the game's mods folder       (GOW3_MODS,    default build/mods next to tools/)
   --g3       Gears 3's disc files         (GOW3_DISC,    default ../gow3-decomp/disc)
 """
-import argparse, os, subprocess, sys
+import re, argparse, os, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 REPO = os.path.dirname(HERE)
 
 
+
+def local_game_disc():
+    """the disc folder this install uses (tools/local.cmd, written by tools/setup.ps1), or None"""
+    p = os.path.join(REPO, 'tools', 'local.cmd')
+    if os.path.exists(p):
+        for line in open(p, encoding='ascii', errors='replace'):
+            m = re.match(r'set "GOW3_GAME=(.*)"', line.strip())
+            if m: return os.path.join(m.group(1), 'disc')
+    return None
+
 def paths(args):
     mods = args.mods or os.environ.get('GOW3_MODS') or os.path.join(REPO, 'build', 'mods')
-    g3 = args.g3 or os.environ.get('GOW3_DISC') or os.path.join(REPO, '..', 'gow3-decomp', 'disc')
+    g3 = args.g3 or os.environ.get('GOW3_DISC') or local_game_disc() or os.path.join(REPO, '..', 'gow3-decomp', 'disc')
     return os.path.abspath(mods), os.path.abspath(g3)
 
 

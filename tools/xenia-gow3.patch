@@ -9,7 +9,7 @@ index 30febc4..deb61e4 100644
 -  add_compile_options($<$<CONFIG:Release>:/GL>)
 -  add_link_options($<$<CONFIG:Release>:/LTCG>)
 -  set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
-+  if(NOT XE_GOW2_NO_LTCG)   # GoW2 port: libraries linked into a clang-cl executable, so no whole-program optimization
++  if(NOT XE_PORT_NO_LTCG)   # Port: libraries linked into a clang-cl executable, so no whole-program optimization
 +    add_compile_options($<$<CONFIG:Release>:/GL>)
 +    add_link_options($<$<CONFIG:Release>:/LTCG>)
 +    set(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} /LTCG")
@@ -21,10 +21,10 @@ index 30febc4..deb61e4 100644
  # ==============================================================================
  set_property(GLOBAL PROPERTY USE_FOLDERS ON)
  
-+# GoW2 port: Xenia's GPU embedded in a recompiled game (no Xenia kernel/CPU)
-+set(XE_GOW2_GLUE_DIR "" CACHE PATH "GoW2 port: glue directory (xe_glue); enables XE_GOW2")
-+if(XE_GOW2_GLUE_DIR)
-+  add_compile_definitions(XE_GOW2=1)
++# Port: Xenia's GPU embedded in a recompiled game (no Xenia kernel/CPU)
++set(XE_PORT_GLUE_DIR "" CACHE PATH "port: glue directory (xe_glue); enables XE_PORT")
++if(XE_PORT_GLUE_DIR)
++  add_compile_definitions(XE_PORT=1)
 +endif()
 +
  # Third-party libraries first (no -Werror applied to these)
@@ -34,8 +34,8 @@ index 30febc4..deb61e4 100644
  # Xenia source modules (xe_target_defaults applies -Werror)
  set(CMAKE_FOLDER "src")
  add_subdirectory(src/xenia)
-+if(XE_GOW2_GLUE_DIR)
-+  add_subdirectory(${XE_GOW2_GLUE_DIR} gow2-glue)
++if(XE_PORT_GLUE_DIR)
++  add_subdirectory(${XE_PORT_GLUE_DIR} gow3-glue)
 +endif()
  
  set(CMAKE_FOLDER "")
@@ -48,7 +48,7 @@ index fb66ee9..61dfbb2 100644
  #include "xenia/base/ring_buffer.h"
  #include "xenia/base/string_buffer.h"
  #include "xenia/base/threading.h"
-+#if !XE_GOW2
++#if !XE_PORT
  #include "xenia/cpu/thread_state.h"
  #include "xenia/kernel/kernel_state.h"
 +#endif
@@ -59,14 +59,14 @@ index fb66ee9..61dfbb2 100644
  namespace apu {
  
  AudioSystem::AudioSystem(cpu::Processor* processor)
-+#if XE_GOW2
-+    : memory_(xe::gow2::GuestMemory()),
++#if XE_PORT
++    : memory_(xe::port::GuestMemory()),
 +#else
      : memory_(processor->memory()),
 +#endif
        processor_(processor),
        worker_running_(false) {
-+#if XE_GOW2
++#if XE_PORT
 +  // not memset: that would also zero each client's std::mutex (a crash on lock with the static CRT's mutex)
 +  for (auto& client : clients_) {
 +    client.driver = nullptr;
@@ -84,7 +84,7 @@ index fb66ee9..61dfbb2 100644
    }
  
    worker_running_ = true;
-+#if XE_GOW2
++#if XE_PORT
 +  xe::threading::Thread::CreationParameters worker_params;
 +  worker_params.stack_size = 1024 * 1024;
 +  worker_thread_ = xe::threading::Thread::Create(worker_params,
@@ -107,8 +107,8 @@ index fb66ee9..61dfbb2 100644
  
        SCOPE_profile_cpu_i("apu", "xe::apu::AudioSystem->client_callback");
        uint64_t args[] = {client_callback_arg};
-+#if XE_GOW2
-+      xe::gow2::CallGuest(client_callback, args, xe::countof(args));
++#if XE_PORT
++      xe::port::CallGuest(client_callback, args, xe::countof(args));
 +#else
        processor_->Execute(worker_thread_->thread_state(), client_callback, args,
                            xe::countof(args));
@@ -120,7 +120,7 @@ index fb66ee9..61dfbb2 100644
    worker_running_ = false;
    pending_work_event_->Set();
    if (worker_thread_) {
-+#if XE_GOW2
++#if XE_PORT
 +    xe::threading::Wait(worker_thread_.get(), false);
 +#else
      worker_thread_->Wait(0, 0, 0, nullptr);
@@ -136,16 +136,16 @@ index 1a715e4..4bf8cb8 100644
  
  #include "xenia/base/mutex.h"
  #include "xenia/base/threading.h"
-+#if XE_GOW2
-+// GoW2 port: no Xenia kernel/CPU in this build, only the types named here
++#if XE_PORT
++// Port: no Xenia kernel/CPU in this build, only the types named here
 +#include "xenia/memory.h"
 +namespace xe::cpu { class Processor; }
 +namespace xe::kernel { class KernelState; }
-+namespace xe::gow2 {
++namespace xe::port {
 +// provided by the port's glue (xe_glue/glue.cc)
 +xe::Memory* GuestMemory();
 +void CallGuest(uint32_t function, const uint64_t* args, size_t arg_count);
-+}  // namespace xe::gow2
++}  // namespace xe::port
 +#include "xenia/base/threading.h"
 +#else
  #include "xenia/cpu/processor.h"
@@ -158,7 +158,7 @@ index 1a715e4..4bf8cb8 100644
    std::unique_ptr<XmaDecoder> xma_decoder_;
  
    std::atomic<bool> worker_running_ = {false};
-+#if XE_GOW2
++#if XE_PORT
 +  std::unique_ptr<xe::threading::Thread> worker_thread_;
 +#else
    kernel::object_ref<kernel::XHostThread> worker_thread_;
@@ -174,7 +174,7 @@ index ca06f8c..2edcbad 100644
  #include "xenia/base/profiling.h"
  #include "xenia/base/ring_buffer.h"
  #include "xenia/base/string_buffer.h"
-+#if !XE_GOW2
++#if !XE_PORT
  #include "xenia/cpu/processor.h"
  #include "xenia/cpu/thread_state.h"
  #include "xenia/kernel/kernel_state.h"
@@ -187,8 +187,8 @@ index ca06f8c..2edcbad 100644
  namespace apu {
  
  XmaDecoder::XmaDecoder(cpu::Processor* processor)
-+#if XE_GOW2
-+    : memory_(xe::gow2::GuestMemory()), processor_(processor) {}
++#if XE_PORT
++    : memory_(xe::port::GuestMemory()), processor_(processor) {}
 +#else
      : memory_(processor->memory()), processor_(processor) {}
 +#endif
@@ -199,7 +199,7 @@ index ca06f8c..2edcbad 100644
    // Setup ffmpeg logging callback
    av_log_set_callback(av_log_callback);
  
-+#if !XE_GOW2  // the GoW2 runtime traps the XMA MMIO page itself and forwards accesses (xe_glue)
++#if !XE_PORT  // the port's runtime traps the XMA MMIO page itself and forwards accesses (xe_glue)
    // Let the processor know we want register access callbacks.
    memory_->AddVirtualMappedRange(
        0x7FEA0000, 0xFFFF0000, 0x0000FFFF, this,
@@ -213,7 +213,7 @@ index ca06f8c..2edcbad 100644
    worker_running_ = true;
    work_event_ = xe::threading::Event::CreateAutoResetEvent(false);
    assert_not_null(work_event_);
-+#if XE_GOW2
++#if XE_PORT
 +  xe::threading::Thread::CreationParameters worker_params;
 +  worker_params.stack_size = 1024 * 1024;
 +  worker_thread_ = xe::threading::Thread::Create(worker_params, [this]() {
@@ -238,7 +238,7 @@ index ca06f8c..2edcbad 100644
  
    if (worker_thread_) {
      // Wait for work thread.
-+#if XE_GOW2
++#if XE_PORT
 +    xe::threading::Wait(worker_thread_.get(), false);
 +#else
      xe::threading::Wait(worker_thread_->thread(), false);
@@ -254,16 +254,16 @@ index 9423b0f..bc580e4 100644
  #include "xenia/apu/xma_context.h"
  #include "xenia/apu/xma_register_file.h"
  #include "xenia/base/bit_map.h"
-+#if XE_GOW2
-+// GoW2 port: no Xenia kernel/CPU in this build, only the types named here
++#if XE_PORT
++// Port: no Xenia kernel/CPU in this build, only the types named here
 +#include "xenia/memory.h"
 +namespace xe::cpu { class Processor; }
 +namespace xe::kernel { class KernelState; }
-+namespace xe::gow2 {
++namespace xe::port {
 +// provided by the port's glue (xe_glue/glue.cc)
 +xe::Memory* GuestMemory();
 +void CallGuest(uint32_t function, const uint64_t* args, size_t arg_count);
-+}  // namespace xe::gow2
++}  // namespace xe::port
 +#include "xenia/base/threading.h"
 +#else
  #include "xenia/kernel/xthread.h"
@@ -275,7 +275,7 @@ index 9423b0f..bc580e4 100644
    cpu::Processor* processor_ = nullptr;
  
    std::atomic<bool> worker_running_ = {false};
-+#if XE_GOW2
++#if XE_PORT
 +  std::unique_ptr<xe::threading::Thread> worker_thread_;
 +#else
    kernel::object_ref<kernel::XHostThread> worker_thread_;
@@ -291,8 +291,8 @@ index eadd8f5..366ae4a 100644
  #include "xenia/gpu/sampler_info.h"
  #include "xenia/gpu/texture_info.h"
  #include "xenia/gpu/xenos_zpd_report.h"
-+#if XE_GOW2
-+// GoW2 port: no Xenia kernel/CPU in this build, only the types the GPU names
++#if XE_PORT
++// Port: no Xenia kernel/CPU in this build, only the types the GPU names
 +namespace xe { class Emulator; }
 +namespace xe::cpu { class Processor; }
 +namespace xe::kernel { class KernelState; }
@@ -308,7 +308,7 @@ index eadd8f5..366ae4a 100644
    }
  
    worker_running_ = true;
-+#if XE_GOW2
++#if XE_PORT
 +  xe::threading::Thread::CreationParameters worker_params;
 +  worker_params.stack_size = 16 * 1024 * 1024;
 +  worker_thread_ = xe::threading::Thread::Create(worker_params,
@@ -330,7 +330,7 @@ index eadd8f5..366ae4a 100644
  
    worker_running_ = false;
    write_ptr_index_event_->Set();
-+#if XE_GOW2
++#if XE_PORT
 +  xe::threading::Wait(worker_thread_.get(), false);
 +#else
    worker_thread_->Wait(0, 0, 0, nullptr);
@@ -342,7 +342,7 @@ index eadd8f5..366ae4a 100644
  }
  
  void CommandProcessor::CallInThread(std::function<void()> fn) {
-+#if XE_GOW2
++#if XE_PORT
 +  if (pending_fns_.empty() &&
 +      xe::threading::Thread::GetCurrentThread() == worker_thread_.get()) {
 +#else
@@ -356,7 +356,7 @@ index eadd8f5..366ae4a 100644
    }
    paused_ = false;
  
-+#if XE_GOW2
++#if XE_PORT
 +  worker_thread_->Resume();
 +#else
    worker_thread_->thread()->Resume();
@@ -377,7 +377,7 @@ index eadd8f5..366ae4a 100644
  }
  
  XE_NOINLINE XE_COLD void CommandProcessor::LogKickoffInitator(uint32_t value) {
-+#if !XE_GOW2  // no Xenia CPU backend: guest stacks are not available here
++#if !XE_PORT  // no Xenia CPU backend: guest stacks are not available here
    cpu::backend::GuestPseudoStackTrace st;
  
    if (logging::ShouldLog(LogLevel::Debug) &&
@@ -397,8 +397,8 @@ index dfe4273..c1076bb 100644
  #include "xenia/gpu/trace_writer.h"
  #include "xenia/gpu/xenos.h"
  #include "xenia/gpu/xenos_zpd_report.h"
-+#if XE_GOW2
-+// GoW2 port: no Xenia kernel/CPU in this build, only the types the GPU names
++#if XE_PORT
++// Port: no Xenia kernel/CPU in this build, only the types the GPU names
 +namespace xe { class Emulator; }
 +namespace xe::cpu { class Processor; }
 +namespace xe::kernel { class KernelState; }
@@ -413,7 +413,7 @@ index dfe4273..c1076bb 100644
    std::filesystem::path trace_frame_path_;
  
    std::atomic<bool> worker_running_;
-+#if XE_GOW2
++#if XE_PORT
 +  std::unique_ptr<xe::threading::Thread> worker_thread_;
 +#else
    kernel::object_ref<kernel::XHostThread> worker_thread_;
@@ -429,8 +429,8 @@ index 7149982..fcc1ffc 100644
  #include "xenia/base/logging.h"
  #include "xenia/base/math.h"
  #include "xenia/base/profiling.h"
-+#if XE_GOW2
-+// GoW2 port: no Xenia kernel/CPU in this build, only the types the GPU names
++#if XE_PORT
++// Port: no Xenia kernel/CPU in this build, only the types the GPU names
 +namespace xe { class Emulator; }
 +namespace xe::cpu { class Processor; }
 +namespace xe::kernel { class KernelState; }
@@ -445,7 +445,7 @@ index 7149982..fcc1ffc 100644
  #include "xenia/gpu/registers.h"
  #include "xenia/gpu/xenos.h"
  #include "xenia/gpu/xenos_zpd_report.h"
-+#if !XE_GOW2
++#if !XE_PORT
  #include "xenia/kernel/kernel_state.h"
 +#endif
  #include "xenia/ui/d3d12/d3d12_presenter.h"
@@ -455,7 +455,7 @@ index 7149982..fcc1ffc 100644
        title << ' ' << draw_resolution_scale_x << 'x' << draw_resolution_scale_y;
      }
    }
-+#if !XE_GOW2
++#if !XE_PORT
    auto* audio_system = kernel_state_->emulator()->audio_system();
    if (audio_system) {
      title << " - " << audio_system->name();
@@ -472,8 +472,8 @@ index 7c6324c..76c17e0 100644
  #include "xenia/gpu/dxbc_shader_translator.h"
  #include "xenia/gpu/registers.h"
  #include "xenia/gpu/xenos.h"
-+#if XE_GOW2
-+// GoW2 port: no Xenia kernel/CPU in this build, only the types the GPU names
++#if XE_PORT
++// Port: no Xenia kernel/CPU in this build, only the types the GPU names
 +namespace xe { class Emulator; }
 +namespace xe::cpu { class Processor; }
 +namespace xe::kernel { class KernelState; }
@@ -489,8 +489,8 @@ index 7c6324c..76c17e0 100644
  #include "../pm4_command_processor_declare.h"
  #undef OVERRIDING_BASE_CMDPROCESSOR
   public:
-+  // GoW2 port: CPU-side rewrites of guest textures (xe_glue WritePhysical) must invalidate the GPU copy
-+  SharedMemory& gow2_shared_memory() { return *shared_memory_; }
++  // Port: CPU-side rewrites of guest textures (xe_glue WritePhysical) must invalidate the GPU copy
++  SharedMemory& port_shared_memory() { return *shared_memory_; }
    explicit D3D12CommandProcessor(D3D12GraphicsSystem* graphics_system,
                                   kernel::KernelState* kernel_state);
    ~D3D12CommandProcessor();
@@ -502,8 +502,8 @@ index f4f4a15..7b72088 100644
  #include "xenia/config.h"
  #include "xenia/gpu/command_processor.h"
  #include "xenia/gpu/gpu_flags.h"
-+#if XE_GOW2
-+// GoW2 port: no Xenia kernel/CPU in this build, only the types the GPU names
++#if XE_PORT
++// Port: no Xenia kernel/CPU in this build, only the types the GPU names
 +namespace xe { class Emulator; }
 +namespace xe::cpu { class Processor; }
 +namespace xe::kernel { class KernelState; }
@@ -518,14 +518,14 @@ index f4f4a15..7b72088 100644
      "runtime spikes and freezes when playing the game not for the first time.",
      "GPU.Debug");
  
-+#if XE_GOW2
-+// Provided by the GoW2 port's glue (xe_glue/glue.cc).
-+namespace xe::gow2 {
++#if XE_PORT
++// Provided by the port's glue (xe_glue/glue.cc).
++namespace xe::port {
 +Memory* GuestMemory();
 +void DispatchInterrupt(uint32_t callback, uint32_t user_data, uint32_t source,
 +                       uint32_t cpu);
 +uint32_t VblankIntervalMicroseconds();
-+}  // namespace xe::gow2
++}  // namespace xe::port
 +#endif
 +
  namespace xe {
@@ -535,8 +535,8 @@ index f4f4a15..7b72088 100644
                                 kernel::KernelState* kernel_state,
                                 ui::WindowedAppContext* app_context,
                                 bool with_presentation) {
-+#if XE_GOW2
-+  memory_ = xe::gow2::GuestMemory();
++#if XE_PORT
++  memory_ = xe::port::GuestMemory();
 +#else
    memory_ = processor->memory();
 +#endif
@@ -547,14 +547,14 @@ index f4f4a15..7b72088 100644
      return X_STATUS_UNSUCCESSFUL;
    }
  
-+#if XE_GOW2
-+  // The GoW2 runtime forwards guest MMIO accesses itself (xe_glue), and runs
++#if XE_PORT
++  // The port's runtime forwards guest MMIO accesses itself (xe_glue), and runs
 +  // the vblank on its own thread: MarkVblank every 1/60 s.
 +  frame_limiter_worker_running_ = true;
 +  std::thread([this]() {
 +    auto next = std::chrono::steady_clock::now();
 +    while (frame_limiter_worker_running_) {
-+      next += std::chrono::microseconds(xe::gow2::VblankIntervalMicroseconds());
++      next += std::chrono::microseconds(xe::port::VblankIntervalMicroseconds());
 +      std::this_thread::sleep_until(next);
 +      register_file()->values[XE_GPU_REG_D1MODE_V_COUNTER] +=
 +          GetResolution().second;
@@ -569,7 +569,7 @@ index f4f4a15..7b72088 100644
    frame_limiter_worker_thread_->thread()->set_priority(
        threading::ThreadPriority::kNormal);
  #endif
-+#endif  // XE_GOW2
++#endif  // XE_PORT
    if (cvars::trace_gpu_stream) {
      BeginTracing();
    }
@@ -577,7 +577,7 @@ index f4f4a15..7b72088 100644
      command_processor_.reset();
    }
  
-+#if XE_GOW2
++#if XE_PORT
 +  frame_limiter_worker_running_ = false;
 +#else
    if (frame_limiter_worker_thread_) {
@@ -593,7 +593,7 @@ index f4f4a15..7b72088 100644
      return;
    }
  
-+#if !XE_GOW2
++#if !XE_PORT
    config::SaveConfig();
 +#endif
  
@@ -603,9 +603,9 @@ index f4f4a15..7b72088 100644
  }
  
  void GraphicsSystem::DispatchInterruptCallback(uint32_t source, uint32_t cpu) {
-+#if XE_GOW2
++#if XE_PORT
 +  if (interrupt_callback_) {
-+    xe::gow2::DispatchInterrupt(interrupt_callback_, interrupt_callback_data_,
++    xe::port::DispatchInterrupt(interrupt_callback_, interrupt_callback_data_,
 +                                source, cpu);
 +  }
 +#else
@@ -619,7 +619,7 @@ index f4f4a15..7b72088 100644
  }
  
  std::pair<uint32_t, uint32_t> GraphicsSystem::GetResolution() const {
-+#if XE_GOW2
++#if XE_PORT
 +  return {1280, 720};
 +#else
    if (!kernel_state_) {
@@ -641,8 +641,8 @@ index a393db7..34fe633 100644
  #include <string>
  #include <thread>
  
-+#if XE_GOW2
-+// GoW2 port: no Xenia kernel/CPU in this build, only the types the GPU names
++#if XE_PORT
++// Port: no Xenia kernel/CPU in this build, only the types the GPU names
 +namespace xe { class Emulator; }
 +namespace xe::cpu { class Processor; }
 +namespace xe::kernel { class KernelState; }
@@ -660,7 +660,7 @@ index a393db7..34fe633 100644
    uint32_t interrupt_callback_data_ = 0;
  
    std::atomic<bool> frame_limiter_worker_running_;
-+#if !XE_GOW2
++#if !XE_PORT
    kernel::object_ref<kernel::XHostThread> frame_limiter_worker_thread_;
 +#endif
  
@@ -674,8 +674,8 @@ index 1311d5e..c770ab6 100644
        } else if (trace_state_ == TraceState::kSingleFrame) {
          // New trace request - we only start tracing at the beginning of a
          // frame.
-+#if XE_GOW2
-+        uint32_t title_id = 0x4D53082D;   // Gears of War 2
++#if XE_PORT
++        uint32_t title_id = 0x4D5308AB;   // Gears of War 3
 +#else
          uint32_t title_id = kernel_state_->GetExecutableModule()->title_id();
 +#endif
@@ -686,8 +686,8 @@ index 1311d5e..c770ab6 100644
    // If we have a pending trace stream open it now. That way we ensure we get
    // all commands.
    if (!trace_writer_.is_open() && trace_state_ == TraceState::kStreaming) {
-+#if XE_GOW2
-+    uint32_t title_id = 0x4D53082D;   // Gears of War 2
++#if XE_PORT
++    uint32_t title_id = 0x4D5308AB;   // Gears of War 3
 +#else
      uint32_t title_id = kernel_state_->GetExecutableModule()
                              ? kernel_state_->GetExecutableModule()->title_id()
@@ -704,11 +704,11 @@ index a76be1e..62b7e00 100644
              "support. Disable for graphics debugger compatibility.",
              "GPU.Debug");
  
-+namespace xe::gow2 {
-+// GoW2 port (xe_glue): sees a texture's guest data just before it is uploaded, and may rewrite it (button prompts)
++namespace xe::port {
++// Port (xe_glue): sees a texture's guest data just before it is uploaded, and may rewrite it (button prompts)
 +void OnTextureLoad(uint32_t guest_address, uint32_t size, uint32_t format, uint32_t width, uint32_t height,
 +                   uint32_t pitch, bool tiled, uint32_t dimension);
-+}  // namespace gow2
++}  // namespace port
 +
  namespace xe {
  namespace gpu {
@@ -718,7 +718,7 @@ index a76be1e..62b7e00 100644
    // TODO(Triang3l): Load unscaled parts.
    if (base_outdated) {
 +    if (!texture_key.scaled_resolve) {
-+      xe::gow2::OnTextureLoad(texture_key.base_page << 12, texture.GetGuestBaseSize(),
++      xe::port::OnTextureLoad(texture_key.base_page << 12, texture.GetGuestBaseSize(),
 +                          uint32_t(texture_key.format), texture_key.width_minus_1 + 1,
 +                          texture_key.height_minus_1 + 1, texture_key.pitch,
 +                          texture_key.tiled != 0, uint32_t(texture_key.dimension));

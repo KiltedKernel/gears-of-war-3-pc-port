@@ -20,6 +20,10 @@ Status: boots, menus, the Act 1 campaign and Horde play; mods and new campaign c
 
 ## Setup: your ISO to a PC port
 
+Double-click **`Setup.cmd`**: choose your disc image and press **Convert**. The window checks the build tools, offers
+to install the missing ones, shows the progress of each step and keeps a log (`build\setup.log`). When it is done,
+**Open launcher** starts the game's launcher. The same setup from a console:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\setup.ps1 -Iso "D:\Games\Gears of War 3.iso"
 ```

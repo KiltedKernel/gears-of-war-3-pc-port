@@ -30,7 +30,9 @@
    be compiled on their machine. Goal: a single installer/converter executable that brings or fetches what it needs
    (a pinned portable clang + ninja, the prebuilt runtime as a library), shows progress, and resumes after failures.
    Done so far (2026-10-13): the setup detects missing tools and installs them with winget (Visual Studio Build
-   Tools with clang-cl, CMake and Ninja; Python; Git), `-CheckOnly` reports. Next: a graphical converter around it.
+   Tools with clang-cl, CMake and Ninja; Python; Git), `-CheckOnly` reports. The converter window
+   (`Setup.cmd`, tools/setup_gui.ps1) runs it with progress and a log. Next: prebuilt runtime and tools, so the
+   player's PC only recompiles the game code.
 2. ~~Launcher with a mod manager~~ (done 2026-10-13: the Mods tab). Later: remove / update mods, mod pages with
    screenshots.
 3. ~~Runtime config merge for mods~~ (done 2026-10-13).

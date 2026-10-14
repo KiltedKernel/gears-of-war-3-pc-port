@@ -1,0 +1,18 @@
+# Esc / right click on the main menu's first page do nothing (B there left for the title screen, which reloads the
+# front end and then reads only Start); a click on PRESS START is Start; Esc in a submenu still goes back
+45 cursor 640 560
+46 click L 120
+# main menu: Esc twice and a right click, then the pad must still move the selection
+52 key 1B 120
+53 key 1B 120
+54 click R 120
+56 pad 0002 150
+58 pad 0001 150
+# Campaign (click), then Esc back to the main menu's first page, then Esc there again
+60 glide 230 373 400
+62 click L 120
+65 key 1B 120
+68 key 1B 120
+69 click R 120
+71 pad 0002 150
+73 pad 0002 150

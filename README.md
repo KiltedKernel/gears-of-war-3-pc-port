@@ -59,11 +59,13 @@ the game. `-nointro` skips the logo movies. Saves and settings caches live in `%
 | 1-4 or arrow keys | d-pad: weapons |
 | C / Z (middle mouse) | left / right stick click |
 | Enter, or Esc in play | Start (pause) |
-| Esc in menus | B: back |
+| Esc in menus | B: back (not on the main menu's first page) |
 | Backspace | Back |
 | F11 or Alt+Enter | fullscreen |
 
-In menus the mouse works too: hover selects, left click accepts, right click goes back, the wheel scrolls.
+In menus the mouse works too: hover selects, left click accepts (Start on the title screen), right click goes back, the
+wheel scrolls. On the main menu's first page Esc and right click do nothing; the controller's B still returns to the
+title screen as on the console.
 
 ## Mods
 

@@ -1,0 +1,11 @@
+# bug repro (player report): click Campaign, Esc back to the main menu, then click Horde: the click must open Horde
+45 pad 0010 250
+52 cursor 640 360
+53 glide 230 373 400
+55 click L 120
+59 key 1B 150
+62 glide 240 424 500
+64 click L 120
+69 key 1B 150
+72 glide 240 450 500
+74 click L 120

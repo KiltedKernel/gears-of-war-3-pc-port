@@ -25,4 +25,7 @@ namespace hid
     MenuMouse PollMenuMouse();                       // wheel: notches since the previous poll
     bool MenuCursor(float& x, float& y);              // the cursor on the UI canvas now (false: outside / unfocused)
     void InjectButtons(uint16_t xinputButtons, int milliseconds);   // not counted as controller use
+    // Esc in a menu: not a button by itself. The menu code (ui/gfx_menu.cpp) takes the press and decides: B, or nothing
+    // on the main menu's first page (B there leaves for the title screen, which reloads the front end)
+    bool TakeMenuEscape();
 }

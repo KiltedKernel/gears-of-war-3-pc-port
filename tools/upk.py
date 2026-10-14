@@ -121,9 +121,13 @@ class Package:
                 ncomp = i32(d, o2)
                 if not 0 <= ncomp < 10000: raise ValueError(f'export {i}: bad ComponentMap count {ncomp} at {o:#x}')
                 o2 += 4 + 12 * ncomp
-            nnet = i32(d, o2 + 4)
+            # 835 (Gears of War: Reloaded since its 2026 update): one more int between the export flags and the
+            # NetObjectCount array (1 for textures and packages, 0 for an ObjectReferencer). Not yet: class and default
+            # objects with components (their entries carry more; e.g. COG_*_SF.upk fail here)
+            extra = 4 if self.version >= 835 else 0
+            nnet = i32(d, o2 + 4 + extra)
             if not 0 <= nnet < 100000: raise ValueError(f'export {i}: bad NetObjectCount count {nnet} at {o:#x}')
-            o = o2 + 8 + 4 * nnet + 16 + (4 if self.version >= 475 else 0)   # guid; package flags from 475
+            o = o2 + 8 + extra + 4 * nnet + 16 + (4 if self.version >= 475 else 0)   # guid; package flags from 475
 
     def fname(self, index, number):
         n = self.names[index] if 0 <= index < len(self.names) else f'?{index}'

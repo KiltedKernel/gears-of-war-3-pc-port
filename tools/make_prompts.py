@@ -121,7 +121,11 @@ def find_reloaded():
 def main():
     install = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] != 'auto' else (find_reloaded() or '')
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, '..', 'build', 'prompts')
-    pages = reloaded_keycaps(install) if os.path.isdir(install) else None
+    pages = None
+    if os.path.isdir(install):
+        try: pages = reloaded_keycaps(install)
+        except Exception as e:   # an update of Reloaded changed its packages: the drawn keycaps still work
+            print(f'Gears of War: Reloaded keycaps not readable ({e}); drawing them instead')
     source = 'Gears of War: Reloaded keycaps' if pages else 'drawn keycaps'
 
     def key(name):

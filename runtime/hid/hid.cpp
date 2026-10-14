@@ -58,6 +58,7 @@ namespace
     std::atomic<int64_t> g_anyMouse{ 0 };              // any raw mouse event while focused (device tracking)
     std::atomic<uint16_t> g_injected{ 0 };
     std::atomic<uint64_t> g_injectedUntil{ 0 };
+    std::atomic<uint64_t> g_menuEscapeAt{ 0 };          // the last Esc press in a menu, not yet taken
     std::atomic<int64_t> g_rawXScript{ 0 }, g_rawYScript{ 0 };
 
     bool Down(int vk)
@@ -325,9 +326,15 @@ namespace
         for (const auto& b : kButtons)
         {
             if (!Down(b.vk) || (alt && b.vk == VK_RETURN)) continue;
-            // in menus Esc goes back (B), the PC convention; in play it pauses (Start)
-            g.wButtons |= (b.vk == VK_ESCAPE && g_menuMode) ? BTN_B : b.button;
+            // in menus Esc goes back (hid::TakeMenuEscape: the menu code presses B), the PC convention; in play it pauses
+            if (b.vk == VK_ESCAPE && g_menuMode) continue;
+            g.wButtons |= b.button;
         }
+        // a menu's Esc: one request per press (pressed in play and held into a menu: none)
+        static std::atomic<bool> escWasDown{ false };
+        const bool esc = Down(VK_ESCAPE);
+        if (esc && !escWasDown.exchange(true) && g_menuMode) g_menuEscapeAt = GetTickCount64();
+        if (!esc) escWasDown = false;
         g.sThumbLX = Axis(Down('A'), Down('D'));
         g.sThumbLY = Axis(Down('S'), Down('W'));
         g.sThumbRX = look.x;
@@ -392,14 +399,13 @@ namespace
         out.wButtons |= injected;
         // in menus, every change of buttons by source (a player's report of menus not answering can then be read
         // from build\gow3.log): pad, keyboard/mouse, and presses injected by the menu mouse (ui/gfx_menu.cpp)
-        if (g_menuMode)
         {
             static uint16_t lastPad = 0, lastKey = 0, lastInj = 0;
             static int logged = 0;
             const uint16_t p = hasPad ? pad.Gamepad.wButtons : 0;
-            if ((p != lastPad || k.wButtons != lastKey || injected != lastInj) && logged++ < 600)
+            if (g_menuMode && (p != lastPad || k.wButtons != lastKey || injected != lastInj) && logged++ < 600)
                 LOGFN("menu input: pad {:04X} keyboard {:04X} injected {:04X}", p, k.wButtons, injected);
-            lastPad = p; lastKey = k.wButtons; lastInj = injected;
+            lastPad = p; lastKey = k.wButtons; lastInj = injected;   // (outside menus too: a release there is no news)
         }
         out.bLeftTrigger = std::max(out.bLeftTrigger, k.bLeftTrigger);
         out.bRightTrigger = std::max(out.bRightTrigger, k.bRightTrigger);
@@ -525,6 +531,13 @@ void hid::InjectButtons(uint16_t buttons, int milliseconds)
 {
     g_injected = buttons;
     g_injectedUntil = GetTickCount64() + uint64_t(milliseconds);
+}
+
+// a press is dropped when nobody took it within half a second (the game was loading: a late back is a surprise)
+bool hid::TakeMenuEscape()
+{
+    const uint64_t at = g_menuEscapeAt.exchange(0);
+    return at && GetTickCount64() < at + 500;
 }
 
 bool hid::MenuCursor(float& x, float& y)

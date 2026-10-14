@@ -1618,3 +1618,24 @@ Trilogy (the goal: Gears 1/2 campaigns inside Gears 3's engine and gameplay), in
    mods, a mod-enable switch in the launcher, packaging (zip) and versioned format docs.
 Tools: a frame-aware LZX decoder in xpack (the failing blocks above).
 Other: menus (clickable prompt bar, slider dragging); longer playtests.
+
+## 2026-10-13: Esc "breaking" the menus; keyboard prompts missing in a fresh build
+
+**Esc.** A player log (build\gow3.log, with the new menu input trace) and scripted repros showed no stuck input: Esc
+is B in menus, and B on the main menu's first page is `Callback_TransitionToTitle` (MainMenuView.handleInput /
+HostBackwards with an empty MenuOptionsHistory). That reloads the front end: about 10 s with the game thread busy and
+no XInput polling (a GOW3_HANG_DUMP=<s> thread dump showed it working, not waiting), then PRESS START, where
+handleInput reads only GAMEPAD_START, so clicks (A), arrows and Esc did nothing. Clicks and Escs during the back
+animation are dropped too (SetDenyInput). Fix (runtime/ui/gfx_menu.cpp, hid.cpp): in menus Esc is not mapped to a
+button; hid::TakeMenuEscape hands each press to the game thread, which presses B unless the main menu
+(_level0.MainMenuSP.MainMenu) is on its title screen (bOnTitleScreen) or first page (MenuOptionsHistory.length 0, its
+list focused, no capturing overlay). A right click goes the same way; a left click on the title screen is Start. The
+controller's B is unchanged. The menu input trace now updates its last state outside menus as well (a release during a
+transition had been logged as a held key). Tests: menu_esc_root, menu_esc_click_still, menu_esc_then_click,
+menu_title_back.
+
+**Prompts.** A build made without setup.ps1 had no build\prompts, so only controller prompts showed. tools/build.cmd
+now runs make_prompts.py when kbm_glyphs.rgba is missing. make_prompts failed on Gears of War: Reloaded's updated
+packages: version 835 adds an int between an export's flags and its NetObjectCount (1 for textures and packages, 0 for
+an ObjectReferencer); upk.py reads it (class and default objects with components still fail, e.g. COG_*_SF.upk).
+make_prompts draws the keycaps when Reloaded's cannot be read.

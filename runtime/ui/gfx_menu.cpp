@@ -53,6 +53,7 @@ namespace
 
     std::mutex g_targetsMutex;
     std::vector<Target> g_targets;                 // open menu movies (their GFxMovieView and size)
+    std::atomic<bool> g_pendingB{ false };   // a right click: B, unless on the main menu's first page (as Esc)
     std::atomic<bool> g_pendingA{ false };   // a left click waiting for the selection to reach the hovered option
     uint64_t g_pendingSince = 0;
 
@@ -149,7 +150,7 @@ namespace
                 if (logged++ < 30) LOGFN("gfx_menu: mouse {}{}{} at {:.0f},{:.0f} inside {}", m.left && !left ? "left " : "",
                     m.right && !right ? "right " : "", m.wheel ? fmt::format("wheel {} ", m.wheel) : "", m.x, m.y, m.inside);
             if (m.left && !left && m.inside) { g_pendingSince = GetTickCount64(); g_pendingA = true; }
-            else if (m.right && !right && m.inside) hid::InjectButtons(0x2000, 80);   // B
+            else if (m.right && !right && m.inside) g_pendingB = true;   // B, decided on the game thread
             left = m.left; right = m.right;
             pending += m.wheel;
             static uint64_t nextWheel = 0;
@@ -483,6 +484,45 @@ namespace
 
 namespace
 {
+    // where the front end's main menu (gears.views.MainMenuView at _level0.MainMenuSP.MainMenu) is: its title screen
+    // (PRESS START: only Start is read there, MainMenuView.handleInput), its first page (B there is
+    // Callback_TransitionToTitle: back to the title screen, reloading the front end for seconds, which looked to
+    // players like the controls had stopped), or anywhere else (a submenu, or another scene has the input)
+    enum class MainMenuPage { Other, Title, First };
+    MainMenuPage FindMainMenuPage()
+    {
+        const std::string view = "_level0.MainMenuSP.MainMenu";
+        if (GetTickCount64() >= g_focus.at + 250) RefreshFocus(GetTickCount64());
+        std::vector<Target> targets;
+        { std::lock_guard lock(g_targetsMutex); targets = g_targets; }
+        const bool overlay = std::any_of(targets.begin(), targets.end(), [](const Target& t) { return t.capture; });
+        for (const Target& t : targets)
+        {
+            if (overlay && !t.capture) continue;   // a message box or options over it: B is theirs
+            if (!(GetNumber(t.scene, view + "._visible") > 0)) continue;
+            if (GetNumber(t.scene, view + ".bOnTitleScreen") > 0) return MainMenuPage::Title;
+            if (GetNumber(t.scene, view + ".MenuOptionsHistory.length") > 0) return MainMenuPage::Other;
+            if (!g_focus.list.empty() && g_focus.list.rfind(view + ".", 0) != 0) return MainMenuPage::Other;
+            return MainMenuPage::First;
+        }
+        return MainMenuPage::Other;
+    }
+
+    // Esc or a right click in a menu: B, except on the main menu's first page and its title screen (PC convention:
+    // Esc on a game's top menu does nothing; the controller's B keeps the console's way)
+    void Back(const char* what)
+    {
+        const MainMenuPage page = FindMainMenuPage();
+        static int logged = 0;
+        if (page != MainMenuPage::Other)
+        {
+            if (logged++ < 50) LOGFN("gfx_menu: {} on the main menu's {}: ignored", what, page == MainMenuPage::Title ? "title screen" : "first page");
+            return;
+        }
+        hid::InjectButtons(0x2000, 80);
+        if (logged++ < 50) LOGFN("gfx_menu: {} -> B", what);
+    }
+
     // a selection outside the focused list's data (the reused main-menu list: a submenu with fewer options than the
     // menu it came from) leaves the highlight on an empty row and the list ignoring the d-pad. Whatever put it there
     // (a hover, a click, Esc / B back to a shorter menu...), it is moved back onto the last option, twice a second
@@ -513,7 +553,9 @@ void OnGameThread()
     // the game's main loop only: another thread polls the pad too, and Scaleform belongs to the game thread
     if (GetCurrentThreadId() != g_mainThreadId) return;
     static int lastX = -2, lastY = -2;
-    if (!hid::MenuMode()) { lastX = -2; return; }
+    if (!hid::MenuMode()) { lastX = -2; g_pendingB = false; return; }
+    if (hid::TakeMenuEscape()) Back("Esc");
+    if (g_pendingB.exchange(false)) Back("right click");
     Heal();
     float fx, fy;
     if (!hid::MenuCursor(fx, fy)) return;   // read now, not from the 15 ms mouse poll
@@ -525,7 +567,13 @@ void OnGameThread()
     if (g_pendingA && (!moving || GetTickCount64() - g_pendingSince > 1500) && GetTickCount64() >= g_lastPress + 150)
     {
         g_pendingA = false;
-        if (noHover || moving) hid::InjectButtons(0x1000, 80);   // A on whatever is selected
+        if (FindMainMenuPage() == MainMenuPage::Title)
+        {
+            hid::InjectButtons(0x0010, 80);   // PRESS START reads only Start
+            static int logged = 0;
+            if (logged++ < 20) LOGFN("gfx_menu: click on the title screen -> Start");
+        }
+        else if (noHover || moving) hid::InjectButtons(0x1000, 80);   // A on whatever is selected
         else Click();
         g_lastPress = GetTickCount64();   // no lookups while the press is read
         g_focus.at = 0;                   // the menu may change: find the focused list again

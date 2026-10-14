@@ -1,0 +1,15 @@
+# bug repro (player log): click Campaign, Esc, click again at once without moving (several times), then move and click Horde
+45 pad 0010 250
+52 cursor 640 360
+53 glide 230 373 400
+55 click L 120
+58 key 1B 120
+58.4 click L 100
+60 key 1B 120
+60.2 click L 100
+62 key 1B 120
+63 click L 100
+66 key 1B 120
+68 glide 240 424 500
+70 click L 120
+74 pad 0002 150

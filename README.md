@@ -71,6 +71,10 @@ In menus the mouse works too: hover selects, left click accepts (Start on the ti
 wheel scrolls. On the main menu's first page Esc and right click do nothing; the controller's B still returns to the
 title screen as on the console.
 
+Keyboard and mouse button prompts are drawn by the setup (`build\prompts`; only Windows' Segoe UI font is needed).
+If you own Gears of War: Reloaded on Steam, `python tools\make_prompts.py reloaded` uses its keycap art instead
+(`python tools\make_prompts.py drawn` goes back).
+
 ## Mods
 
 Each folder in `build\mods\` with a `mod.ini` adds or replaces game files; several mods stack by priority, and the
@@ -95,7 +99,8 @@ is the full development journal.
   empty) and their own mods (`-Mods "examples\mods\X"`), never the player's (`GOW3_DATA_DIR`, `GOW3_MODS_DIR`).
 - `GOW3_COMMAND_LINE` adds to the game's command line, e.g. a map URL to start on without the menus.
 - `python tools\chapter_test.py [0-30]`: campaign coverage. Boots each chapter directly, plays generic input, and
-  reports crashes, the map loaded, frame rates and black or frozen screens (`build\coverageeport.md`, one contact
+  reports crashes, the map loaded, frame rates and black or frozen screens (`build\coverage
+eport.md`, one contact
   sheet per chapter).
 - Debug switches are environment variables `GOW3_*`, documented in the files that read them.
 - The package tools (`tools/upk.py` and those built on it) decompress with `tools\xpack\xpack.exe`: build it once

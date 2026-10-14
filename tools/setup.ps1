@@ -153,8 +153,8 @@ Run $bash @("$Root/tools/recomp.sh")
 # ---- 6. build ----
 Step 6 "building build\gow3.exe - the first build takes a while"
 Run cmd @('/c', "`"$Root\tools\build.cmd`"")
-# keyboard/mouse button prompts: icons from Gears of War: Reloaded when it is installed (Steam), else drawn ones
-Run $python @('-P', "$Root\tools\make_prompts.py", 'auto', "$Root\build\prompts")
+# keyboard/mouse button prompts: drawn icons (Gears of War: Reloaded's keycaps are an opt-in: make_prompts.py reloaded)
+Run $python @('-P', "$Root\tools\make_prompts.py", 'drawn', "$Root\build\prompts")
 
 # ---- 7. shortcut ----
 Step 7 "shortcut"

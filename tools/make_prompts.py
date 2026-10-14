@@ -1,8 +1,11 @@
 """Build the keyboard/mouse button-prompt glyphs (build/prompts/kbm_glyphs.png + .json) for the runtime's prompt swap.
-Key icons come from the player's own Gears of War: Reloaded install (its WarfareFonts_Keycaps20 font, Steam version),
-mouse icons are drawn in the same keycap style; without Reloaded, every icon is drawn. The output is generated on the
-player's PC and never committed (it contains Reloaded artwork).
-usage: python -P make_prompts.py [Reloaded install folder] [out folder]
+By default every icon is drawn here (black keycaps with a white rim, labels in Segoe UI Bold, which every Windows
+has): the port needs nothing but the player's Gears of War 3 disc, and every player sees the same icons.
+Opt-in: "reloaded" takes the key icons from the player's own Gears of War: Reloaded install (its WarfareFonts_Keycaps20
+font, Steam version; mouse icons are still drawn), falling back to drawn ones when it is missing or unreadable. The
+output is generated on the player's PC and never committed.
+usage: python -P make_prompts.py [drawn | reloaded | <Reloaded install folder>] [out folder]
+  ("auto", the old default, now means drawn)
 Each glyph replaces one character of GoW2's Warfare_HUD.Xbox360_18pt font (see runtime/ui/prompts.cpp)."""
 import importlib.util, json, os, sys
 import numpy as np
@@ -119,7 +122,12 @@ def find_reloaded():
     return None
 
 def main():
-    install = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] != 'auto' else (find_reloaded() or '')
+    mode = sys.argv[1] if len(sys.argv) > 1 else 'drawn'
+    if mode in ('drawn', 'auto'): install = ''
+    elif mode == 'reloaded':
+        install = find_reloaded() or ''
+        if not install: print('Gears of War: Reloaded not found in a Steam library: drawing the keycaps')
+    else: install = mode
     out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, '..', 'build', 'prompts')
     pages = None
     if os.path.isdir(install):

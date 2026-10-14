@@ -33,10 +33,12 @@
    Tools with clang-cl, CMake and Ninja; Python; Git), `-CheckOnly` reports. The converter window
    (`Setup.cmd`, tools/setup_gui.ps1) runs it with progress and a log. Next: prebuilt runtime and tools, so the
    player's PC only recompiles the game code.
-2. ~~Launcher with a mod manager~~ (done 2026-10-13: the Mods tab). Later: remove / update mods, mod pages with
+2. ~~Launcher with a mod manager~~ (done 2026-10-13: the Mods tab, with Remove to the Recycle Bin). Later: update mods, mod pages with
    screenshots.
 3. ~~Runtime config merge for mods~~ (done 2026-10-13).
-4. **Campaign coverage:** play through every act with scripted tests; fix what breaks.
+4. **Campaign coverage:** play through every act with scripted tests; fix what breaks. `tools/chapter_test.py` boots
+   every chapter (0-30) directly and plays generic input for a few minutes (results below). Next: longer
+   play-throughs per chapter (checkpoints, set pieces, vehicles), and fixing what fails.
 5. **Reverse-engineering documentation:** keep `docs/REVERSE_ENGINEERING.md` current as systems are understood.
 6. **Room for expansion:** content conversion from Gears of War 1 and 2 (developed separately) plugs in as mods
    (new chapters, levels, characters).

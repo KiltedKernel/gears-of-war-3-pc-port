@@ -65,8 +65,14 @@ namespace
         }
         if (n == "ExLoadedCommandLine")
         {
-            uint32_t a = AllocZeroed(256);
-            strcpy((char*)g_memory.Translate(a), "\"default.xex\"");
+            // the game's command line (UE3 appCmdLine): GOW3_COMMAND_LINE adds to it, e.g. a map URL to start on
+            // (tools/chapter_test.py: "GearGame_P?game=geargamecontent.GearGameSP?chapter=7?listen")
+            std::string line = "\"default.xex\"";
+            if (const char* extra = getenv("GOW3_COMMAND_LINE"); extra && *extra) line += std::string(" ") + extra;
+            line.resize(std::min<size_t>(line.size(), 1023));
+            uint32_t a = AllocZeroed(1024);
+            strcpy((char*)g_memory.Translate(a), line.c_str());
+            if (line.size() > 13) LOGFN("loader: command line {}", line);
             return a;
         }
         if (n == "XexExecutableModuleHandle")

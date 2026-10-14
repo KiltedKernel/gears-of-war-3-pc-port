@@ -31,8 +31,12 @@ namespace
         return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
     }
 
+    // build\mods; GOW3_MODS_DIR=<folder> uses another (tools/playtest.ps1: tests bring their own mods)
     std::filesystem::path ModsRoot()
     {
+        wchar_t dir[MAX_PATH]{};
+        const DWORD n = GetEnvironmentVariableW(L"GOW3_MODS_DIR", dir, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) return std::filesystem::path(dir);
         wchar_t exe[MAX_PATH]{};
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
         return std::filesystem::path(exe).parent_path() / "mods";

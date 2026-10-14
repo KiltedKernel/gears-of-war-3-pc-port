@@ -91,7 +91,12 @@ is the full development journal.
 - `bash tools/rebuild.sh`: recompile (when `config/` changed) and rebuild.
 - `cmd /c tools\build.cmd`: rebuild the runtime only.
 - `tools\playtest.ps1 -Script tests\<script>.txt -Seconds N -Shots "a,b"`: scripted input (tests/), screenshots in
-  `build\shots`, log in `build\gow3.log`.
+  `build\shots`, log in `build\gow3.log`. Tests use their own saves and profile (`build	estdata`, `-Fresh` starts
+  empty) and their own mods (`-Mods "examples\mods\X"`), never the player's (`GOW3_DATA_DIR`, `GOW3_MODS_DIR`).
+- `GOW3_COMMAND_LINE` adds to the game's command line, e.g. a map URL to start on without the menus.
+- `python tools\chapter_test.py [0-30]`: campaign coverage. Boots each chapter directly, plays generic input, and
+  reports crashes, the map loaded, frame rates and black or frozen screens (`build\coverageeport.md`, one contact
+  sheet per chapter).
 - Debug switches are environment variables `GOW3_*`, documented in the files that read them.
 - The package tools (`tools/upk.py` and those built on it) decompress with `tools\xpack\xpack.exe`: build it once
   with `cmd /c tools\build_xpack.cmd` (after setup, which fetches the LZX decoder with XenonRecomp).

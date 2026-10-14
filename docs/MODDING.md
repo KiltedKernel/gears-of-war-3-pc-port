@@ -120,7 +120,9 @@ When the game starts, the runtime merges every enabled mod's fragments, in load 
 change the configuration at once. The log lists each fragment (`mods: config chapters.ini from My mod: 13 lines`);
 mistakes are logged with the file and line. `python -P tools/modtool.py check MyMod` checks fragments too.
 
-Two small working examples are in `examples/mods/` (a new act and chapter; a menu string): copy them into `mods\`.
+Working examples are in `examples/mods/`: a new act and chapter (`ExampleChapter`), a menu string
+(`ExampleMenuText`), and `UnlockAllChapters`, which sets `IsAlwaysUnlocked=true` on chapters 1-30 so every chapter
+can be picked in Select Chapter. Copy one into `mods\` (or install its folder as a .zip from the launcher).
 
 ## New campaign chapters
 

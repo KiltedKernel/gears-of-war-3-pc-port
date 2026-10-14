@@ -26,11 +26,23 @@ static std::filesystem::path g_gamePath;
 
 std::filesystem::path GetGamePath() { return g_gamePath; }
 
-std::filesystem::path GetUserPath()
+// %LOCALAPPDATA%\GoW3Recomp: saves, profile, caches. GOW3_DATA_DIR=<folder> uses another one (tools/playtest.ps1 does,
+// so scripted tests never touch the player's saves); the shader cache stays shared (GetSharedUserPath)
+std::filesystem::path GetSharedUserPath()
 {
     wchar_t buf[MAX_PATH];
     GetEnvironmentVariableW(L"LOCALAPPDATA", buf, MAX_PATH);
     return std::filesystem::path(buf) / "GoW3Recomp";
+}
+
+std::filesystem::path GetUserPath()
+{
+    static const std::filesystem::path path = [] {
+        wchar_t buf[MAX_PATH];
+        const DWORD n = GetEnvironmentVariableW(L"GOW3_DATA_DIR", buf, MAX_PATH);
+        return n > 0 && n < MAX_PATH ? std::filesystem::path(buf) : GetSharedUserPath();
+    }();
+    return path;
 }
 
 std::filesystem::path GetSavePath(bool) { return GetUserPath() / "save"; }

@@ -324,7 +324,7 @@ std::wstring g_modsDir;
 std::vector<ModEntry> g_mods;
 HWND g_modList, g_modInfo;
 bool g_modsLoading = false;
-enum { ID_MOD_LIST = 200, ID_MOD_UP, ID_MOD_DOWN, ID_MOD_INSTALL, ID_MOD_FOLDER, ID_MOD_REFRESH };
+enum { ID_MOD_LIST = 200, ID_MOD_UP, ID_MOD_DOWN, ID_MOD_INSTALL, ID_MOD_FOLDER, ID_MOD_REFRESH, ID_MOD_REMOVE };
 
 std::string Narrow(const std::wstring& w)
 {
@@ -488,6 +488,27 @@ void Status(const wchar_t* text);
 
 // moves the selected mod one place earlier / later in the load order: priorities are renumbered 0, 10, 20... in
 // the new order (written to each mod.ini)
+// the selected mod's folder to the Recycle Bin (so a mistake can be undone there)
+void RemoveMod(bool ask = true)
+{
+    const int sel = int(SendMessageW(g_modList, LVM_GETNEXTITEM, WPARAM(-1), LVNI_SELECTED));
+    if (sel < 0 || sel >= int(g_mods.size())) { Status(L"Select a mod to remove."); return; }
+    const ModEntry& m = g_mods[sel];
+    if (m.folder.empty() || m.folder.find(L"..") != std::wstring::npos || m.folder.find_first_of(L"\\/:") != std::wstring::npos) return;
+    if (ask && MessageBoxW(g_wnd, (L"Remove \"" + Wide(m.name.empty() ? Narrow(m.folder) : m.name) + L"\"?\n\nIts folder (mods\\" +
+                           m.folder + L") goes to the Recycle Bin.").c_str(), L"Remove mod", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+    std::wstring from = g_modsDir + L"\\" + m.folder;
+    from.push_back(L'\0');   // SHFileOperation: a double-NUL-terminated list
+    SHFILEOPSTRUCTW op{};
+    op.hwnd = g_wnd; op.wFunc = FO_DELETE; op.pFrom = from.c_str();
+    op.fFlags = FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI;
+    const std::wstring folder = m.folder;
+    const int r = SHFileOperationW(&op);
+    ReloadMods();
+    Status(r == 0 && !op.fAnyOperationsAborted ? (L"Removed " + folder + L" (in the Recycle Bin).").c_str()
+                                               : (L"Could not remove " + folder + L" (is the game running?).").c_str());
+}
+
 void MoveMod(int dir)
 {
     const int sel = int(SendMessageW(g_modList, LVM_GETNEXTITEM, WPARAM(-1), LVNI_SELECTED));
@@ -598,6 +619,7 @@ void BuildModsPage(std::vector<HWND>& page)
     page.push_back(Make(L"BUTTON", L"Install .zip...", BS_PUSHBUTTON | WS_TABSTOP, 508, 252, 100, 30, ID_MOD_INSTALL, g_font));
     page.push_back(Make(L"BUTTON", L"Open folder", BS_PUSHBUTTON | WS_TABSTOP, 508, 288, 100, 30, ID_MOD_FOLDER, g_font));
     page.push_back(Make(L"BUTTON", L"Refresh", BS_PUSHBUTTON | WS_TABSTOP, 508, 324, 100, 30, ID_MOD_REFRESH, g_font));
+    page.push_back(Make(L"BUTTON", L"Remove", BS_PUSHBUTTON | WS_TABSTOP, 508, 364, 100, 30, ID_MOD_REMOVE, g_font));
     g_modInfo = Make(L"STATIC", L"", SS_LEFT, 28, 404, 580, 150, 0, g_fontSmall);
     page.push_back(g_modInfo);
     ReloadMods();
@@ -728,6 +750,7 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp)
             ShellExecuteW(h, L"open", g_modsDir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
             return 0;
         case ID_MOD_REFRESH: ReloadMods(); Status(L"Mod list refreshed."); return 0;
+        case ID_MOD_REMOVE: RemoveMod(); return 0;
         }
         if (HIWORD(wp) == BN_CLICKED || HIWORD(wp) == CBN_SELCHANGE) Status(L"");
         return 0;
@@ -757,6 +780,11 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show)
     g_exeDir = exe;
     g_exeDir.resize(g_exeDir.find_last_of(L"\\/"));
     g_modsDir = g_exeDir + L"\\mods";
+    {   // GOW3_MODS_DIR=<folder>: another mods folder, as the game takes it (tests)
+        wchar_t dir[MAX_PATH] = {};
+        const DWORD n = GetEnvironmentVariableW(L"GOW3_MODS_DIR", dir, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) g_modsDir = dir;
+    }
     // test mode (GOW3_LAUNCHER_SHOT=<folder>): each page drawn off-screen to page<N>.bmp, the ini saved, no focus taken
     wchar_t shotDir[MAX_PATH] = {};
     const bool shot = GetEnvironmentVariableW(L"GOW3_LAUNCHER_SHOT", shotDir, MAX_PATH) > 0;
@@ -827,6 +855,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show)
             wchar_t zip[MAX_PATH] = {};
             if (GetEnvironmentVariableW(L"GOW3_LAUNCHER_INSTALL", zip, MAX_PATH) > 0) InstallZipFile(zip, false);
             capture(L"mods_after");
+            // GOW3_LAUNCHER_REMOVE=1: then remove the first mod in the list (to the Recycle Bin); mods_removed.bmp
+            if (GetEnvironmentVariableW(L"GOW3_LAUNCHER_REMOVE", nullptr, 0) > 0) { select(0); RemoveMod(false); capture(L"mods_removed"); }
         }
         for (int page = 0; page < kPageCount; page++)
         {

@@ -108,6 +108,12 @@ names the focused one and `__set__selectedIndex` selects like a d-pad press. Gea
 its submenus (Campaign's three options in seven rows): rows past the data length must be ignored, or the selection
 leaves the list and input appears dead. Details: `runtime/ui/gfx_menu.cpp`.
 
+The front end's main menu is `gears.views.MainMenuView` at `_level0.MainMenuSP.MainMenu` (ActionScript in the
+movie; decompiled with JPEXS). Its `handleInput`: on the title screen (`bOnTitleScreen`) only GAMEPAD_START is read;
+B with an empty `MenuOptionsHistory` (the first page) calls `Callback_TransitionToTitle`, which reloads the front end
+(about 10 s without polling input); `SetDenyInput(true)` drops every press during a transition. The port therefore
+answers Esc and right click itself (no B on the first page) and turns a click on the title screen into Start.
+
 ### Button prompts
 
 The button font's page 0 (256x256 DXT5, FNV 350c61d5241b80a8) is never touched; keyboard icons go into page 1's free
@@ -123,12 +129,21 @@ objects. Character map and details: `runtime/ui/prompts.cpp`, ENGINEERING_LOG.
   GearGame.int for text), found by `ChapterNum` (GearUIDataStore_GameResource.GetChapterDataProvider); their
   `MapName` is not what loads. EChapterPoint: chapters 0-30, CHAP_Gameover 31, CHAP_DLC_1..18 (32-49), CHAP_MAX 50.
 - New chapters: `runtime/ue3/campaign_chapters.cpp` (see MODDING.md).
+- Unlocking: `GearProfileSettings.HasChapterBeenUnlockedForAccess` returns true for a chapter whose config has
+  `IsAlwaysUnlocked=true` (only chapter 0 on the disc), else tests bit N of profile setting 95 (chapters 0-31) or 96
+  (32+). The Select Chapter screen checks the same flag (examples/mods/UnlockAllChapters).
+- The chapter URL also works as the game's command line (UE3 appCmdLine, read from the kernel variable
+  `ExLoadedCommandLine`; the port fills it in `runtime/loader.cpp`, `GOW3_COMMAND_LINE` adds to it): the game then boots
+  straight into the chapter (tools/chapter_test.py).
+- Cutscenes: `GearPC.CancelCine` (`CANCELMATINEE`) is bound to Space on PC; the controller's Start goes through
+  `ButtonPress Start`.
 
 ## 4. Files and formats
 
 | format | tool | notes |
 |---|---|---|
 | UE3 packages (.xxx), big-endian, version 828 | `tools/upk.py`, `tools/upkwrite.py` | chunks LZX-compressed (flag 4); some packages are compressed as a whole (GearGame.xxx, startup packages) |
+| Gears of War: Reloaded packages (.upk), little-endian, version 835 | `tools/upk.py` | one more int per export before NetObjectCount; class/default objects with components not parsed yet |
 | LZX (XMemCompress framing, 128 KB window) | `tools/xpack` | some blocks with odd frame lengths are not decoded yet (GearGame.xxx 340-347) |
 | Coalesced_INT.bin (all .ini) | `tools/coalesced.py` | strings UTF-16; merge for mods |
 | UnrealScript bytecode | `tools/uscript.py` | readable pseudo-code of any function |

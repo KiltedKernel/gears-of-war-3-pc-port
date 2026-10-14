@@ -17,7 +17,7 @@
 #include "../../xe_glue/gow2_gpu.h"
 #include <filesystem>
 
-std::filesystem::path GetUserPath();   // main.cpp
+std::filesystem::path GetSharedUserPath();   // main.cpp
 namespace prompts { void OnTextureLoad(uint32_t, uint32_t, uint32_t, uint32_t, uint32_t, bool); void Start(); }   // ui/prompts.cpp
 namespace mouse_menu { void Start(); }   // ui/mouse_menu.cpp
 namespace gfx_menu { void Start(); }     // ui/gfx_menu.cpp
@@ -185,7 +185,7 @@ void gpu::Initialize()
     host.fullscreen = cfg.fullscreen;
     host.vblankHz = std::max(60, cfg.frameRate);
     host.xenosSamplePositions = cfg.xenosSamplePositions;
-    static const std::wstring shaderCache = (GetUserPath() / "shader_cache").wstring();
+    static const std::wstring shaderCache = (GetSharedUserPath() / "shader_cache").wstring();
     host.shaderCacheRoot = cfg.shaderCache ? shaderCache.c_str() : nullptr;
     host.upscaling = cfg.upscaling;
     host.sharpness = cfg.sharpness;

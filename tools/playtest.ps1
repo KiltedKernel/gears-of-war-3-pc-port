@@ -1,11 +1,31 @@
 # Scripted playtest that leaves the desktop alone: the game starts minimized, input comes from a script file played
 # inside the runtime (GOW3_INPUT_SCRIPT), screenshots are taken from the guest output (GOW3_SCREENSHOTS).
 # usage: powershell -File tools/playtest.ps1 -Script tests\load_and_look.txt -Seconds 180 -Shots "150,160"
-param([string]$Script, [int]$Seconds = 120, [string]$Shots = "", [string]$Disc = "$PSScriptRoot/../../gow3-decomp/disc")
+# Tests keep their own saves and profile (build\testdata; -Fresh empties it first) and their own mods (none, or the
+# mod folders given with -Mods "examples\mods\A,examples\mods\B", copied to build\testmods), so the player's saves in
+# %LOCALAPPDATA%\GoW3Recomp and mods in build\mods are never touched. -PlayerData uses the player's own (careful).
+param([string]$Script, [int]$Seconds = 120, [string]$Shots = "", [string]$Disc = "$PSScriptRoot/../../gow3-decomp/disc",
+      [string]$Mods = "", [switch]$Fresh, [switch]$PlayerData)
+$build = (Resolve-Path "$PSScriptRoot\..\build").Path
 $env:GOW3_INPUT_SCRIPT = $Script
 $env:GOW3_SCREENSHOTS = $Shots
-Remove-Item -Recurse -Force "$PSScriptRoot\..\build\shots" -ErrorAction SilentlyContinue
-$p = Start-Process -FilePath "$PSScriptRoot\..\build\gow3.exe" -ArgumentList "`"$Disc`"" -WorkingDirectory "$PSScriptRoot\..\build" -WindowStyle Minimized -PassThru
+if (-not $PlayerData) {
+    $data = Join-Path $build 'testdata'
+    if ($Fresh) { Remove-Item -Recurse -Force $data -ErrorAction SilentlyContinue }
+    New-Item -ItemType Directory -Force $data | Out-Null
+    $env:GOW3_DATA_DIR = $data
+    $modsDir = Join-Path $build 'testmods'
+    Remove-Item -Recurse -Force $modsDir -ErrorAction SilentlyContinue
+    New-Item -ItemType Directory -Force $modsDir | Out-Null
+    foreach ($m in ($Mods -split ',' | Where-Object { $_.Trim() })) {
+        $src = $m.Trim()
+        if (-not [IO.Path]::IsPathRooted($src)) { $src = Join-Path "$PSScriptRoot\.." $src }
+        Copy-Item -Recurse -Force -LiteralPath $src -Destination $modsDir
+    }
+    $env:GOW3_MODS_DIR = $modsDir
+}
+Remove-Item -Recurse -Force "$build\shots" -ErrorAction SilentlyContinue
+$p = Start-Process -FilePath "$build\gow3.exe" -ArgumentList "`"$Disc`"" -WorkingDirectory $build -WindowStyle Minimized -PassThru
 $start = Get-Date
 while (((Get-Date) - $start).TotalSeconds -lt $Seconds -and -not $p.HasExited) { Start-Sleep -Milliseconds 500 }
 if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force; Write-Output "stopped after $Seconds s" } else { Write-Output ("exited " + $p.ExitCode) }

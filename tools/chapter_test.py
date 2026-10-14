@@ -5,8 +5,8 @@ usage: python tools/chapter_test.py [chapters] [--seconds N] [--out DIR]
 For each chapter the game starts on GearGame_P?game=geargamecontent.GearGameSP?chapter=N (GOW3_COMMAND_LINE: the URL
 the menu's Select Chapter builds, without the menus) with a fresh test profile and no mods (tools/playtest.ps1), plays
 generic input (walk, look around, fire, cover) and takes screenshots. Per chapter it records: crash or not, the
-persistent map that loaded, the window's present rate (the "video: fps" log line; not the game's frame
-rate), black or frozen screenshots. Output: <out>/chNN.png (contact sheet),
+persistent map that loaded, the game's frame rate (frames it presents through VdSwap, logged every 10 s; capped by
+frame_rate in build\gow3.ini; the first 50 s, loading, are left out), black or frozen screenshots. Output: <out>/chNN.png (contact sheet),
 <out>/report.md and report.json. A chapter takes about --seconds (default 150): all 31 take about 80 minutes.
 """
 import argparse, json, os, re, shutil, subprocess, sys, time
@@ -83,7 +83,7 @@ def run_chapter(n, seconds, out):
     maps = []
     for m in re.findall(r'NtCreateFile: \S+\\CookedXbox360\\(\w+_P)\.xxx', log, re.I):
         if m.lower() not in [x.lower() for x in maps] and m.lower() != 'geargame_p': maps.append(m)
-    fps = [float(x) for x in re.findall(r'video: ([\d.]+) fps', log)]
+    fps = [float(x) for x in re.findall(r'video: ([\d.]+) fps', log)][5:]   # one line per 10 s: from 50 s on (past loading)
     crash = [l for l in log.splitlines() if 'CRASH' in l][:3]
     shots = sorted(os.path.join(BUILD, 'shots', f) for f in os.listdir(os.path.join(BUILD, 'shots'))) if os.path.isdir(os.path.join(BUILD, 'shots')) else []
     info = analyse(shots)
@@ -92,7 +92,7 @@ def run_chapter(n, seconds, out):
     late = info[-3:]
     result = {
         'chapter': n, 'status': status, 'seconds': round(time.time() - start), 'maps': maps, 'crash': crash,
-        'fps_min': min(fps) if fps else None, 'fps_last': fps[-1] if fps else None, 'shots': info,
+        'fps_min': min(fps) if fps else None, 'fps_median': sorted(fps)[len(fps) // 2] if fps else None, 'shots': info,
         'exited_early': status.startswith('exited'),
         'black_at_end': bool(late) and all(s['black'] for s in late),
         'frozen_at_end': len(late) >= 2 and all(s['same_as_previous'] for s in late[1:]),
@@ -103,7 +103,7 @@ def run_chapter(n, seconds, out):
 
 def write_report(results, out):
     json.dump(results, open(os.path.join(out, 'report.json'), 'w'), indent=1)
-    rows = ['| chapter | result | map | presents/s (min / last) | notes |', '|---|---|---|---|---|']
+    rows = ['| chapter | result | map | fps after loading (min / median) | notes |', '|---|---|---|---|---|']
     for r in results:
         notes = []
         if r['crash']: notes.append('crash: ' + r['crash'][0].split('CRASH:')[-1].strip()[:60])
@@ -111,7 +111,7 @@ def write_report(results, out):
         if r['black_at_end']: notes.append('black screen')
         if r['frozen_at_end']: notes.append('frozen picture')
         if not r['maps']: notes.append('no chapter map loaded')
-        fps = f"{r['fps_min']:.0f} / {r['fps_last']:.0f}" if r['fps_min'] is not None else '-'
+        fps = f"{r['fps_min']:.0f} / {r['fps_median']:.0f}" if r['fps_min'] is not None else '-'
         rows.append(f"| {r['chapter']} | {'ok' if r['ok'] else 'FAIL'} | {', '.join(r['maps'])} | {fps} | {'; '.join(notes)} |")
     open(os.path.join(out, 'report.md'), 'w').write('# Chapter coverage\n\n' + '\n'.join(rows) + '\n\nSheets: chNN.png\n')
     return rows

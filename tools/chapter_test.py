@@ -5,7 +5,8 @@ usage: python tools/chapter_test.py [chapters] [--seconds N] [--out DIR]
 For each chapter the game starts on GearGame_P?game=geargamecontent.GearGameSP?chapter=N (GOW3_COMMAND_LINE: the URL
 the menu's Select Chapter builds, without the menus) with a fresh test profile and no mods (tools/playtest.ps1), plays
 generic input (walk, look around, fire, cover) and takes screenshots. Per chapter it records: crash or not, the
-persistent map that loaded, frame rates, black or frozen screenshots. Output: <out>/chNN.png (contact sheet),
+persistent map that loaded, the window's present rate (the "video: fps" log line; not the game's frame
+rate), black or frozen screenshots. Output: <out>/chNN.png (contact sheet),
 <out>/report.md and report.json. A chapter takes about --seconds (default 150): all 31 take about 80 minutes.
 """
 import argparse, json, os, re, shutil, subprocess, sys, time
@@ -102,7 +103,7 @@ def run_chapter(n, seconds, out):
 
 def write_report(results, out):
     json.dump(results, open(os.path.join(out, 'report.json'), 'w'), indent=1)
-    rows = ['| chapter | result | map | fps (min / last) | notes |', '|---|---|---|---|---|']
+    rows = ['| chapter | result | map | presents/s (min / last) | notes |', '|---|---|---|---|---|']
     for r in results:
         notes = []
         if r['crash']: notes.append('crash: ' + r['crash'][0].split('CRASH:')[-1].strip()[:60])

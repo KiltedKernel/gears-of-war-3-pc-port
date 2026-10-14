@@ -1639,3 +1639,15 @@ now runs make_prompts.py when kbm_glyphs.rgba is missing. make_prompts failed on
 packages: version 835 adds an int between an export's flags and its NetObjectCount (1 for textures and packages, 0 for
 an ObjectReferencer); upk.py reads it (class and default objects with components still fail, e.g. COG_*_SF.upk).
 make_prompts draws the keycaps when Reloaded's cannot be read.
+
+## 2026-10-13: campaign coverage, every chapter
+
+The chapter URL works as the game's command line (ExLoadedCommandLine, GOW3_COMMAND_LINE), so a chapter boots with no
+menus. tools/chapter_test.py runs chapters 0-30 for 150 s each on a fresh, isolated test profile (playtest.ps1 now
+uses build\testdata and build\testmods; the player's saves and mods are never touched), pressing Start then B every
+12 s (skips a cutscene; in play it opens and closes the pause menu), walking, turning, firing and taking cover. All 31
+chapters load (SP_Nightmare_P .. SP_Rooftop_P, with their intro/cine persistent levels: SP_Stadium_ColeCine_P,
+SP_Imulsion_P, SP_OldShipyard_Intro_P, SP_Azura_Intro_P), render, and run without a crash, black or frozen screen;
+when the aimless player dies the checkpoint reloads. Also seen: on a brand-new profile the main menu takes input a few
+seconds later than usual after Start (the profile storage is being created), and GearCampaignChapterData's
+IsAlwaysUnlocked (config) unlocks a chapter in Select Chapter (examples/mods/UnlockAllChapters).

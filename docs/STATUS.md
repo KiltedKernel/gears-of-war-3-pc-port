@@ -18,7 +18,8 @@
 
 - No Xbox Live: online modes, party UI (the game asks for xam.xex through XexLoadImage, which fails; it then skips the
   party features).
-- The rest of the campaign (Acts 2-5) has not been played through in tests.
+- Acts 2-5: every chapter loads and plays its first minutes (tools/chapter_test.py); none has been played through
+  to its end in tests.
 - Versus with bots: not tested.
 - `tools/xpack` does not decode every LZX block (GearGame.xxx blocks 340-347): packages compressed as a whole cannot
   be rewritten offline yet.
@@ -37,8 +38,10 @@
    screenshots.
 3. ~~Runtime config merge for mods~~ (done 2026-10-13).
 4. **Campaign coverage:** play through every act with scripted tests; fix what breaks. `tools/chapter_test.py` boots
-   every chapter (0-30) directly and plays generic input for a few minutes (results below). Next: longer
-   play-throughs per chapter (checkpoints, set pieces, vehicles), and fixing what fails.
+   every chapter (0-30) directly and plays generic input for 150 s. First run (2026-10-13): all 31 chapters load
+   their maps, play cutscenes and gameplay (combat, turret and vehicle sections, the Maelstrom submarine) with no
+   crash, black or frozen screen; deaths reload checkpoints. Next: longer play-throughs per chapter (checkpoint to
+   checkpoint, set pieces, chapter transitions), and a game frame-rate measure.
 5. **Reverse-engineering documentation:** keep `docs/REVERSE_ENGINEERING.md` current as systems are understood.
 6. **Room for expansion:** content conversion from Gears of War 1 and 2 (developed separately) plugs in as mods
    (new chapters, levels, characters).

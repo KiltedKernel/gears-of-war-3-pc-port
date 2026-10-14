@@ -3,9 +3,10 @@
 # usage: powershell -File tools/playtest.ps1 -Script tests\load_and_look.txt -Seconds 180 -Shots "150,160"
 # Tests keep their own saves and profile (build\testdata; -Fresh empties it first) and their own mods (none, or the
 # mod folders given with -Mods "examples\mods\A,examples\mods\B", copied to build\testmods), so the player's saves in
-# %LOCALAPPDATA%\GoW3Recomp and mods in build\mods are never touched. -PlayerData uses the player's own (careful).
+# %LOCALAPPDATA%\GoW3Recomp and mods in build\mods are never touched, and their own settings (build	estdata\gow3.ini:
+# the defaults, or -Settings <ini>). -PlayerData uses the player's own saves, mods and settings (careful).
 param([string]$Script, [int]$Seconds = 120, [string]$Shots = "", [string]$Disc = "$PSScriptRoot/../../gow3-decomp/disc",
-      [string]$Mods = "", [switch]$Fresh, [switch]$PlayerData)
+      [string]$Mods = "", [string]$Settings = "", [switch]$Fresh, [switch]$PlayerData)
 $build = (Resolve-Path "$PSScriptRoot\..\build").Path
 $env:GOW3_INPUT_SCRIPT = $Script
 $env:GOW3_SCREENSHOTS = $Shots
@@ -23,6 +24,11 @@ if (-not $PlayerData) {
         Copy-Item -Recurse -Force -LiteralPath $src -Destination $modsDir
     }
     $env:GOW3_MODS_DIR = $modsDir
+    # settings: the defaults (the game writes them on first use), or -Settings <ini> (copied)
+    $ini = Join-Path $data 'gow3.ini'
+    if ($Settings) { Copy-Item -Force -LiteralPath $Settings -Destination $ini }
+    elseif ($Fresh) { Remove-Item -Force $ini -ErrorAction SilentlyContinue }
+    $env:GOW3_SETTINGS = $ini
 }
 Remove-Item -Recurse -Force "$build\shots" -ErrorAction SilentlyContinue
 $p = Start-Process -FilePath "$build\gow3.exe" -ArgumentList "`"$Disc`"" -WorkingDirectory $build -WindowStyle Minimized -PassThru

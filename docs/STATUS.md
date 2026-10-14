@@ -42,6 +42,7 @@
    their maps, play cutscenes and gameplay (combat, turret and vehicle sections, the Maelstrom submarine) with no
    crash, black or frozen screen; deaths reload checkpoints. Frame rate after loading (frame_rate = 240): median
    150-240, lowest 124 (chapter 15); chapter 27 dips to 36 once while SP_Azura_Intro_P hands over to SP_Azura_P.
+   With the default settings (60 fps, vsync), as tests now run: a steady 60 (chapter 7).
    Next: longer play-throughs per chapter (checkpoint to checkpoint, set pieces, chapter transitions).
 5. **Reverse-engineering documentation:** keep `docs/REVERSE_ENGINEERING.md` current as systems are understood.
 6. **Room for expansion:** content conversion from Gears of War 1 and 2 (developed separately) plugs in as mods

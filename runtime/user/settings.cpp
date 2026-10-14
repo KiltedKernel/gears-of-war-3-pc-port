@@ -69,8 +69,13 @@ namespace
         "[audio]\n"
         "enabled = true\n";
 
+    // build\gow3.ini; GOW3_SETTINGS=<file> uses another (tools/playtest.ps1: tests run with the defaults, not the
+    // player's settings)
     std::filesystem::path Path()
     {
+        wchar_t file[MAX_PATH] = {};
+        const DWORD n = GetEnvironmentVariableW(L"GOW3_SETTINGS", file, MAX_PATH);
+        if (n > 0 && n < MAX_PATH) return std::filesystem::path(file);
         wchar_t exe[MAX_PATH];
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
         return std::filesystem::path(exe).parent_path() / "gow3.ini";

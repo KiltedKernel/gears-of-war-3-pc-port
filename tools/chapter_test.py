@@ -7,7 +7,8 @@ the menu's Select Chapter builds, without the menus) with a fresh test profile a
 generic input (walk, look around, fire, cover) and takes screenshots. Per chapter it records: crash or not, the
 persistent map that loaded, the game's frame rate (frames it presents through VdSwap, logged every 10 s; capped by
 frame_rate in build\gow3.ini; the first 50 s, loading, are left out), black or frozen screenshots. Output: <out>/chNN.png (contact sheet),
-<out>/report.md and report.json. A chapter takes about --seconds (default 150): all 31 take about 80 minutes.
+<out>/chNN/ (full-size
+screenshots), <out>/report.md and report.json. A chapter takes about --seconds (default 150): all 31 take about 80 minutes.
 """
 import argparse, json, os, re, shutil, subprocess, sys, time
 from PIL import Image, ImageDraw, ImageStat
@@ -87,6 +88,9 @@ def run_chapter(n, seconds, out):
     crash = [l for l in log.splitlines() if 'CRASH' in l][:3]
     shots = sorted(os.path.join(BUILD, 'shots', f) for f in os.listdir(os.path.join(BUILD, 'shots'))) if os.path.isdir(os.path.join(BUILD, 'shots')) else []
     info = analyse(shots)
+    keep = os.path.join(out, f'ch{n:02d}')            # the full-size screenshots too
+    shutil.rmtree(keep, ignore_errors=True); os.makedirs(keep)
+    for s in shots: shutil.copy(s, keep)
     sheet = os.path.join(out, f'ch{n:02d}.png')
     contact_sheet(shots, f'chapter {n}: {", ".join(maps) or "no map"}  ({status})', sheet)
     late = info[-3:]

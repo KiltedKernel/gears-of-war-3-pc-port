@@ -1661,3 +1661,8 @@ maps, as in Horde). Character setup, then Team Deathmatch on Checkout: the playe
 Carmine against five Locust bots; the bots fight (team respawns 15 -> 12, kill feed), 60 fps with default settings.
 Casual and Standard need Xbox LIVE (the game says so). Keyboard prompts are now drawn by default
 (tools/make_prompts.py drawn; Gears of War: Reloaded's keycaps are an opt-in), so only the Gears 3 disc is needed.
+
+Beast (tests/beast_private.txt): BEAST (3 down) > PRIVATE > difficulty Normal > Start Match > lobby (the Locust side,
+map CHECKOUT): one Start selects the map and starts (a second one opens the pause menu) > "Welcome to Beast Mode",
+$3750 > A (choose your creature) > A (Wild Ticker, $75) > wave 1 with the 1:00 clock; when it runs out, WAVE 1 FAILED
+and the restart menu. Standard (online) asks for Xbox LIVE Gold, like Versus Casual/Standard.

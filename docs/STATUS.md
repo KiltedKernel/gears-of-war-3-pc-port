@@ -10,6 +10,9 @@
 - Horde private matches start and play waves.
 - Versus with bots, offline (Private > Team Deathmatch on Checkout, 9 AI players): the match starts, bots fight and
   score, 60 fps (tests/versus_bots.txt).
+- Beast, offline (Private, Normal, Checkout): creature selection, playing a Wild Ticker through wave 1, the wave
+  result and restart menu (tests/beast_private.txt). Every offline mode of the main menu now plays: Campaign
+  (Standard, Arcade), Versus Private, Horde Private, Beast Private.
 - 60 fps (frame-rate unlock), 16x anisotropy, effect toggles, resolution scaling, native mouse look, keyboard/mouse
   button prompts, launcher with options.
 - Mods: folders with `mod.ini`, priorities and conflicts, merged table of contents, configuration fragments merged

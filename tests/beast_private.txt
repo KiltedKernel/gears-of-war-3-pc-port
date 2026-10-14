@@ -1,0 +1,36 @@
+# Beast, offline: fresh profile (tools/playtest.ps1 -Fresh): Start, the brightness screen (A), main menu -> BEAST
+# (3 down) -> PRIVATE (1 down) -> A through its screens -> lobby: Start (select the map and start) -> wave 1:
+# A (choose your creature), A (the first creature); then play
+45 pad 0010 250
+54 pad 1000 200
+60 pad 0002 150
+62 pad 0002 150
+64 pad 0002 150
+67 pad 1000 200
+71 pad 0002 150
+74 pad 1000 200
+80 pad 1000 200
+86 pad 1000 200
+110 pad 0010 250
+140 pad 1000 200
+145 pad 1000 200
+150 pad 1000 200
+158 capture
+160 key 57 3000
+164 mouse 400 0 600
+166 trig R 900
+172 key 57 3000
+176 mouse 400 0 600
+178 trig R 900
+184 key 57 3000
+188 mouse 400 0 600
+190 trig R 900
+196 key 57 3000
+200 mouse 400 0 600
+202 trig R 900
+208 key 57 3000
+212 mouse 400 0 600
+214 trig R 900
+220 key 57 3000
+224 mouse 400 0 600
+226 trig R 900

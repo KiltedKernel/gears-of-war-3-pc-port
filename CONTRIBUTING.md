@@ -33,3 +33,8 @@ docs/REVERSE_ENGINEERING.md, written in your own words.
   data folders and never touch a player's saves, mods or settings; keep it that way.
 - Write code like the code around it, and note what you learned in docs/ENGINEERING_LOG.md (newest at the end).
 - Changes are released under GPL-3.0 (LICENSE).
+
+## Releasing
+
+- Set the new version in VERSION, CHANGELOG.md (the release heading), README.md and docs/STATUS.md, then run
+  `python tools/check_version.py`: it fails when they differ (0.2.1 shipped calling itself 0.2.0 this way).

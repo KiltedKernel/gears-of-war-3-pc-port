@@ -31,6 +31,12 @@
   kernel took the session handle's number for an object's address. NtClose now closes sessions, and answers "invalid
   handle" (as the console does) for anything that is not an open object, instead of destroying freed memory.
 
+**Fixes**
+- 0.2.1 called itself 0.2.0 in the launcher, the game's log and the setup wizard: VERSION was not raised with the
+  release. tools/check_version.py now checks VERSION against CHANGELOG.md, README.md and docs/STATUS.md.
+- README and docs/STATUS.md no longer say Gears of War 2 content converts (only Gears 1's opening does);
+  tools/chapter_test.py: no invalid-escape warning on newer Python.
+
 ## 0.2.1 (2026-10-15)
 
 Fixes: the setup accepts Gears of War 3 discs again, works on PCs with WSL, and the frame-rate unlock keeps the

@@ -1,6 +1,14 @@
 # Engineering log
 
-The development journal, copied from the working tree it was written in. Entries about Gears of War 1 and 2 content (the "trilogy" work: converting their levels into Gears 3) belong to separate tooling that is not part of this repository yet; they are kept here for the reverse-engineering facts they record about Gears 3.
+The development journal, copied from the working tree it was written in. Entries about Gears of War 1 and 2 content
+(the "trilogy" work: converting their levels into Gears 3) were written in a separate development sandbox; its
+conversion tools joined this repository on 2026-10-15 (the last entry, docs/TRILOGY.md).
+
+Tools named in older entries that are **not** in this repository (they stayed in the sandbox, and their outputs with
+them): tools/census.py (export classes by data size), tools/class_compat.py (which classes a campaign's levels use and
+whether Gears 3 has them: the source of the Gears 1 / Gears 2 coverage tables), tools/mesh_sweep.py (StaticMesh reader
+sweep), tools/meshview.py (OBJ render check). tools/patch_xenonrecomp_gow3.py was replaced by the patch
+tools/xenonrecomp-gow3.patch. The numbers those entries give cannot be reproduced from this repository alone.
 
 
 

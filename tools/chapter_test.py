@@ -1,4 +1,4 @@
-"""Campaign coverage: boot each chapter directly and check it loads and plays.
+r"""Campaign coverage: boot each chapter directly and check it loads and plays.
 
 usage: python tools/chapter_test.py [chapters] [--seconds N] [--out DIR]
   chapters: "0-30" (default), "7", "7,8,14-18"

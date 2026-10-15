@@ -94,9 +94,9 @@ are in `examples\mods`. See [docs/MODDING.md](docs/MODDING.md).
 
 ## The trilogy
 
-Gears of War 1 and 2 converted into this port's engine, from your own discs: `tools\trilogy.py build gears1_prison`
-turns Gears 1's opening into a mod that starts Gears 3's campaign in Gears 1's prison cell. A preview; see
-[docs/TRILOGY.md](docs/TRILOGY.md).
+The goal: Gears of War 1 and 2's campaigns converted into this port's engine, from your own discs. A preview so far:
+`tools\trilogy.py build gears1_prison` turns Gears 1's opening into a mod that starts Gears 3's campaign in Gears 1's
+prison cell. Nothing of Gears 2 converts yet (its textures and meshes are read). See [docs/TRILOGY.md](docs/TRILOGY.md).
 
 ## How it works / reverse engineering
 

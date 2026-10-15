@@ -62,5 +62,5 @@ Current release: **0.2.1** (CHANGELOG.md).
    With the default settings (60 fps, vsync), as tests now run: a steady 60 (chapter 7).
    Next: longer play-throughs per chapter (checkpoint to checkpoint, set pieces, chapter transitions).
 5. **Reverse-engineering documentation:** keep `docs/REVERSE_ENGINEERING.md` current as systems are understood.
-6. **Room for expansion:** content conversion from Gears of War 1 and 2 (developed separately) plugs in as mods
-   (new chapters, levels, characters).
+6. **Room for expansion:** content converted from Gears of War 1 and 2 plugs in as mods (new chapters, levels,
+   characters). The conversion tools are in tools/ (docs/TRILOGY.md); Gears 1's opening converts today, Gears 2 not yet.

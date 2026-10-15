@@ -61,6 +61,20 @@ uint32_t XamSessionCreateHandle(be<uint32_t>* handle)
     return 0;
 }
 
+// a session handle closed with NtClose (the title closes sessions as any handle, e.g. when a match ends): its
+// object freed; false for any other handle. Session handles are not kernel objects (they are numbers from 0xF5E50000,
+// which NtClose would otherwise read as an object's address)
+bool CloseSessionHandle(uint32_t handle)
+{
+    std::lock_guard lock(g_mutex);
+    const auto it = g_objects.find(handle);
+    if (it == g_objects.end()) return false;
+    g_userHeap.Free(g_memory.Translate(it->second));
+    g_objects.erase(it);
+    LOGFN("session handle {:08X} closed", handle);
+    return true;
+}
+
 uint32_t XamSessionRefObjByHandle(uint32_t handle, be<uint32_t>* object)
 {
     std::lock_guard lock(g_mutex);

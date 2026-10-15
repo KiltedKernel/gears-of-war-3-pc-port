@@ -351,6 +351,8 @@ namespace
     std::unordered_map<uint32_t, uint32_t> g_handleExtraRefs;   // handle -> duplicates not yet closed
 }
 
+namespace x360k { bool CloseSessionHandle(uint32_t handle); }   // x360_session.cpp
+
 uint32_t NtClose(uint32_t handle)
 {
     if (handle == GUEST_INVALID_HANDLE_VALUE)
@@ -368,7 +370,13 @@ uint32_t NtClose(uint32_t handle)
                 return 0;
             }
         }
-        DestroyKernelObject(handle);
+        if (x360k::CloseSessionHandle(handle)) return 0;
+        if (!CloseKernelHandle(handle))
+        {
+            static std::atomic<int> logged{ 0 };
+            if (logged++ < 10) LOGFN_WARNING("NtClose({:08X}): not an open handle (closed twice?)", handle);
+            return 0xC0000008;   // STATUS_INVALID_HANDLE
+        }
         return 0;
     }
     else

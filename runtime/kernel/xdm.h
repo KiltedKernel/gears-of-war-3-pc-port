@@ -94,12 +94,19 @@ struct KernelObject
     }
 };
 
+// the live kernel objects (xdm.cpp): a handle that is closed twice, or a number that is no object, must not be
+// destroyed (NtClose answers STATUS_INVALID_HANDLE, as the console does)
+void TrackKernelObject(void* obj);
+bool CloseKernelHandle(uint32_t handle);   // false: not a live object
+
 template<typename T, typename... Args>
 inline T* CreateKernelObject(Args&&... args)
 {
     static_assert(std::is_base_of_v<KernelObject, T>);
     // Port: kernel objects live in the host-side heap (0x90000000); physical memory is the title's 512 MB
-    return g_userHeap.Alloc<T>(std::forward<Args>(args)...);
+    T* obj = g_userHeap.Alloc<T>(std::forward<Args>(args)...);
+    TrackKernelObject(obj);
+    return obj;
 }
 
 template<typename T = KernelObject>

@@ -108,8 +108,14 @@ game (functions, data layouts, file formats), with the tools that read them.
 - The package tools (`tools\upk.py` and those built on it) decompress with `tools\xpack\xpack.exe`: build it once with
   `cmd /c tools\build_xpack.cmd` (after setup, which fetches the LZX decoder with XenonRecomp).
 
+## Reporting problems and contributing
+
+Open an issue with the bug report form and attach `build\gow3.log` (network lines hide public addresses and join
+codes, so it is safe to post). Never post game files, disc images or keys. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
 GPL-3.0 (see LICENSE): the runtime's kernel, threading and heap code comes from Unleashed Recompiled (GPL-3.0). Third
 party components keep their licenses (runtime/thirdparty). Gears of War is a trademark of Microsoft; this project
-contains no game assets or code and is not affiliated with Microsoft or The Coalition.
+contains no game assets or code, is not affiliated with or endorsed by Microsoft, Epic Games or The Coalition, and
+needs your own legally obtained copy of the game.

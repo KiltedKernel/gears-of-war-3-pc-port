@@ -28,6 +28,7 @@
 #include <condition_variable>
 #include <mutex>
 #include <optional>
+#include <regex>
 #include <thread>
 #include <vector>
 
@@ -68,16 +69,40 @@ namespace
     }
     std::string EndpointString(const sockaddr_in& a) { return fmt::format("{}:{}", IpString(ntohl(a.sin_addr.s_addr)), ntohs(a.sin_port)); }
 
+    // what goes to gow3.log: players post logs in public bug reports, so public addresses keep only their first two
+    // numbers and join codes (which hold a public address) are hidden. Private, loopback and virtual addresses stay.
+    // GOW3_LOG_ADDRESSES=1 logs everything. The window title and the messages in the game are not changed.
+    std::string Redact(const std::string& s)
+    {
+        static const bool keep = getenv("GOW3_LOG_ADDRESSES") != nullptr;
+        if (keep) return s;
+        static const std::regex ip(R"(\b(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\b)"), code(R"(\b[0-9A-Za-z]{5}-[0-9A-Za-z]{5}\b)");
+        std::string out;
+        auto at = s.cbegin();
+        for (std::sregex_iterator it(s.begin(), s.end(), ip), end; it != end; ++it)
+        {
+            const auto& m = *it;
+            const int a = std::stoi(m[1]), b = std::stoi(m[2]);
+            const bool local = a == 0 || a == 10 || a == 127 || a == 255 || (a == 169 && b == 254) || (a == 172 && b >= 16 && b < 32) ||
+                               (a == 192 && b == 168) || (a == 100 && b >= 64 && b < 128) || a >= 224;
+            out.append(at, m[0].first);
+            out += local ? m.str() : fmt::format("{}.{}.x.x", a, b);
+            at = m[0].second;
+        }
+        out.append(at, s.cend());
+        return std::regex_replace(out, code, "xxxxx-xxxxx");
+    }
+
     void SetStatus(const std::string& s)
     {
         { std::lock_guard lock(g_statusMutex); g_status = s; }
-        LOGFN("net: {}", s);
+        LOGFN("net: {}", Redact(s));
     }
 
     // a toast in the game (and the log)
     void Notify(const std::string& title, const std::string& text, int seconds = 6)
     {
-        LOGFN("net: [{}] {}", title, text);
+        LOGFN("net: [{}] {}", title, Redact(text));
         portgpu::ShowNotice(title.c_str(), text.c_str(), seconds);
     }
 
@@ -196,7 +221,7 @@ namespace
             {
                 const uint16_t port = o.port;
                 std::thread([port] {
-                    upnp::SetLog([](const char* line) { LOGFN("net: {}", line); });
+                    upnp::SetLog([](const char* line) { LOGFN("net: {}", Redact(line)); });
                     uint32_t publicIp = 0;
                     const bool ok = upnp::ForwardUdp(port, publicIp);
                     if (!g_ownHub) { if (ok) upnp::RemoveUdp(port); return; }   // moved to another game meanwhile
@@ -521,7 +546,7 @@ void Start()
     std::call_once(once, [] {
         if (!Enabled()) return;
         WSADATA wsa; WSAStartup(MAKEWORD(2, 2), &wsa);
-        SetHubLog([](const char* line) { LOGFN("net: {}", line); });
+        SetHubLog([](const char* line) { LOGFN("net: {}", Redact(line)); });
         g_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         DWORD timeout = 200;
         setsockopt(g_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
@@ -534,7 +559,7 @@ void Start()
         if (const char* b = getenv("GOW3_NET_BIND")) inet_pton(AF_INET, b, &local.sin_addr);   // tests: this PC only
         bind(g_socket, (sockaddr*)&local, sizeof(local));
         LOGFN("net: online as {} ({:016X}); {}", profile::Gamertag(), profile::Xuid(),
-              settings::Get().netServer.empty() ? "direct play" : "server " + settings::Get().netServer);
+              settings::Get().netServer.empty() ? "direct play" : "server " + Redact(settings::Get().netServer));
         g_running = true;
         g_thread = std::thread(Run);
         if (settings::Get().netServer.empty()) g_mergeThread = std::thread(MergeWatch);

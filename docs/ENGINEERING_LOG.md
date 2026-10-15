@@ -1774,3 +1774,17 @@ checkouts (tools/XenonRecomp, xenia/), fetched and built from scratch by the set
 - So LIVE matchmaking is not emulated. System Link on a gow3_server lobby is the replacement: everyone on the server
   sees every party. Next steps, if it is pursued: find the matchmaking flow in GearGame's script (memory dump), and
   answer its search with the server's parties.
+
+## 2026-10-14: Preparing the repository to be public
+
+- Audit: the tracked files and every commit hold no personal details, local user paths, keys or game data; all 18
+  commits are by the project's pseudonym (noreply address). The public address in the multiplayer entry above was
+  replaced before 0.2.0 was committed.
+- Logs: players will attach gow3.log to public issues, and the network lines printed their public address and join
+  code. vnet.cpp's Redact() now filters every `net:` line (status, in-game message text, hub and UPnP lines): public
+  IPv4 addresses keep their first two numbers (`192.0.x.x`), join codes become `xxxxx-xxxxx`; private, loopback,
+  link-local, CGNAT, multicast and virtual (10.73) addresses stay. The window title and the messages shown in the game
+  are unchanged. `GOW3_LOG_ADDRESSES=1` turns it off. Checked with mp_test.ps1 -Connect unreachable: the joiner's log
+  says `connecting to code xxxxx-xxxxx (192.0.x.x:3174)`, and neither log holds the address or code.
+- CONTRIBUTING.md (reporting, never committing game files or keys, tests that leave the player's data alone) and a
+  bug report form (.github/ISSUE_TEMPLATE). The README's notice names Epic Games, the game's developer, too.

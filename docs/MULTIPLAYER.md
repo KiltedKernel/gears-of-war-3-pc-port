@@ -69,7 +69,8 @@ Each copy of the game started from one install gets its own player: the second c
 The id is made once at random and kept, because the game tells players apart by it. Saves don't depend on it.
 
 The window title shows the connection state, and `gow3.log` logs every step (`net:` lines; `net: [title] text` for
-each message shown in the game).
+each message shown in the game). So that logs can be posted in bug reports, the log keeps only the first two numbers of
+public addresses (`203.0.x.x`) and hides join codes (`xxxxx-xxxxx`); `GOW3_LOG_ADDRESSES=1` logs them in full.
 
 ## Running a server
 

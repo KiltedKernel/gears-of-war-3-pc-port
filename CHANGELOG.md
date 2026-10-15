@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Logs are safe to post: network lines keep only the first two numbers of public addresses and hide join codes
+  (`GOW3_LOG_ADDRESSES=1` logs them in full).
+- CONTRIBUTING.md and a bug report form for GitHub issues.
+
 ## 0.2.0 (2026-10-14)
 
 Multiplayer with friends, a player profile, and a settings audit.

@@ -32,6 +32,7 @@ Screenshots land in `build\shots`, the log in `build\gow3.log`. Tests run with t
 | prompt_switch.txt | profile | button prompts follow the last device used |
 | menu_click_then_pad.txt | profile | after a mouse click into a submenu the controller still works |
 | menu_esc_then_click.txt | profile | Esc back, then a click opens the next menu |
+| menu_held_b.txt | profile | F (BACK in the prompt bar) held on the main menu's first page does nothing; in Horde it goes back once; clicks open Horde before and after |
 | menu_esc_root.txt | profile | Esc / right click on the main menu's first page do nothing; a click on PRESS START starts |
 | menu_title_back.txt | profile | back to PRESS START, Start opens the main menu again |
 | mp_host.txt + mp_join.txt | fresh | System Link: party created, browsed and joined, Private Team Deathmatch with both players (tools/mp_test.ps1) |

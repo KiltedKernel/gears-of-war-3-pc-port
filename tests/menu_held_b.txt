@@ -1,0 +1,11 @@
+# bug repro (player log 2026-10-15): F (the prompt bar's BACK) went to the game as B: on the main menu's first page that
+# is back to the title screen (reloading the front end), and a held F kept pressing it. Now F is Esc's back: ignored on
+# the first page, one B per press elsewhere. Expected: F held 3 s on the main menu does nothing (shot 60: MAIN MENU),
+# Horde opens on a click (66), F held there goes back once (72: MAIN MENU), Horde opens again on a click (80)
+45 pad 0010 250
+52 cursor 640 360
+53 glide 240 424 400
+56 key 46 3000
+62 click L 120
+68 key 46 2000
+75 click L 120

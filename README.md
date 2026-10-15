@@ -62,7 +62,7 @@ multiplayer, manages mods, and starts the game. `-nointro` skips the logo movies
 | 1-4 or arrow keys | d-pad: weapons |
 | C / Z (middle mouse) | left / right stick click |
 | Enter, or Esc in play | Start (pause) |
-| Esc in menus | B: back (not on the main menu's first page) |
+| Esc or F in menus | B: back (not on the main menu's first page) |
 | Backspace | Back |
 | F11 or Alt+Enter | fullscreen |
 

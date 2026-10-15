@@ -1841,3 +1841,17 @@ checkouts (tools/XenonRecomp, xenia/), fetched and built from scratch by the set
   build\: "playing 0 scripted events", the run had no input at all (the menus never left PRESS START). It now passes
   the full path (Gears 2's playtest.ps1 the same). Runs that gave an absolute path were unaffected (chapter_test.py,
   mp_test.ps1).
+
+## 2026-10-15: F in menus, the main menu "breaking" again
+
+A player log (build\gow3.log) of menus that stopped answering: a click on HORDE, then "menu input: keyboard 2000"
+(B from the keyboard) on every following line, with clicks injected but nothing happening. B came from F, the
+keyboard's B and the key the prompt bar shows for BACK. The 2026-10-13 fix routed Esc and the right click through
+gfx_menu's Back (no B on the main menu's first page or title screen, where B is Callback_TransitionToTitle and reloads
+the front end), but F still reached the game directly, so F on the first page, or F held while a submenu closed,
+took the menus back to PRESS START. Fix (runtime/hid/hid.cpp): in menus, keys bound to B are not mapped; an F press is
+a back request like Esc (one per press, a key held into a menu makes none). The trace now carries the time and logs
+when menu mode ends, so a press across a transition can be told from one inside a menu. tests/menu_held_b.txt: F held
+3 s on the main menu ("Esc / F on the main menu's first page: ignored"), a click opens Horde, F held 2 s there goes
+back once, a click opens Horde again. Gears 2's menus (mouse_menu.cpp) press B for Esc as for F and have no such
+first page, so nothing changes there.

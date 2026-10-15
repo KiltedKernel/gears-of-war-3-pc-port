@@ -554,7 +554,7 @@ void OnGameThread()
     if (GetCurrentThreadId() != g_mainThreadId) return;
     static int lastX = -2, lastY = -2;
     if (!hid::MenuMode()) { lastX = -2; g_pendingB = false; return; }
-    if (hid::TakeMenuEscape()) Back("Esc");
+    if (hid::TakeMenuEscape()) Back("Esc / F");
     if (g_pendingB.exchange(false)) Back("right click");
     Heal();
     float fx, fy;

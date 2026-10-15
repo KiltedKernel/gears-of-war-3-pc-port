@@ -24,6 +24,12 @@
 - First recipe, `gears1_prison`: Gears 1's opening in Gears 3's campaign (the cell, the cutscene, Dom, the corridor),
   about three minutes to build. tests/g1_follow_dom.txt.
 
+**Fixes**
+- Menus: F (shown as BACK in the prompt bar) went to the game as B, so on the main menu's first page it returned to
+  the title screen and reloaded the front end, and the menus seemed to stop answering (a player's log). F now works
+  like Esc in menus: back, one press at a time, and nothing on the main menu's first page. The menu input trace in
+  build\gow3.log shows times and when a menu closes.
+
 **Tests**
 - tools/playtest.ps1 gave the game the input script's path relative to the repository while the game runs in
   build\: a relative path played no input at all. It now passes the full path.

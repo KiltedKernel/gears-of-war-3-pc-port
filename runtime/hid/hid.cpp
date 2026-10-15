@@ -12,7 +12,7 @@
 //   WASD left stick     mouse right stick   LMB fire (RT)       RMB aim (LT)        MMB / Z zoom (RS click)
 //   Space / Shift A (cover, roadie run)     F B (melee)         E X (use)           Q Y (look)
 //   R RB (reload)       Tab LB (tactical)   C LS click          1-4 / arrows D-pad (weapons)
-//   Enter / Esc Start   Backspace Back
+//   Enter / Esc Start   Backspace Back      (in menus Esc and F are back, never from the main menu's first page)
 #include <stdafx.h>
 #include <hid/hid.h>
 #include <user/settings.h>
@@ -414,15 +414,17 @@ namespace
         for (const auto& b : kButtons)
         {
             if (!Down(b.vk) || (alt && b.vk == VK_RETURN)) continue;
-            // in menus Esc goes back (hid::TakeMenuEscape: the menu code presses B), the PC convention; in play it pauses
-            if (b.vk == VK_ESCAPE && g_menuMode) continue;
+            // in menus Esc and F (the prompt bar's BACK) go back through hid::TakeMenuEscape: the menu code presses B,
+            // except on the main menu's first page, where B returns to the title screen and reloads the front end
+            // (player log 2026-10-15: F there looked like the controls had stopped); in play Esc pauses, F is melee
+            if ((b.vk == VK_ESCAPE || b.button == BTN_B) && g_menuMode) continue;
             g.wButtons |= b.button;
         }
-        // a menu's Esc: one request per press (pressed in play and held into a menu: none)
-        static std::atomic<bool> escWasDown{ false };
-        const bool esc = Down(VK_ESCAPE);
-        if (esc && !escWasDown.exchange(true) && g_menuMode) g_menuEscapeAt = GetTickCount64();
-        if (!esc) escWasDown = false;
+        // a menu's back: one request per press (pressed in play and held into a menu: none)
+        static std::atomic<bool> backWasDown{ false };
+        const bool back = Down(VK_ESCAPE) || Down('F');
+        if (back && !backWasDown.exchange(true) && g_menuMode) g_menuEscapeAt = GetTickCount64();
+        if (!back) backWasDown = false;
         g.sThumbLX = Axis(Down('A'), Down('D'));
         g.sThumbLY = Axis(Down('S'), Down('W'));
         g.sThumbRX = look.x;
@@ -493,11 +495,18 @@ namespace
         // from build\gow3.log): pad, keyboard/mouse, and presses injected by the menu mouse (ui/gfx_menu.cpp)
         {
             static uint16_t lastPad = 0, lastKey = 0, lastInj = 0;
+            static bool lastMenu = false;
             static int logged = 0;
+            static const uint64_t t0 = GetTickCount64();
             const uint16_t p = hasPad ? pad.Gamepad.wButtons : 0;
-            if (g_menuMode && (p != lastPad || k.wButtons != lastKey || injected != lastInj) && logged++ < 600)
-                LOGFN("menu input: pad {:04X} keyboard {:04X} injected {:04X}", p, k.wButtons, injected);
-            lastPad = p; lastKey = k.wButtons; lastInj = injected;   // (outside menus too: a release there is no news)
+            const bool menu = g_menuMode;
+            // with the time (s since start) and menu mode changes: a press across a menu's opening or closing reads
+            // differently from one inside it
+            if ((menu || lastMenu) && (p != lastPad || k.wButtons != lastKey || injected != lastInj || menu != lastMenu) &&
+                logged++ < 600)
+                LOGFN("menu input: t {:.2f} pad {:04X} keyboard {:04X} injected {:04X}{}", (GetTickCount64() - t0) / 1000.0,
+                      p, k.wButtons, injected, menu ? "" : " (menu closed)");
+            lastPad = p; lastKey = k.wButtons; lastInj = injected; lastMenu = menu;
         }
         out.bLeftTrigger = std::max(out.bLeftTrigger, k.bLeftTrigger);
         out.bRightTrigger = std::max(out.bRightTrigger, k.bRightTrigger);

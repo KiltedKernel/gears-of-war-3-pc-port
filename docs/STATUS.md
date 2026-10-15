@@ -24,7 +24,9 @@ Current release: **0.2.1** (CHANGELOG.md).
   System Link play wave 1 with both players; campaign co-op joins the host's campaign (tests/mp_host_*.txt).
 - Mods: folders with `mod.ini`, priorities and conflicts, merged table of contents, configuration fragments merged
   at startup (several mods changing the config stack), new campaign chapters (32-49) in Select Chapter loading their
-  own maps.
+  own maps. Mods in multiplayer: a joining player without the session's `everyone` mods is turned away with the list
+  (by a friend's game and by a server with `--mods`); a host's `host` mod (Horde starting money) reaches a player
+  without it; a client mod (wider camera) changes only its player's view. Xbox 360-style mod archives install.
 
 ## Not done / known issues
 

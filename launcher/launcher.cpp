@@ -24,6 +24,7 @@
 #include "../runtime/net/code.h"
 #include "../runtime/net/vnet_protocol.h"
 #include "../runtime/net/upnp.h"
+#include "../runtime/kernel/mod_manifest.h"
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "shcore.lib")
@@ -331,15 +332,18 @@ bool Play()
 }
 
 // ---- the Mods page: installed mods (mods\<folder>\mod.ini), enabled state, load order, install from a .zip ----
-// The same rules as the runtime (runtime/kernel/mods.cpp) and tools/modtool.py: load order is priority, then name;
-// when two enabled mods have the same file, the later one wins.
+// The same rules as the runtime (runtime/kernel/mod_manifest.h, mods.cpp) and tools/modtool.py: load order is
+// priority, then name; when two enabled mods have the same file, the later one wins.
 struct ModEntry
 {
     std::wstring folder;            // folder name under mods
     std::string name, version, author, description;
     int priority = 0;
     bool enabled = true;
-    std::vector<std::string> files; // lower-case relative paths (game files; not mod.ini, config, TOCs)
+    modinfo::Side side = modinfo::Side::Everyone;
+    std::string problem;            // why the game will not load it although it is on (another game; a required mod)
+    std::vector<std::string> needs;
+    std::vector<std::string> files; // lower-case game paths (modinfo::GamePath)
     int fragments = 0;              // config\*.ini
 };
 
@@ -371,64 +375,29 @@ std::string LowerA(std::string s)
     return s;
 }
 
-void CollectFiles(const std::wstring& dir, const std::wstring& rel, ModEntry& m)
-{
-    WIN32_FIND_DATAW fd;
-    HANDLE f = FindFirstFileW((dir + L"\\*").c_str(), &fd);
-    if (f == INVALID_HANDLE_VALUE) return;
-    do
-    {
-        const std::wstring n = fd.cFileName;
-        if (n == L"." || n == L"..") continue;
-        const std::wstring r = rel.empty() ? n : rel + L"\\" + n;
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-        {
-            if (rel.empty() && LowerA(Narrow(n)) == "config")
-            {
-                WIN32_FIND_DATAW cf;
-                HANDLE c = FindFirstFileW((dir + L"\\" + n + L"\\*.ini").c_str(), &cf);
-                if (c != INVALID_HANDLE_VALUE) { do m.fragments++; while (FindNextFileW(c, &cf)); FindClose(c); }
-                continue;
-            }
-            CollectFiles(dir + L"\\" + n, r, m);
-            continue;
-        }
-        const std::string low = LowerA(Narrow(r));
-        if (low == "mod.ini" || (low.rfind("geargame\\xbox360toc", 0) == 0 && low.size() > 4 && low.substr(low.size() - 4) == ".txt")) continue;
-        m.files.push_back(low);
-    } while (FindNextFileW(f, &fd));
-    FindClose(f);
-}
-
 void ScanMods()
 {
     g_mods.clear();
-    WIN32_FIND_DATAW fd;
-    HANDLE f = FindFirstFileW((g_modsDir + L"\\*").c_str(), &fd);
-    if (f != INVALID_HANDLE_VALUE)
+    for (const auto& mi : modinfo::Scan(std::filesystem::path(g_modsDir)))
     {
-        do
-        {
-            if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || fd.cFileName[0] == L'.') continue;
-            const std::wstring dir = g_modsDir + L"\\" + fd.cFileName;
-            if (GetFileAttributesW((dir + L"\\mod.ini").c_str()) == INVALID_FILE_ATTRIBUTES) continue;
-            Ini ini; ini.Load(dir + L"\\mod.ini");
-            ModEntry m;
-            m.folder = fd.cFileName;
-            m.name = ini.Get("mod", "name", Narrow(m.folder));
-            m.version = ini.Get("mod", "version", "");
-            m.author = ini.Get("mod", "author", "");
-            m.description = ini.Get("mod", "description", "");
-            m.priority = atoi(ini.Get("mod", "priority", "0").c_str());
-            const std::string en = LowerA(ini.Get("mod", "enabled", "true"));
-            m.enabled = !(en == "false" || en == "0" || en == "no");
-            CollectFiles(dir, L"", m);
-            g_mods.push_back(std::move(m));
-        } while (FindNextFileW(f, &fd));
-        FindClose(f);
+        if (mi.loose) continue;     // files directly in mods\: the game loads them, but they have no mod.ini to switch
+        ModEntry m;
+        m.folder = mi.dir.filename().wstring();
+        m.name = mi.name; m.version = mi.version; m.author = mi.author; m.description = mi.description;
+        m.priority = mi.priority; m.enabled = mi.enabled; m.side = mi.side; m.problem = mi.problem; m.needs = mi.needs;
+        for (const auto& [game, file] : modinfo::Files(mi)) m.files.push_back(game);
+        m.fragments = int(modinfo::Fragments(mi).size());
+        g_mods.push_back(std::move(m));
     }
-    std::stable_sort(g_mods.begin(), g_mods.end(), [](const ModEntry& a, const ModEntry& b) {
-        return a.priority != b.priority ? a.priority < b.priority : a.name < b.name; });
+}
+
+// after a mod is switched on or off: which mods the game will skip (their required mods), the list kept as it is
+void UpdateModProblems()
+{
+    const auto scan = modinfo::Scan(std::filesystem::path(g_modsDir));
+    for (ModEntry& m : g_mods)
+        for (const auto& mi : scan)
+            if (!mi.loose && mi.dir.filename().wstring() == m.folder) m.problem = mi.problem;
 }
 
 bool WriteModKey(const ModEntry& m, const char* key, const std::string& value)
@@ -463,9 +432,19 @@ void ShowModInfo()
     }
     const ModEntry& m = g_mods[sel];
     std::wstring t = Wide(m.description.empty() ? "(no description)" : m.description);
+    if (m.enabled && !m.problem.empty()) t += L"\r\nNot loaded: " + Wide(m.problem) + L".";
     t += L"\r\n" + std::to_wstring(m.files.size()) + L" game file(s)";
     if (m.fragments) t += L", " + std::to_wstring(m.fragments) + L" config fragment(s) (merged with other mods')";
     t += L"; folder mods\\" + m.folder + L".";
+    t += m.side == modinfo::Side::Client ? L"\r\nMultiplayer: changes only what you see; others need not have it."
+       : m.side == modinfo::Side::Host   ? L"\r\nMultiplayer: changes the rules of matches you host; others need not have it."
+                                         : L"\r\nMultiplayer: everyone in a session needs this mod (the same version).";
+    if (!m.needs.empty())
+    {
+        std::string list;
+        for (const auto& n : m.needs) list += (list.empty() ? "" : ", ") + n;
+        t += L"\r\nNeeds: " + Wide(list) + L".";
+    }
     if (m.enabled)
         for (const auto& [other, n] : Conflicts(m))
             t += L"\r\nShares " + std::to_wstring(n) + L" file(s) with " + Wide(other) + L" (the later in the list wins).";
@@ -479,10 +458,11 @@ void FillModList()
     for (int i = 0; i < int(g_mods.size()); i++)
     {
         const ModEntry& m = g_mods[i];
-        std::wstring name = Wide(m.name), ver = Wide(m.version), author = Wide(m.author), prio = std::to_wstring(m.priority);
+        std::wstring name = Wide(m.name), ver = Wide(m.version), author = Wide(m.author);
+        std::wstring side = m.enabled && !m.problem.empty() ? L"not loaded" : Wide(modinfo::SideName(m.side));
         LVITEMW it{ LVIF_TEXT }; it.iItem = i; it.pszText = name.data();
         SendMessageW(g_modList, LVM_INSERTITEMW, 0, (LPARAM)&it);
-        const std::wstring* cols[] = { &ver, &author, &prio };
+        const std::wstring* cols[] = { &ver, &author, &side };
         for (int c = 0; c < 3; c++)
         {
             LVITEMW s{ LVIF_TEXT }; s.iItem = i; s.iSubItem = c + 1; s.pszText = (LPWSTR)cols[c]->c_str();
@@ -568,26 +548,34 @@ int RunQuiet(const std::wstring& cmdline, std::string* output = nullptr)
     return int(code);
 }
 
-// checks an archive listing (tar -tf): exactly one top folder with a mod.ini, nothing that could land outside it.
-// Returns the folder's name, or empty with the reason in why
-std::string CheckArchive(const std::string& listing, std::wstring& why)
+// checks an archive listing (tar -tf): nothing may land outside the mod's folder. A mod made for this port is one
+// folder with a mod.ini (tools/modtool.py pack); returns that folder's name. Otherwise (a mod.ini at the top, or a
+// mod shared for the Xbox 360: its game files, bare or in the game's folders, no mod.ini) wrap is set and the
+// archive goes into a new folder. Empty with the reason in why: not a mod.
+std::string CheckArchive(const std::string& listing, bool& wrap, bool& hasIni, std::wstring& why)
 {
     std::istringstream ls(listing);
     std::string line, top;
-    bool hasIni = false;
+    bool oneTop = true, topIni = false, rootIni = false, gameFiles = false;
     while (std::getline(ls, line))
     {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.empty()) continue;
         if (line[0] == '/' || line[0] == '\\' || line.find(':') != std::string::npos || line.find("..") != std::string::npos)
         { why = L"the archive has a path outside its folder"; return {}; }
-        const std::string first = line.substr(0, line.find_first_of("/\\"));
+        const auto slash = line.find_first_of("/\\");
+        const std::string first = line.substr(0, slash);
         if (top.empty()) top = first;
-        else if (first != top) { why = L"the archive must hold exactly one mod folder"; return {}; }
-        if (LowerA(line) == LowerA(top) + "\\mod.ini") hasIni = true;
+        else if (first != top) oneTop = false;
+        if (slash == std::string::npos) oneTop = false;      // a file at the top (folders are listed as "name/")
+        if (LowerA(line) == LowerA(top) + "\\mod.ini") topIni = true;
+        if (LowerA(line) == "mod.ini") rootIni = true;
+        if (!modinfo::GamePath(line).empty()) gameFiles = true;
     }
     if (top.empty()) { why = L"the archive is empty"; return {}; }
-    if (!hasIni) { why = L"no mod.ini in the archive's folder"; return {}; }
+    if (oneTop && topIni) { wrap = false; hasIni = true; return top; }
+    if (!rootIni && !gameFiles) { why = L"no mod.ini and no game files (packages, Coalesced files, movies) in it"; return {}; }
+    wrap = true; hasIni = rootIni;
     return top;
 }
 
@@ -610,16 +598,39 @@ void InstallZipFile(const wchar_t* file, bool ask)
     std::string listing;
     if (RunQuiet(L"\"" + tar + L"\" -tf \"" + file + L"\"", &listing) != 0) { Status(L"Could not read that archive."); return; }
     std::wstring why;
-    const std::string top = CheckArchive(listing, why);
+    bool wrap = false, hasIni = false;
+    std::string top = CheckArchive(listing, wrap, hasIni, why);
     if (top.empty()) { Status((L"Not installed: " + why + L".").c_str()); return; }
-    const std::wstring dest = g_modsDir + L"\\" + Wide(top);
+    std::wstring folder = Wide(top);
+    if (wrap)
+    {
+        // a new folder named after the archive
+        std::wstring stem = file;
+        stem = stem.substr(stem.find_last_of(L"\\/") + 1);
+        if (const auto dot = stem.find_last_of(L'.'); dot != std::wstring::npos) stem.resize(dot);
+        for (wchar_t& c : stem) if (wcschr(L"<>:\"/\\|?*", c) || c < 32) c = L'_';
+        while (!stem.empty() && (stem.back() == L'.' || stem.back() == L' ')) stem.pop_back();
+        if (stem.empty()) stem = L"Mod";
+        folder = stem;
+    }
+    const std::wstring dest = g_modsDir + L"\\" + folder;
     if (GetFileAttributesW(dest.c_str()) != INVALID_FILE_ATTRIBUTES && ask &&
-        MessageBoxW(g_wnd, (L"A mod folder named \"" + Wide(top) + L"\" is already installed. Replace its files?").c_str(),
+        MessageBoxW(g_wnd, (L"A mod folder named \"" + folder + L"\" is already installed. Replace its files?").c_str(),
                     L"Install mod", MB_YESNO | MB_ICONQUESTION) != IDYES) return;
     CreateDirectoryW(g_modsDir.c_str(), nullptr);
-    if (RunQuiet(L"\"" + tar + L"\" -xf \"" + file + L"\" -C \"" + g_modsDir + L"\"") != 0) { Status(L"Extracting the archive failed."); return; }
+    if (wrap) CreateDirectoryW(dest.c_str(), nullptr);
+    if (RunQuiet(L"\"" + tar + L"\" -xf \"" + file + L"\" -C \"" + (wrap ? dest : g_modsDir) + L"\"") != 0) { Status(L"Extracting the archive failed."); return; }
+    if (!hasIni)
+    {
+        // a mod shared for the Xbox 360: a mod.ini so it can be switched and ordered (everyone needs it: its files
+        // may be packages)
+        std::ofstream ini(dest + L"\\mod.ini");
+        ini << "[mod]\nname = " << Narrow(folder) << "\nversion = \nauthor = \ndescription = Installed from "
+            << Narrow(std::wstring(file).substr(std::wstring(file).find_last_of(L"\\/") + 1))
+            << " (it had no mod.ini)\npriority = 0\nenabled = true\nside = everyone\n";
+    }
     ReloadMods();
-    Status((L"Installed " + Wide(top) + L".").c_str());
+    Status((L"Installed " + folder + (hasIni ? L"." : L" (made a mod.ini for it).")).c_str());
 }
 
 void BuildModsPage(std::vector<HWND>& page)
@@ -630,7 +641,7 @@ void BuildModsPage(std::vector<HWND>& page)
     g_modList = Make(WC_LISTVIEWW, L"", LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP,
                      28, 164, 470, 230, ID_MOD_LIST, g_font);
     SendMessageW(g_modList, LVM_SETEXTENDEDLISTVIEWSTYLE, 0, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
-    const struct { const wchar_t* title; int width; } cols[] = { { L"Mod", 210 }, { L"Version", 70 }, { L"Author", 110 }, { L"Priority", 60 } };
+    const struct { const wchar_t* title; int width; } cols[] = { { L"Mod", 210 }, { L"Version", 70 }, { L"Author", 100 }, { L"For", 70 } };
     for (int i = 0; i < 4; i++)
     {
         LVCOLUMNW c{ LVCF_TEXT | LVCF_WIDTH }; c.pszText = (LPWSTR)cols[i].title; c.cx = S(cols[i].width);
@@ -662,6 +673,13 @@ void OnModListNotify(NMHDR* h)
         {
             m.enabled = on;
             Status(WriteModKey(m, "enabled", on ? "true" : "false") ? (on ? L"Mod enabled." : L"Mod disabled.") : L"Could not write the mod.ini.");
+            UpdateModProblems();
+            for (int i = 0; i < int(g_mods.size()); i++)
+            {
+                std::wstring side = g_mods[i].enabled && !g_mods[i].problem.empty() ? L"not loaded" : Wide(modinfo::SideName(g_mods[i].side));
+                LVITEMW s{ LVIF_TEXT }; s.iItem = i; s.iSubItem = 3; s.pszText = side.data();
+                SendMessageW(g_modList, LVM_SETITEMTEXTW, i, (LPARAM)&s);
+            }
         }
     }
     ShowModInfo();

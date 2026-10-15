@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+**Mods** (docs/MODDING.md)
+- Mods in multiplayer: each mod says who needs it (`side = everyone | host | client` in its mod.ini). A player whose
+  `everyone` mods differ from the session's is not let in, and the game says which mods the session uses; `host` mods
+  (a game mode's rules) act in matches you host, `client` mods (your own view) are never compared.
+- Servers can require mods: `gow3_server --mods <folder>`, and a `server.ini` for every server setting
+  (examples/server/server.ini). The server prints the mods players need and their fingerprint.
+- Mods can need other mods (`requires = ...`) and name their game (`game = gears3`): a mod whose requirement is
+  missing or off is left off, with the reason in the log, the launcher and `modtool.py mods`.
+- Mods shared for the Xbox 360 install as they are: a .zip without a mod.ini gets a mod folder and a mod.ini (launcher
+  and `modtool.py install`); bare packages, Coalesced files and movies, or files inside the game's folders, go where
+  the game expects them. `modtool.py check` points out code patches, which cannot apply to the recompiled game.
+- Sample mods for each side: Wider view (client: camera field of view), Horde: big bank and Horde: interest (host;
+  the second requires the first), Lancer ammo (everyone), next to the chapter, menu text and unlock examples.
+- The launcher's Mods tab shows who needs each mod and why a mod is not loaded.
+- Fix: an intermittent crash of a game that joined a match. Gears 3 closes its session handles with NtClose, and the
+  kernel took the session handle's number for an object's address. NtClose now closes sessions, and answers "invalid
+  handle" (as the console does) for anything that is not an open object, instead of destroying freed memory.
+
 ## 0.2.1 (2026-10-15)
 
 Fixes: the setup accepts Gears of War 3 discs again, works on PCs with WSL, and the frame-rate unlock keeps the

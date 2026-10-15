@@ -18,18 +18,7 @@ namespace mods
 {
 namespace
 {
-    std::string Lower(std::string s)
-    {
-        std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return char(tolower(c)); });
-        std::replace(s.begin(), s.end(), '/', '\\');
-        return s;
-    }
-
-    std::string Trim(std::string s)
-    {
-        const auto a = s.find_first_not_of(" \t\r\n"), b = s.find_last_not_of(" \t\r\n");
-        return a == std::string::npos ? std::string() : s.substr(a, b - a + 1);
-    }
+    using modinfo::Lower;
 
     // build\mods; GOW3_MODS_DIR=<folder> uses another (tools/playtest.ps1: tests bring their own mods)
     std::filesystem::path ModsRoot()
@@ -42,36 +31,13 @@ namespace
         return std::filesystem::path(exe).parent_path() / "mods";
     }
 
-    Mod ReadManifest(const std::filesystem::path& dir)
-    {
-        Mod m;
-        m.dir = dir;
-        m.name = dir.filename().string();
-        std::ifstream in(dir / "mod.ini");
-        std::string line;
-        while (std::getline(in, line))
-        {
-            line = Trim(line);
-            if (line.empty() || line[0] == ';' || line[0] == '#' || line[0] == '[') continue;
-            const auto eq = line.find('=');
-            if (eq == std::string::npos) continue;
-            const std::string key = Lower(Trim(line.substr(0, eq))), value = Trim(line.substr(eq + 1));
-            if (key == "name") m.name = value;
-            else if (key == "version") m.version = value;
-            else if (key == "author") m.author = value;
-            else if (key == "description") m.description = value;
-            else if (key == "priority") m.priority = atoi(value.c_str());
-            else if (key == "enabled") m.enabled = !(Lower(value) == "false" || value == "0" || Lower(value) == "no");
-        }
-        return m;
-    }
-
     struct State
     {
         std::vector<Mod> mods;                                             // load order: lowest priority first
         std::unordered_map<std::string, std::filesystem::path> files;     // lower-case relative path -> winning file
         std::map<std::string, std::filesystem::path> tocs;                 // merged TOCs built so far
         std::vector<std::pair<const Mod*, std::filesystem::path>> fragments; // config\*.ini of enabled mods, load order
+        modinfo::NetSet net;
         bool configMerged = false;
     };
 
@@ -80,38 +46,19 @@ namespace
         static State s;
         static std::once_flag once;
         std::call_once(once, [] {
-            const auto root = ModsRoot();
-            std::error_code ec;
-            if (!std::filesystem::is_directory(root, ec)) return;
-            for (const auto& entry : std::filesystem::directory_iterator(root, ec))
-                if (entry.is_directory() && std::filesystem::is_regular_file(entry.path() / "mod.ini", ec))
-                    s.mods.push_back(ReadManifest(entry.path()));
-            // files directly under mods\ (the converters' output): one more mod
-            bool loose = false;
-            for (const auto& entry : std::filesystem::directory_iterator(root, ec))
-                if (!(entry.is_directory() && std::filesystem::is_regular_file(entry.path() / "mod.ini", ec))) loose = true;
-            if (loose) { Mod m; m.name = "(loose files)"; m.dir = root; s.mods.push_back(m); }
-            std::stable_sort(s.mods.begin(), s.mods.end(), [](const Mod& a, const Mod& b) {
-                return a.priority != b.priority ? a.priority < b.priority : a.name < b.name; });
+            s.mods = modinfo::Scan(ModsRoot());
             std::map<std::string, std::vector<std::string>> owners;
             for (const Mod& m : s.mods)
             {
-                LOGFN("mods: {} {}{}{} (priority {}){}", m.name, m.version, m.author.empty() ? "" : " by ", m.author,
-                      m.priority, m.enabled ? "" : " - disabled");
-                if (!m.enabled) continue;
-                for (auto it = std::filesystem::recursive_directory_iterator(m.dir, ec); it != std::filesystem::recursive_directory_iterator(); it.increment(ec))
+                LOGFN("mods: {} {}{}{} (priority {}, {}){}", m.name, m.version, m.author.empty() ? "" : " by ", m.author,
+                      m.priority, modinfo::SideName(m.side), !m.enabled ? " - disabled" : !m.problem.empty() ? " - off: " + m.problem : "");
+                if (!m.Active()) continue;
+                for (const auto& [rel, path] : modinfo::Files(m))
                 {
-                    if (ec) break;
-                    // the loose mod does not descend into the folders of the manifest mods
-                    if (m.name == "(loose files)" && it.depth() == 0 && it->is_directory() &&
-                        std::filesystem::is_regular_file(it->path() / "mod.ini", ec)) { it.disable_recursion_pending(); continue; }
-                    if (!it->is_regular_file()) continue;
-                    const std::string rel = Lower(std::filesystem::relative(it->path(), m.dir, ec).string());
-                    if (rel == "mod.ini" || rel.ends_with("toc.txt") && rel.find("xbox360toc") != std::string::npos) continue;
-                    if (rel.starts_with("config\\")) continue;                  // configuration fragments (below)
-                    s.files[rel] = it->path();                              // later (higher priority) wins
+                    s.files[rel] = path;                                    // later (higher priority) wins
                     owners[rel].push_back(m.name);
                 }
+                for (const auto& f : modinfo::Fragments(m)) s.fragments.emplace_back(&m, f);
             }
             for (const auto& [rel, who] : owners)
                 if (who.size() > 1)
@@ -120,10 +67,9 @@ namespace
                     for (const auto& n : who) list += (list.empty() ? "" : ", ") + n;
                     LOGFN("mods: conflict on {}: {} (the last wins)", rel, list);
                 }
-            for (const Mod& m : s.mods)
-                if (m.enabled && m.name != "(loose files)")
-                    for (const auto& f : config::Fragments(m)) s.fragments.emplace_back(&m, f);
-            LOGFN("mods: {} mods, {} files, {} configuration fragments", s.mods.size(), s.files.size(), s.fragments.size());
+            s.net = modinfo::ForMultiplayer(s.mods);
+            LOGFN("mods: {} mods, {} files, {} configuration fragments{}", s.mods.size(), s.files.size(), s.fragments.size(),
+                  s.net.fingerprint ? "; multiplayer sessions need: " + s.net.summary : "");
         });
         return s;
     }
@@ -199,6 +145,7 @@ namespace
 }
 
 const std::vector<Mod>& List() { return Get().mods; }
+const modinfo::NetSet& Multiplayer() { return Get().net; }
 
 std::filesystem::path Resolve(const std::string& relative, const std::filesystem::path& gameRoot)
 {

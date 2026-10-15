@@ -34,6 +34,8 @@ namespace
         uint64_t xuid = 0;
         std::string gamertag;
         std::string room;
+        uint64_t mods = 0;              // the fingerprint of the player's "everyone" mods (0: none)
+        std::string modList;
         Clock::time_point seen;
     };
 
@@ -102,6 +104,22 @@ namespace
             return;
         }
         const uint64_t key = Key(from);
+        // the same mods as the room: players without the session's packages or weapon rules would desynchronise or fail to
+        // load its maps (the fixed set of a server, else the players already there; not the player's own earlier entry)
+        bool known = g_options.fixedMods;
+        uint64_t want = g_options.mods;
+        std::string wantList = g_options.modList;
+        for (const auto& [k, p] : g_players)
+            if (!known && p.room == room && k != key && p.xuid != h.xuid) { known = true; want = p.mods; wantList = p.modList; }
+        if (known && h.mods != want)
+        {
+            const std::string mine = Text(h.modList);
+            Log("hub: %s turned away: mods differ (has: %s; %s uses: %s)", gamertag.c_str(), mine.empty() ? "none" : mine.c_str(),
+                RoomName(room).c_str(), wantList.empty() ? "none" : wantList.c_str());
+            Reject(from, want == 0 ? "this session plays without mods; yours: " + mine
+                         : "this session needs the mods " + wantList + (mine.empty() ? " (you have none)" : "; yours: " + mine));
+            return;
+        }
         // the same profile from another endpoint: a reconnect (the old one went quiet), or a second copy of the game
         for (auto it = g_players.begin(); it != g_players.end(); ++it)
         {
@@ -120,6 +138,7 @@ namespace
         Player& p = g_players[key];
         const bool fresh = p.vip == 0;
         p.addr = from; p.xuid = h.xuid; p.gamertag = gamertag; p.room = room;
+        p.mods = h.mods; p.modList = Text(h.modList);
         p.seen = Clock::now();
         if (fresh) p.vip = AllocateVip(room, h.xuid);
         if (!p.vip) { g_players.erase(key); Reject(from, "no address left"); return; }

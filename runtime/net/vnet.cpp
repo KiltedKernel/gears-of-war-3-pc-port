@@ -22,6 +22,7 @@
 #include "upnp.h"
 #include <user/settings.h>
 #include <user/profile.h>
+#include <kernel/mods.h>
 #include <os/logger.h>
 #include <algorithm>
 #include <atomic>
@@ -179,6 +180,10 @@ namespace
         Hello h{ MakeHeader(kHello), {}, profile::Xuid(), {}, {}, {} };
         if (!cfg.netServer.empty()) { SetText(h.room, cfg.netRoom); SetText(h.password, cfg.netPassword); }
         SetText(h.gamertag, profile::Gamertag());
+        // the mods everyone in a session must share: the hub turns a player with others away, saying which
+        const auto& net = mods::Multiplayer();
+        h.mods = net.fingerprint;
+        SetText(h.modList, net.summary.size() < sizeof(h.modList) ? net.summary : net.summary.substr(0, sizeof(h.modList) - 4) + "...");
         SendToHub(&h, sizeof(h));
     }
 

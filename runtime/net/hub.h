@@ -17,6 +17,11 @@ namespace vnet
         std::string password;          // non-empty: players must send it
         int maxPlayers = 16;           // per room
         std::string bindAddress;       // empty: every interface; "127.0.0.1": this PC only (tests: no firewall prompt)
+        // the mods players must have (kernel/mod_manifest.h: the fingerprint of their "everyone" mods; 0 = none). Unless
+        // fixed (a server's --mods), a room plays with the mods of the player who is in it first.
+        bool fixedMods = false;
+        uint64_t mods = 0;
+        std::string modList;
     };
 
     bool StartHub(const HubOptions& options);   // false: the port is in use (the reason is logged)

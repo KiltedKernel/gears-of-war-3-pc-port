@@ -75,12 +75,26 @@ public addresses (`203.0.x.x`) and hides join codes (`xxxxx-xxxxx`); `GOW3_LOG_A
 ## Running a server
 
 ```
-gow3_server.exe [--port 3074] [--name NAME] [--motd TEXT] [--password TEXT] [--max 16] [--bind ADDRESS] [--no-upnp]
+gow3_server.exe [--config server.ini] [--port 3074] [--name NAME] [--motd TEXT] [--password TEXT] [--max 16]
+                [--mods FOLDER] [--bind ADDRESS] [--no-upnp]
 ```
 
 It asks the router to open its port (UPnP) and prints the address and code players use. It keeps no data and has no
 accounts: it forwards datagrams between the players of each room (the lobby, or a private room) and tells them who
 joins and leaves. `--max` is per room. A server on a rented machine with a public address needs no UPnP.
+
+The same settings can live in a `server.ini` next to the server (or `--config <file>`; the command line overrides
+it): `[server]` with `name`, `motd`, `password`, `port`, `max`, `upnp` and `mods`. `examples/server/server.ini` is a
+sample. `--mods <folder>` makes the server require the mods in that folder that every player needs (docs/MODDING.md,
+Mods in multiplayer): players with other mods are turned away and told which ones the server uses.
+
+## Mods
+
+Players in one session must have the same mods that change what every game simulates (`side = everyone` in a mod's
+`mod.ini`: packages, maps, weapon settings). When a game joins, the hub compares them and turns a player with other
+mods away with the list ("this session needs the mods Lancer ammo 1.0 (you have none)"). Mods for the host's rules
+(`side = host`, e.g. Horde's starting money) and for one player's own view (`side = client`) are not compared.
+docs/MODDING.md has the details.
 
 ## How it works
 
@@ -116,7 +130,8 @@ joins and leaves. `--max` is per room. A server on a rented machine with a publi
 network), each with a scripted controller (tests/mp_host.txt, tests/mp_join.txt), in each of these setups:
 `lan` (no codes), `samepc` (one install, two copies: the second gets its own profile), `direct`, `code`, `server`,
 `hairpin` (a friend's code whose address cannot be reached from inside the network) and `unreachable` (a code nobody
-answers at). See tests/README.md.
+answers at). `-HostMods`, `-JoinMods` and `-ServerMods` give each game (and the server) its own mods. See
+tests/README.md.
 
 ## Status
 
@@ -124,7 +139,9 @@ Verified on one PC with the setups above: the second game finds the first, joins
 Team Deathmatch (lan, samepc, server); the code cases connect or fall back as described. Over System Link (lan):
 Horde (the Command Post bought, wave 1 against both players, the wave result on both), Beast (both players pick a
 creature and play wave 1), and campaign co-op from a checkpoint (the second player joins the campaign and waits for
-the drop-in point; reaching Dom in a test is still to do). Not verified yet: two separate PCs, a real router's
+the drop-in point; reaching Dom in a test is still to do). Mods: a player without the session's `everyone` mods is
+turned away with the list (by a friend's game and by a server with `--mods`); players with the same ones play a
+Team Deathmatch; a host's `host` mod (Horde: big bank) gives a player without it the host's $5,000 in Horde. Not verified yet: two separate PCs, a real router's
 UPnP. No voice chat (the game is told
 there is no headset). Casual and Standard (Xbox LIVE matchmaking) still ask for Xbox LIVE; use Private with System
 Link.

@@ -16,9 +16,12 @@
 #   unreachable  the second enters a code nobody answers at: it must say so, then join the game open on the network
 # -HostData <folder>: the host starts with a copy of that data folder's saves and settings (content\,
 # profile_settings.bin), e.g. build\testdata after tests/continue.txt made a checkpoint (tests/mp_host_coop.txt)
+# -HostMods / -JoinMods "examples\mods\A,...": each game's mods (build\mp\mods_host, mods_join; default none);
+# -ServerMods: the mods folder the server requires (--mods), with -Connect server.
 # Folders: build\mp\host and build\mp\join (gow3.log, shots\, gow3.ini; data\ unless samepc: build\mp\data).
 param([string]$HostScript, [string]$JoinScript = "", [int]$Seconds = 240, [string]$Shots = "", [int]$JoinDelay = 5,
-      [string]$HostData = "", [int]$Port = 3174, [ValidateSet('lan', 'samepc', 'direct', 'code', 'server', 'hairpin', 'unreachable')][string]$Connect = 'lan', [string]$Disc = "")
+      [string]$HostData = "", [int]$Port = 3174, [ValidateSet('lan', 'samepc', 'direct', 'code', 'server', 'hairpin', 'unreachable')][string]$Connect = 'lan', [string]$Disc = "",
+      [string]$HostMods = "", [string]$JoinMods = "", [string]$ServerMods = "")
 $build = (Resolve-Path "$PSScriptRoot\..\build").Path
 if (-not $Disc) {
     $Disc = "$PSScriptRoot/../../gow3-decomp/disc"
@@ -29,8 +32,17 @@ if (-not $Disc) {
 }
 $root = Join-Path $build 'mp'
 Remove-Item -Recurse -Force $root -ErrorAction SilentlyContinue
-$mods = Join-Path $root 'mods'
-New-Item -ItemType Directory -Force $mods | Out-Null
+function New-ModsFolder([string]$name, [string]$list) {
+    $dir = Join-Path $root $name
+    New-Item -ItemType Directory -Force $dir | Out-Null
+    foreach ($m in ($list -split ',' | Where-Object { $_.Trim() })) {
+        $src = $m.Trim()
+        if (-not [IO.Path]::IsPathRooted($src)) { $src = Join-Path "$PSScriptRoot\.." $src }
+        Copy-Item -Recurse -Force -LiteralPath $src -Destination $dir
+    }
+    $dir
+}
+$modsFor = @{ host = (New-ModsFolder 'mods_host' $HostMods); join = (New-ModsFolder 'mods_join' $JoinMods) }
 
 function Start-Player([string]$name, [string]$script, [string]$network, [string]$gamertag) {
     $dir = Join-Path $root $name
@@ -47,7 +59,7 @@ function Start-Player([string]$name, [string]$script, [string]$network, [string]
     $profile = Join-Path $data 'profile.ini'
     if (-not (Test-Path $profile)) { "[profile]`ngamertag = $gamertag" | Set-Content -Encoding ascii $profile }
     $env:GOW3_DATA_DIR = $data
-    $env:GOW3_MODS_DIR = $mods
+    $env:GOW3_MODS_DIR = $modsFor[$name]
     $env:GOW3_SETTINGS = $ini
     $env:GOW3_NET_BIND = '127.0.0.1'
     $env:GOW3_INPUT_SCRIPT = if ($script) { (Resolve-Path $script).Path } else { '' }
@@ -74,7 +86,7 @@ switch ($Connect) {
     'hairpin' { $joinNet = "join = $(Get-JoinCode 0xC0000201L $Port)" }       # 192.0.2.1 (TEST-NET-1): never answers
     'unreachable' { $joinNet = "join = $(Get-JoinCode 0xC0000202L $Port)" }   # 192.0.2.2, which the first game does not claim
     'server' {
-        $server = Start-Process -FilePath "$build\gow3_server.exe" -ArgumentList "--port $Port --bind 127.0.0.1 --no-upnp --name TestServer --motd `"Test message`"" `
+        $server = Start-Process -FilePath "$build\gow3_server.exe" -ArgumentList "--port $Port --bind 127.0.0.1 --no-upnp --name TestServer --motd `"Test message`"$(if ($ServerMods) { ' --mods `"' + (New-ModsFolder 'mods_server' $ServerMods) + '`"' })" `
             -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $root 'server.log')
         $hostNet = "server = 127.0.0.1:$Port"; $joinNet = "server = 127.0.0.1:$Port"
     }

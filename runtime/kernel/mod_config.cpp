@@ -191,26 +191,6 @@ namespace
     }
 }
 
-std::vector<std::filesystem::path> Fragments(const Mod& m)
-{
-    std::vector<std::filesystem::path> out;
-    std::error_code ec;
-    for (const char* sub : { "config", "Config" })
-    {
-        const auto dir = m.dir / sub;
-        if (!std::filesystem::is_directory(dir, ec)) continue;
-        for (const auto& e : std::filesystem::directory_iterator(dir, ec))
-        {
-            std::string ext = e.path().extension().string();
-            for (char& c : ext) c = char(tolower(c));
-            if (e.is_regular_file() && ext == ".ini") out.push_back(e.path());
-        }
-        break;   // (the same folder on a case-insensitive file system)
-    }
-    std::sort(out.begin(), out.end());
-    return out;
-}
-
 bool Merge(const std::filesystem::path& base, const std::vector<std::pair<const Mod*, std::filesystem::path>>& fragments,
            const std::filesystem::path& out)
 {

@@ -49,8 +49,10 @@ namespace vnet
 
 #pragma pack(push, 1)
     struct Header { uint32_t magic; uint8_t version; uint8_t type; uint16_t reserved; };
-    struct Hello { Header h; char room[32]; uint64_t xuid; char gamertag[16]; char password[32]; char pad[52]; };   // padded to
-    // the Welcome's size, and Query to the Info's: a hub never answers a spoofed sender with more bytes than it got
+    struct Hello { Header h; char room[32]; uint64_t xuid; char gamertag[16]; char password[32]; uint64_t mods; char modList[44]; };
+    // mods: the fingerprint of the player's "everyone" mods (kernel/mod_manifest.h; 0: none, as games before 0.3 send in
+    // what was padding), modList their names for messages. Hello is the size of a Welcome, and Query of an Info:
+    // a hub never answers a spoofed sender with more bytes than it got
     struct Welcome { Header h; uint32_t vip; uint32_t hubVip; uint16_t players; uint16_t flags; char hubName[32]; char motd[96]; };
     struct Data { Header h; uint32_t srcVip; uint32_t dstVip; uint16_t srcPort; uint16_t dstPort; };   // + payload
     struct Announce { Header h; uint16_t port; uint16_t players; uint64_t hubId; char name[32]; char code[16]; };
@@ -63,6 +65,7 @@ namespace vnet
     struct Query { Header h; uint32_t token; char pad[sizeof(Info) - sizeof(Header) - 4]; };
     struct Notice { Header h; char text[96]; };
 #pragma pack(pop)
+    static_assert(sizeof(Hello) == sizeof(Welcome) && sizeof(Query) == sizeof(Info), "requests are as large as their answers");
 
     inline Header MakeHeader(Type t) { return Header{ kMagic, kVersion, uint8_t(t), 0 }; }
     inline bool Valid(const void* p, int n)

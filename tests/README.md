@@ -43,7 +43,8 @@ connected through loopback only (no firewall prompt). `-Connect` picks the setup
 the first), `samepc` (one data folder, as two copies of one install: the second gets `instance2`), `direct`, `code`,
 `server` (a gow3_server.exe started for the test), `hairpin` (a friend's code whose address cannot be reached from
 inside the network: found on the network instead) and `unreachable` (a code nobody answers at: a message, then the
-game on the network). The `net:` lines of each log show every step, `net: [title] text` the messages shown in the
+game on the network). `-HostMods` / `-JoinMods "examples\mods\A,..."` give each game its own mods and
+`-ServerMods` the mods a test server requires (a mismatch: the second game is turned away with the list). The `net:` lines of each log show every step, `net: [title] text` the messages shown in the
 game:
 
 ```powershell

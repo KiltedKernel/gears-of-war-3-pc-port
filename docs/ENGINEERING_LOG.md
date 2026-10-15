@@ -1788,3 +1788,30 @@ checkouts (tools/XenonRecomp, xenia/), fetched and built from scratch by the set
   says `connecting to code xxxxx-xxxxx (192.0.x.x:3174)`, and neither log holds the address or code.
 - CONTRIBUTING.md (reporting, never committing game files or keys, tests that leave the player's data alone) and a
   bug report form (.github/ISSUE_TEMPLATE). The README's notice names Epic Games, the game's developer, too.
+
+## 2026-10-15: Mods for multiplayer, servers and Xbox 360 mods; a session-handle crash
+
+- One description of a mod for every program: runtime/kernel/mod_manifest.h (header-only) reads mod.ini (new keys
+  `side`, `requires`, `game`), scans a mods folder in load order with each mod's problem (another game; a required mod
+  missing or off, repeated until stable), maps a mod's files to game paths, and computes the multiplayer fingerprint.
+  The game (mods.cpp), the launcher and the server include it; tools/modtool.py implements the same rules (the
+  fingerprints agree: 5362224fb2e9af86 for the sample folder from both).
+- Fingerprint: FNV-1a 64 over "name|version|gamepath:size;...config\fragment:size;\n" per active `everyone` mod in load
+  order; 0 = no such mods. It travels in the Hello's former 52 padding bytes (uint64 + 44-character list), so a 0.2
+  game counts as "no mods" and the protocol version stays 2. The hub compares a Hello with the server's fixed set
+  (--mods) or with the players already in the room (not the joining player's own older entry), and rejects with the
+  lists; the joining game shows "Could not join: Not let in: this session needs the mods Lancer ammo 1.0 (you have
+  none)".
+- Verified with tools/mp_test.ps1 (-HostMods / -JoinMods / -ServerMods): mismatch turned away on LAN and by a server;
+  matching `everyone` mods with different client / host mods play a Team Deathmatch; Horde over System Link with the
+  host's HordeBank: the joiner (no mods) shows $5000. Wider view: chapter 2 with and without, the modded camera shows
+  more of the corridor. HordeBank's DeploymentPhaseDuration=60 did not change the 30-second build timer, so it was
+  dropped from the sample; HordeInterest and LancerAmmo were not checked in play.
+- Xbox 360 mods: modinfo::GamePath takes a path from its GearGame folder, else sends bare .xxx/.upk/.tfc/Coalesced_*.bin
+  to CookedXbox360 and .bik to Movies; archives without a mod.ini are wrapped in a folder named after the archive.
+- Crash: a joiner died once in NtClose -> DestroyKernelObject while a match loaded; the stack held F5E50000, the first
+  session handle (x360_session.cpp numbers them from 0xF5E50000). Having the top bit set, NtClose took it for a kernel
+  object's address and ran a destructor on whatever was there. NtClose now hands session handles to
+  x360k::CloseSessionHandle, and kernel objects are registered at creation (xdm.cpp): closing anything else returns
+  STATUS_INVALID_HANDLE with a warning instead of destroying memory. Four modded multiplayer runs after the fix (LAN
+  Versus, server Versus, Horde) played to the end.

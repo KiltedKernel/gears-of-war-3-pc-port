@@ -55,6 +55,7 @@ author = Your name
 description = One line about what the mod does.
 priority = 0
 enabled = true
+side = everyone
 ```
 
 | key | meaning |
@@ -63,6 +64,9 @@ enabled = true
 | `version`, `author`, `description` | free text |
 | `priority` | whole number, default 0; when two mods have the same file, the higher priority wins (equal: the later name alphabetically) |
 | `enabled` | `false` / `0` / `no` turns the mod off |
+| `side` | who needs the mod in multiplayer: `everyone` (default), `host` or `client` (see [Mods in multiplayer](#mods-in-multiplayer)) |
+| `requires` | other mods it needs, by name or folder, separated by commas (`requires = Horde: big bank`). If one is missing or off, the game leaves this mod off and says why |
+| `game` | the game it is made for: `gears3` (default). A mod for another game (`gears2`) is left off |
 
 Files placed directly in `mods\` (not inside a folder with a `mod.ini`) still work, as one mod named
 "(loose files)" at priority 0.
@@ -120,9 +124,73 @@ When the game starts, the runtime merges every enabled mod's fragments, in load 
 change the configuration at once. The log lists each fragment (`mods: config chapters.ini from My mod: 13 lines`);
 mistakes are logged with the file and line. `python -P tools/modtool.py check MyMod` checks fragments too.
 
-Working examples are in `examples/mods/`: a new act and chapter (`ExampleChapter`), a menu string
-(`ExampleMenuText`), and `UnlockAllChapters`, which sets `IsAlwaysUnlocked=true` on chapters 1-30 so every chapter
-can be picked in Select Chapter. Copy one into `mods\` (or install its folder as a .zip from the launcher).
+Working examples are in `examples/mods/` (see [Sample mods](#sample-mods)). Copy one into `mods\` (or install its
+folder as a .zip from the launcher).
+
+## Mods in multiplayer
+
+Every mod says who needs it with `side` in its `mod.ini`:
+
+| side | changes | in a multiplayer session |
+|---|---|---|
+| `client` | only what you see and hear: menus, text, the HUD, the camera | yours alone; nobody else needs it |
+| `host` | the rules of the game mode (Horde's money, Versus round settings): the host's game runs the mode | acts in matches you host; others need not have it |
+| `everyone` (default) | anything every player's game simulates or loads: packages, maps, weapon and character stats | every player must have the same ones |
+
+When you join someone (a friend's game or a server), your `everyone` mods are compared with the session's: the
+names, versions and files' sizes, as one fingerprint. If they differ you are not let in, and the game says which
+mods the session uses ("this session needs the mods Lancer ammo 1.0 (you have none)"). `client` and `host` mods are
+never compared. Games of version 0.2 (no mod check) count as having no mods. `python -P tools/modtool.py mods`
+prints your multiplayer mods and their fingerprint.
+
+Pick the side carefully: a mod marked `client` or `host` that changes something both games simulate (weapon
+damage, ammunition, movement) lets players with different settings play together, and their games disagree.
+When unsure, leave the default, `everyone`.
+
+### Servers
+
+`gow3_server.exe` can require a set of mods: give it a mods folder (`--mods <folder>`, or `mods =` in its
+`server.ini`, `examples/server/server.ini`). Copy the mod folders players install there (the server reads each
+`mod.ini` and the names and sizes of the mod's files and fragments; it never loads them). The server prints the
+mods players need and their fingerprint; players with other mods are turned away with the list. Without `--mods`,
+each room plays with the mods of the first player in it.
+
+## Mods made for the Xbox 360
+
+Mods for the console version are usually shared as the changed game files: a `Coalesced_INT.bin`, some `.xxx`
+packages, sometimes inside the game's own folders, often with an edited `Xbox360TOC.txt`. The port takes them as
+they are:
+
+- **Install** the .zip with the launcher (**Install .zip...**) or `modtool.py install`: an archive without a
+  `mod.ini` goes into a new mod folder named after the archive, and a `mod.ini` is written for it (side
+  `everyone`).
+- **Files go where the game expects them**: a path containing a `GearGame` folder is used from there (so
+  `Gears of War 3\GearGame\CookedXbox360\X.xxx` works); bare packages (`.xxx`, `.upk`), texture caches (`.tfc`)
+  and `Coalesced_*.bin` go to `GearGame\CookedXbox360`; bare movies (`.bik`) to `GearGame\Movies`.
+- **The TOC is ignored**: the runtime lists every mod file in the game's table of contents itself.
+- **A whole Coalesced file** is used as the base, and other mods' `config\` fragments still apply on top of it.
+- **Code patches** (a modified `default.xex`, Xenia `.patch.toml` files) cannot apply: the port's game code is C++
+  recompiled on your PC. `modtool.py check` points them out.
+
+Packages must be Gears 3 packages (version 828); `modtool.py check` reads each one
+back.
+
+## Sample mods
+
+`examples/mods/` holds one sample for each kind of mod. All of them are configuration fragments: they contain no game
+data, so they can be shared freely.
+
+| mod | side | what it shows |
+|---|---|---|
+| `WiderView` | client | a wider camera field of view (`GearCamera.ini`): one player's own view |
+| `ExampleMenuText` | client | a menu string (`GearGameUI.int`) |
+| `UnlockAllChapters` | client | every chapter in Select Chapter (`IsAlwaysUnlocked`) |
+| `HordeBank` | host | Horde starts with $5,000: a game mode's setting, which the host's game applies; players who join see it |
+| `HordeInterest` | host | builds on `HordeBank` with `requires`: off (and saying why) without it |
+| `LancerAmmo` | everyone | more Lancer magazines (`GearWeapon.ini`, `GearWeaponMP.ini`): weapons are simulated by every game |
+| `ExampleChapter` | everyone | a new act and chapter (co-op partners load the same chapter) |
+
+`examples/server/` has a `server.ini` whose server requires `LancerAmmo`.
 
 ## New campaign chapters
 

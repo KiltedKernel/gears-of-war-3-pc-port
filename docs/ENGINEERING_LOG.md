@@ -12,7 +12,7 @@ and 3 into this port, so the trilogy can be played with Gears 3's gameplay and s
 No game files are in this repository; everything game-derived is made from the disc (dev copy: D:\gow3-decomp).
 
 ## 2026-10-11: Recon
-- ISO `Gears of War 3 [NTSCU][MEX].iso` (8.7 GB) extracted with tools/xdvdfs.py to D:\gow3-decomp\disc: 2,568 files,
+- The disc image (8.7 GB) extracted with tools/xdvdfs.py to D:\gow3-decomp\disc: 2,568 files,
   7.4 GB. `GearGame/CookedXbox360/*.xxx` UE3 packages, `Coalesced_INT.bin`, `Movies/*.bik`, `Xbox360TOC*.txt`,
   `TRIOVIZ*.XBX` (TriOviz 3D), `$SystemUpdate`. One game disc, single default.xex
   (SHA-256 08b60f29...6411917, 21,938,176 B).

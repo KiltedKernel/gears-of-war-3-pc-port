@@ -13,6 +13,9 @@ multiplayer over System Link, on a LAN, over the internet with a friend's code, 
 mods. See [docs/STATUS.md](docs/STATUS.md) for what is
 verified and what is next, and [CHANGELOG.md](CHANGELOG.md).
 
+Sister project: the [Gears of War 2 PC port](https://github.com/KiltedKernel/gears-of-war-2-pc-port), which shares
+this port's runtime, setup, launcher and multiplayer.
+
 ## Install
 
 1. Get the source: download the release's source archive and extract it to a folder of your choice, or clone the

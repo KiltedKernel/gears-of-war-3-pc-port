@@ -25,10 +25,15 @@
   about three minutes to build. tests/g1_follow_dom.txt.
 
 **Fixes**
+- Menus: the main menu could stop answering for good after a click on an option when the mouse moved on during the
+  submenu's opening (a player's log). The mouse hover changed the list's selection mid-transition, which left the
+  menu refusing all input. Hover and clicks now wait while a menu is in a transition, as its own controls do.
 - Menus: F (shown as BACK in the prompt bar) went to the game as B, so on the main menu's first page it returned to
-  the title screen and reloaded the front end, and the menus seemed to stop answering (a player's log). F now works
-  like Esc in menus: back, one press at a time, and nothing on the main menu's first page. The menu input trace in
-  build\gow3.log shows times and when a menu closes.
+  the title screen. F now works like Esc in menus: back, and nothing on the main menu's first page.
+- build\gow3.log: each menu click and back logs the main menu's state, a menu refusing input for 2 s is a warning,
+  and the menu input lines carry the time.
+- Tools for reading the menus: tools/gfx_extract.py (every Scaleform movie of the game) and
+  tools/gfx_input_catalog.py (what each button does in each menu); docs/REVERSE_ENGINEERING.md, "Menu input".
 
 **Tests**
 - tools/playtest.ps1 gave the game the input script's path relative to the repository while the game runs in

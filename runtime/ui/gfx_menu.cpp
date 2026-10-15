@@ -508,6 +508,66 @@ namespace
         return MainMenuPage::Other;
     }
 
+    // the front end main menu's own input state (MainMenuView, UI_FrontEndAssets' ActionScript), for the log: its
+    // handleInput drops every press while bDenyInput is set (transitions: SetDenyInput; the stacker's StartStack until
+    // its shift_up tween completes, AddMovieClipToStack), reads only Start on the title screen, and B on an empty
+    // MenuOptionsHistory goes back to the title (Callback_TransitionToTitle). Empty when the main menu is not open
+    std::string MainMenuState(uint32_t* sceneOut = nullptr)
+    {
+        const std::string view = "_level0.MainMenuSP.MainMenu";
+        std::vector<Target> targets;
+        { std::lock_guard lock(g_targetsMutex); targets = g_targets; }
+        for (const Target& t : targets)
+        {
+            if (!(GetNumber(t.scene, view + "._visible") > 0)) continue;
+            if (sceneOut) *sceneOut = t.scene;
+            return fmt::format("deny {} title {} history {} stacker {} animating {} server {}{}",
+                GetNumber(t.scene, view + ".bDenyInput") > 0 ? 1 : 0, GetNumber(t.scene, view + ".bOnTitleScreen") > 0 ? 1 : 0,
+                GetNumber(t.scene, view + ".MenuOptionsHistory.length"), GetNumber(t.scene, view + ".bIsDisplayingStacker") > 0 ? 1 : 0,
+                GetNumber(t.scene, view + ".Stacker.bIsAnimating") > 0 ? 1 : 0, GetNumber(t.scene, view + ".bIsServer") > 0 ? 1 : 0,
+                std::any_of(targets.begin(), targets.end(), [](const Target& x) { return x.capture; }) ? " overlay" : "");
+        }
+        return {};
+    }
+
+    // the main menu is in a transition (bDenyInput): its own handleInput drops presses then, and a selection written
+    // by the hover during a forward transition left the submenu's header over the old list with bDenyInput set for
+    // good (player log 2026-10-15, tests/menu_click_during_transition.txt). Hover and clicks wait until it ends
+    bool MainMenuDenies()
+    {
+        uint32_t scene = 0;
+        std::vector<Target> targets;
+        { std::lock_guard lock(g_targetsMutex); targets = g_targets; }
+        const std::string view = "_level0.MainMenuSP.MainMenu";
+        for (const Target& t : targets)
+            if (GetNumber(t.scene, view + "._visible") > 0) { scene = t.scene; break; }
+        if (scene && GetNumber(scene, view + ".bDenyInput") > 0) return true;
+        // the other menus on gears.controls.MainMenuList (Options, custom weapon spawns, mutators): its handleInput
+        // drops input while its Owner's bDenyInput is set
+        return !g_focus.list.empty() && GetNumber(g_focus.scene, g_focus.list + ".Owner.bDenyInput") > 0;
+    }
+
+    // a main menu that denies input for longer than any transition (2 s; a stacker tween is 0.2-0.3 s) is logged once
+    // per episode with its state: the trace for "the menus stopped answering"
+    void WatchDeny()
+    {
+        static uint64_t next = 0, since = 0;
+        static bool reported = false;
+        const uint64_t now = GetTickCount64();
+        if (now < next) return;
+        next = now + 500;
+        uint32_t scene = 0;
+        const std::string state = MainMenuState(&scene);
+        const bool deny = scene && GetNumber(scene, "_level0.MainMenuSP.MainMenu.bDenyInput") > 0;
+        if (!deny) { since = 0; reported = false; return; }
+        if (!since) since = now;
+        if (!reported && now - since >= 2000)
+        {
+            reported = true;
+            LOGFN_WARNING("gfx_menu: the main menu has refused input for {} ms ({})", now - since, state);
+        }
+    }
+
     // Esc or a right click in a menu: B, except on the main menu's first page and its title screen (PC convention:
     // Esc on a game's top menu does nothing; the controller's B keeps the console's way)
     void Back(const char* what)
@@ -520,7 +580,7 @@ namespace
             return;
         }
         hid::InjectButtons(0x2000, 80);
-        if (logged++ < 50) LOGFN("gfx_menu: {} -> B", what);
+        if (logged++ < 50) LOGFN("gfx_menu: {} -> B (main menu: {})", what, MainMenuState());
     }
 
     // a selection outside the focused list's data (the reused main-menu list: a submenu with fewer options than the
@@ -556,13 +616,21 @@ void OnGameThread()
     if (!hid::MenuMode()) { lastX = -2; g_pendingB = false; return; }
     if (hid::TakeMenuEscape()) Back("Esc / F");
     if (g_pendingB.exchange(false)) Back("right click");
-    Heal();
+    WatchDeny();
+    const bool denies = MainMenuDenies();   // a transition: nothing may write the selection (Heal, hover)
+    if (!denies) Heal();
     float fx, fy;
     if (!hid::MenuCursor(fx, fy)) return;   // read now, not from the 15 ms mouse poll
     const int x = int(fx), y = int(fy);
     // first hover for the previous frame's move (Scaleform has applied it by now), then this frame's move; a click
     // waits until the selection is on the hovered option (at most 1.5 s)
     static const bool noHover = getenv("GOW3_NO_HOVER") != nullptr;
+    if (denies)
+    {
+        g_dirty = true;   // hover again once the transition is over (the cursor's move is sent then too)
+        if (g_pendingA && GetTickCount64() - g_pendingSince > 1500) g_pendingA = false;   // the game would drop it too
+        return;
+    }
     const bool moving = !noHover && Hover(lastY);
     if (g_pendingA && (!moving || GetTickCount64() - g_pendingSince > 1500) && GetTickCount64() >= g_lastPress + 150)
     {
@@ -575,6 +643,8 @@ void OnGameThread()
         }
         else if (noHover || moving) hid::InjectButtons(0x1000, 80);   // A on whatever is selected
         else Click();
+        static int logged = 0;
+        if (logged++ < 200) LOGFN("gfx_menu: click{} (main menu: {})", moving ? " while the selection moves -> A" : "", MainMenuState());
         g_lastPress = GetTickCount64();   // no lookups while the press is read
         g_focus.at = 0;                   // the menu may change: find the focused list again
     }

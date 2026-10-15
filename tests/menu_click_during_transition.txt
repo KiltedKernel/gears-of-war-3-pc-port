@@ -1,0 +1,20 @@
+# bug repro (player log 2026-10-15): a click on HORDE, then the cursor moved and clicked again while the submenu was
+# opening. Each click logs the main menu's state (deny, history, stacker); a stuck bDenyInput is logged as "refused
+# input". Expected: the menus keep answering (shot 80: a submenu or a screen past it, not a frozen list)
+45 pad 0010 250
+52 cursor 640 360
+53 glide 240 424 300
+55 click L 80
+55.15 glide 240 460 150
+55.4 click L 80
+55.7 glide 240 400 150
+56.0 click L 80
+56.3 click L 80
+57 glide 240 387 200
+58 click L 80
+60 click L 80
+64 glide 240 424 300
+66 click L 120
+70 key 1B 150
+74 glide 240 373 300
+76 click L 120

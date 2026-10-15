@@ -1842,16 +1842,39 @@ checkouts (tools/XenonRecomp, xenia/), fetched and built from scratch by the set
   the full path (Gears 2's playtest.ps1 the same). Runs that gave an absolute path were unaffected (chapter_test.py,
   mp_test.ps1).
 
-## 2026-10-15: F in menus, the main menu "breaking" again
+## 2026-10-15: The main menu "breaking" again: a hover during a transition; menu input reverse engineered
 
-A player log (build\gow3.log) of menus that stopped answering: a click on HORDE, then "menu input: keyboard 2000"
-(B from the keyboard) on every following line, with clicks injected but nothing happening. B came from F, the
-keyboard's B and the key the prompt bar shows for BACK. The 2026-10-13 fix routed Esc and the right click through
-gfx_menu's Back (no B on the main menu's first page or title screen, where B is Callback_TransitionToTitle and reloads
-the front end), but F still reached the game directly, so F on the first page, or F held while a submenu closed,
-took the menus back to PRESS START. Fix (runtime/hid/hid.cpp): in menus, keys bound to B are not mapped; an F press is
-a back request like Esc (one per press, a key held into a menu makes none). The trace now carries the time and logs
-when menu mode ends, so a press across a transition can be told from one inside a menu. tests/menu_held_b.txt: F held
-3 s on the main menu ("Esc / F on the main menu's first page: ignored"), a click opens Horde, F held 2 s there goes
-back once, a click opens Horde again. Gears 2's menus (mouse_menu.cpp) press B for Esc as for F and have no such
-first page, so nothing changes there.
+A player log (build\gow3.log) of menus that stopped answering: a click on HORDE, a hover "select 3 (was 2)" right after
+it, then clicks injected with nothing happening, and "menu input: keyboard 2000" (B from F) on the following lines.
+
+**Reading the real thing.** tools/gfx_extract.py saves all 52 Scaleform movies of the cooked packages (GearStart,
+GearGame, Startup, the game modes' *_SF packages); JPEXS FFDec decompiles their ActionScript (6320 files, kept outside
+the repository); tools/gfx_input_catalog.py lists every handleInput branch on a button with its phase and the engine
+callbacks it reaches (82 rows). Findings (docs/REVERSE_ENGINEERING.md, "Menu input"):
+- The engine sends pad buttons to the movies as key codes 96-115 (Xbox360-GearGame.ini [GFxUI.GFxMoviePlayer]:
+  XboxTypeS_B=GAMEPAD_B ...); CLIK's InputDelegate turns them into nav codes ("escape-gamepad_B" is both B and Esc)
+  with the phase keyDown, keyHold (while _global.bIsKeyHold: the engine's repeat, InitialButtonRepeatDelay 0.2 s,
+  ButtonRepeatDelay 0.1 s) or keyUp. No menu acts on a held face button: only directions repeat. A held key is one
+  press.
+- MainMenuView.handleInput and gears.controls.MainMenuList.handleInput (the main menu, Options, custom weapon
+  spawns, mutators) drop all input while the view's bDenyInput is set: transitions (SetDenyInput) and the stacker
+  (StartStack until its tween completes, AddMovieClipToStack). B with an empty MenuOptionsHistory calls
+  Callback_TransitionToTitle (for a party member who is not the host, B anywhere on the main menu does). Difficulty
+  select's B is Callback_Abort for the host and Callback_LeaveParty for a party member. Popups act on keyDown only.
+
+**The bug.** The port's mouse hover selects by calling the list's selectedIndex setter, which runs whether or not the
+view denies input. A hover (or Heal) during the forward transition into a submenu rewrote the list mid-transition:
+the header showed HORDE over the main menu's options and bDenyInput stayed set for good, so every later press was
+dropped by the game itself, B too. Reproduced with tests/menu_click_during_transition.txt (click HORDE, move and
+click again within half a second: "deny 1 history 1" at every later click, the header over the wrong list). Fix
+(runtime/ui/gfx_menu.cpp): while the main menu's, or the focused list's Owner's, bDenyInput is set, nothing writes
+the selection (hover, Heal) and clicks wait (dropped after 1.5 s, as the game would). The same test now goes HORDE >
+PRIVATE with every click answered; mouse_menu, menu_esc_then_click, options_click, menu_held_b unchanged.
+
+**F.** F (the prompt bar's BACK) reached the game as B directly, while Esc and the right click go through gfx_menu's
+Back (nothing on the main menu's first page or title screen). In menus F is now a back request like Esc
+(runtime/hid/hid.cpp; tests/menu_held_b.txt).
+
+**Trace.** Each click and back logs the main menu's state ("deny 0 title 0 history 1 stacker 0 animating 0 server 1"),
+a main menu refusing input for 2 s is a warning with that state, and the menu input lines carry the time and the end
+of menu mode. Gears 2's menus (mouse_menu.cpp, UIScenes) are a different system and unchanged.

@@ -115,6 +115,30 @@ B with an empty `MenuOptionsHistory` (the first page) calls `Callback_Transition
 (about 10 s without polling input); `SetDenyInput(true)` drops every press during a transition. The port therefore
 answers Esc and right click itself (no B on the first page) and turns a click on the title screen into Start.
 
+### Menu input
+
+How a button reaches a menu, from the movies' own ActionScript (`tools/gfx_extract.py` saves the 52 movies of the
+cooked packages, JPEXS FFDec decompiles them, `tools/gfx_input_catalog.py` lists every handler branch on a button with
+its phase and the engine callbacks it reaches):
+
+- The engine maps pad buttons to key codes (Xbox360-GearGame.ini `[GFxUI.GFxMoviePlayer]`: `XboxTypeS_A=GAMEPAD_A`
+  ...): A 96, B 97, X 98, Y 99, LB 100, LT 101, LS 102, RB 103, RT 104, RS 105, Start 106, Back 107, right stick
+  112-115; the d-pad and left stick are the arrow keys. CLIK's `InputDelegate` makes them nav codes
+  (`"escape-gamepad_B"` is B and Esc alike) with a phase: `keyDown`, `keyHold` (while `_global.bIsKeyHold`, the
+  engine's repeat: `[Engine.Client] InitialButtonRepeatDelay=0.2`, `ButtonRepeatDelay=0.1`) or `keyUp`.
+- No menu acts on a held face button; only directions repeat. A held key is one press.
+- `MainMenuView.handleInput` and `gears.controls.MainMenuList.handleInput` (main menu, Options, custom weapon spawns,
+  mutators) drop all input while the view's `bDenyInput` is set: transitions (`SetDenyInput`) and the stacker
+  (`StartStack` until its tween completes, `AddMovieClipToStack`). Setting a list's `selectedIndex` from outside
+  bypasses this; done during a forward transition it leaves `bDenyInput` set for good. The port writes no selection
+  and sends no click while it is set.
+- B: on the main menu with an empty `MenuOptionsHistory` `Callback_TransitionToTitle` (a party member who is not the
+  host: on any page); in a submenu `HostBackwards` (`Callback_MenuOptionWasPopped`); difficulty select
+  `Callback_Abort` (host) or `Callback_LeaveParty` (party member); Options `Callback_ReturnToMain` /
+  `Callback_BeginClosingMenu`; popups `Callback_CancelButtonPressed` (keyDown only).
+- `MainMenuList` takes directions and A only from the host's primary controller (`_global.bIsServer`,
+  `PrimaryControllerIndex`); Start, X and B from anyone.
+
 ### Button prompts
 
 The button font's page 0 (256x256 DXT5, FNV 350c61d5241b80a8) is never touched; keyboard icons go into page 1's free

@@ -5,6 +5,8 @@
 - Logs are safe to post: network lines keep only the first two numbers of public addresses and hide join codes
   (`GOW3_LOG_ADDRESSES=1` logs them in full).
 - CONTRIBUTING.md and a bug report form for GitHub issues.
+- Multiplayer: a Gears of War 2 PC port game or server is turned away with a reason ("this is for Gears of War 3, not
+  Gears of War 2"), in the game and in the launcher's server list, instead of the two games mixing.
 - Fix: the setup's disc check expected the wrong default.xex (Gears of War 2's hash), so it turned every Gears of War 3
   disc away.
 

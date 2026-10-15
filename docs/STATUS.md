@@ -27,6 +27,9 @@ Current release: **0.2.1** (CHANGELOG.md).
   own maps. Mods in multiplayer: a joining player without the session's `everyone` mods is turned away with the list
   (by a friend's game and by a server with `--mods`); a host's `host` mod (Horde starting money) reaches a player
   without it; a client mod (wider camera) changes only its player's view. Xbox 360-style mod archives install.
+- Trilogy preview (docs/TRILOGY.md): `tools/trilogy.py build gears1_prison` makes Gears 1's opening from the player's
+  Gears 1 and Gears 3 discs (about three minutes, the navmesh generated in game); a new campaign then starts in Gears
+  1's cell, plays its cutscene, and Marcus follows Dom out along the corridor (tests/g1_follow_dom.txt).
 
 ## Not done / known issues
 

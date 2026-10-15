@@ -15,7 +15,7 @@ if (-not $Disc) {   # the disc this install uses (tools\local.cmd, from tools\se
         foreach ($l in Get-Content -LiteralPath $local) { if ($l -match '^set "GOW3_GAME=(.*)"$') { $Disc = Join-Path $Matches[1] 'disc' } }
     }
 }
-$env:GOW3_INPUT_SCRIPT = $Script
+$env:GOW3_INPUT_SCRIPT = if ($Script) { (Resolve-Path -LiteralPath $Script).Path } else { "" }   # the game may run elsewhere: an absolute path
 $env:GOW3_SCREENSHOTS = $Shots
 if (-not $PlayerData) {
     $data = Join-Path $build 'testdata'

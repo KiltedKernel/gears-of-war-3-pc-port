@@ -87,8 +87,16 @@ Link**, and create or join a party. The game tells you on screen who joins and w
 Each folder in `build\mods\` with a `mod.ini` adds or replaces game files; several mods stack by priority and the
 game's table of contents is merged automatically. Mods can change the game's configuration and add campaign chapters
 to Select Chapter. The launcher's **Mods** tab turns mods on or off, changes the load order, installs a shared .zip and
-removes mods; `tools\modtool.py` creates, checks and packs them. Examples are in `examples\mods` (one unlocks every
-chapter in Select Chapter). See [docs/MODDING.md](docs/MODDING.md).
+removes mods; `tools\modtool.py` creates, checks and packs them. In multiplayer, every player needs the same mods
+that change the game for everyone, and the game says which; mods for your own view or for the host's rules are yours
+alone, and a server can require a set of mods. Mods made for the Xbox 360 install as they are. Samples for each kind
+are in `examples\mods`. See [docs/MODDING.md](docs/MODDING.md).
+
+## The trilogy
+
+Gears of War 1 and 2 converted into this port's engine, from your own discs: `tools\trilogy.py build gears1_prison`
+turns Gears 1's opening into a mod that starts Gears 3's campaign in Gears 1's prison cell. A preview; see
+[docs/TRILOGY.md](docs/TRILOGY.md).
 
 ## How it works / reverse engineering
 

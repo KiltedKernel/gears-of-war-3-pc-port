@@ -1,0 +1,24 @@
+# Gears 1's prison opening (SP_Prison_*) converted into Gears 3's prologue slot (SP_Nightmare_02_S, offset 0):
+# Gears 3's own prologue scripting, intro cutscene and dream-cell geometry switched off around it.
+# python -P tools/trilogy.py patch-level Gears1_Prison_Campaign tools/recipes/gears1_prison_campaign.txt
+# (each line: a Gears 3 package and tools/stripkismet.py options; rebuilt from the disc unless --in-place)
+
+# the converted level: Gears 3's prologue Kismet off, the converted Gears 1 subsequences (G1_*) kept
+SP_Nightmare_02_S --in-place --keep=G1_
+# the prologue tutorials ("Walk") never start; its cinematic toggles stop locking movement
+SP_Nightmare_01_S --drop-class=SeqAct_ManageTutorials --set=SeqAct_ToggleCinematicMode_0:bDisableMovement=0,SeqAct_ToggleCinematicMode_1:bDisableMovement=0,SeqAct_ToggleCinematicMode_3:bDisableMovement=0
+# "start black" without locking the player; the player start at Gears 1's (in the cell)
+SP_Nightmare_P --set=SeqAct_ToggleCinematicMode_5:bDisableMovement=0,SeqAct_ToggleCinematicMode_5:bDisableTurning=0,SeqAct_ToggleCinematicMode_5:bDisableInput=0 --move=PlayerStart_0:150.6,686.6,192.1,16404
+# Gears 3's intro cutscene (its remake of this opening, played on the player's pawn) skipped; its end events still
+# stream the prison in
+SP_Nightmare_01_Cine --bypass=Name.SeqAct_Interp_1:Completed+EndCIne
+# Gears 3's dream cell (walls, BSP, blocking volumes under the converted prison): an empty level of the same map
+copy SP_Nightmare_02_W SP_Nightmare_01
+# ... carrying Gears 1's post-process (its prison: brighter mid-tones and highlights, desaturated) in its volume
+SP_Nightmare_01 --in-place --g1-environment={g1}/SP_Prison_P.xxx
+# the dream's colour grading (a sepia lookup table and film grain, unbound post-process volume in the always-loaded
+# SP_Nightmare_02_W) off
+SP_Nightmare_02_W --set=PostProcessVolume_3:bEnabled=0
+# Gears 3's later prologue cutscenes (Adam, the closing one: streamed in after the intro): their scripts off
+SP_Nightmare_02_Cine
+SP_Nightmare_Adam_Cine

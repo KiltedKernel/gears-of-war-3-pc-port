@@ -1,0 +1,21 @@
+# (fresh; needs the Gears1_Prison mod: python -P tools/trilogy.py build gears1_prison) a new campaign into the converted
+# Gears 1 opening (the menus as new_campaign.txt); after its cutscene follow Dom: out of the cell (north), then west
+# along the corridor
+45 pad 0010 250
+52 pad 1000 250
+60 pad 1000 250
+64 pad 1000 250
+68 pad 1000 250
+74 pad 1000 250
+80 pad 1000 250
+86 pad 1000 250
+92 pad 1000 250
+98 pad 1000 250
+240 capture
+286 pad 2000 250
+288 key 57 4500
+294 mouse 2300 0 1000
+296 key 57 12000
+309 mouse -300 0 400
+310 key 57 12000
+323 key 57 12000

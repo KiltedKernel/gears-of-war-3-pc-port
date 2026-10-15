@@ -22,6 +22,7 @@ Screenshots land in `build\shots`, the log in `build\gow3.log`. Tests run with t
 | combat.txt | checkpoint | moving, aiming (right mouse), firing (left mouse), reloading (R) |
 | esc_pause.txt | checkpoint | Esc pauses in play, Esc resumes |
 | select_chapter.txt | checkpoint | Select Chapter (overwrites slot 1) to Act VI (needs examples\mods\ExampleChapter: `-Mods`) |
+| g1_follow_dom.txt | fresh | (trilogy; `-Mods` the Gears1_Prison mod from `tools\trilogy.py build gears1_prison`) a new campaign starts in Gears 1's cell: its cutscene, then Marcus follows Dom out along the corridor |
 | horde_private.txt | profile | Horde > Private lobby |
 | versus_bots.txt | fresh | Versus > Private > Team Deathmatch with 9 bots, played |
 | beast_private.txt | fresh | Beast > Private, a creature chosen, wave 1 played |

@@ -1815,3 +1815,29 @@ checkouts (tools/XenonRecomp, xenia/), fetched and built from scratch by the set
   x360k::CloseSessionHandle, and kernel objects are registered at creation (xdm.cpp): closing anything else returns
   STATUS_INVALID_HANDLE with a warning instead of destroying memory. Four modded multiplayer runs after the fix (LAN
   Versus, server Versus, Horde) played to the end.
+
+## 2026-10-15: The trilogy tools in the repository; Gears 1's opening built from the discs in one command
+
+- The conversion tools from the development sandbox (levelinject, objcopy, bspconv, cover, kdop, lighting,
+  materialconv, meshconv, modpack, navedges, navinject, navmesh, pylons, skelmesh, staticmesh, stripkismet, xma: the
+  import closure of levelinject, navinject and stripkismet) are now in tools/, with tools/recipes/. No game data and
+  no paths of the development machine in them (checked). tools/trilogy.py is rewritten around recipes
+  (tools/recipes/<name>.ini: [mod], [convert] target / sources / levelinject options, [navmesh], [patch] a stripkismet
+  recipe): `build` makes the mod folder, converts, generates and injects the navmesh, patches the Gears 3 packages
+  around it and runs modtool's check; it builds tools\xpack when missing.
+- Navmesh in a campaign sublevel: running the builder on SP_Nightmare_02_S in the campaign (GOW3_NAVMESH_LEVEL,
+  10 s or 60 s after the sublevel loaded) explores nothing: the seed's traces report hits, but exploration returns in
+  47 ms with no polygon, and navinject then disabled the pylon (the first build "succeeded" with an empty mesh: the
+  build now fails when a dump has no path polygons). The sandbox's route works: the cell block's geometry (SP_Prison_P,
+  S01, S02, S02_Meshes) converted into MP_GridlockG3 at z +20000 with the pylon at the campaign pylon's place + 20000,
+  loaded directly with GOW3_COMMAND_LINE=MP_GridlockG3?game=GearGameContent.GearGameHorde?listen (no menus), built in
+  7.8 s: 523 path polygons, 601 obstacle polygons; shifted by -20000 (navmesh.shift_dump) into the campaign package's
+  Pylon_1 (same name in both): 861 edges (12 mantle, 44 cover slip), 87 cover slots. The recipe's [navmesh] slot
+  section automates this. Whole build: 175 s.
+- Playtest of the built mod (tests/g1_follow_dom.txt, new campaign): Gears 1's cell and cutscene, Marcus out of the
+  cell and west along the corridor to (-309, 1141), Dom at his first goal (-563, 1149), Gears 1's "Choose path"
+  prompt; 60 fps.
+- Found on the way: tools/playtest.ps1 handed the game a relative script path (tests\x.txt) while the game runs in
+  build\: "playing 0 scripted events", the run had no input at all (the menus never left PRESS START). It now passes
+  the full path (Gears 2's playtest.ps1 the same). Runs that gave an absolute path were unaffected (chapter_test.py,
+  mp_test.ps1).

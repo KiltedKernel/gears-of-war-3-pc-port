@@ -1,0 +1,218 @@
+"""Gears of War 1 materials as Gears 3 material instances (offline): the Gears 1 material's diffuse, normal and
+specular textures become Gears 3 Texture2D exports, and a clone of a Gears 3 MaterialInstanceConstant (one whose
+parent takes Diffuse_01 / Normal_01 / Specular_01 texture parameters; its compiled static-permutation shaders stay
+valid, as only texture parameters change) points at them.
+
+Gears 1 materials are plain Materials: DiffuseColor / Normal / SpecularColor are tagged structs whose Expression leads
+through the expression graph (Add, Multiply... inputs are ExpressionInput structs); the shallowest
+MaterialExpressionTextureSample with a texture in this package is the slot's texture (fallback: ReferencedTextures by
+name: _Tex / _Diffuse, _Normal, _Spec).
+Gears 3 textures are written with every mip inline (LZO-decoded from Gears 1; the same tiled Xbox data) and
+NeverStream = True, cloned from a Gears 3 texture of the same slot for the other properties (LODGroup, compression
+settings...), TextureFileCacheName removed."""
+import os, struct, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import upk, levelinject, texture2d
+
+FORMATS_374 = {2: 'PF_A8R8G8B8', 3: 'PF_G8', 5: 'PF_DXT1', 6: 'PF_DXT3', 7: 'PF_DXT5'}
+
+
+# ---- tagged properties as raw records, for editing and re-encoding ----
+
+def raw_props(p, d, o):
+    """[(name, type, array index, extra bytes (struct/enum name), value bytes)], offset after None"""
+    out = []
+    while True:
+        name = p.fname(*struct.unpack_from('>ii', d, o)); o += 8
+        if name == 'None': return out, o
+        typ = p.fname(*struct.unpack_from('>ii', d, o))
+        size, index = struct.unpack_from('>ii', d, o + 8); o += 16
+        extra = b''
+        if typ == 'StructProperty' or (typ == 'ByteProperty' and p.version >= 633): extra = d[o:o + 8]; o += 8
+        if typ == 'BoolProperty': size = 1 if p.version >= 673 else 4
+        out.append([name, typ, index, extra, d[o:o + size]]); o += size
+
+
+def encode_props(w, props):
+    """re-encode raw records with the Rewriter's names (Gears 3: bools are one byte, tag size 0)"""
+    out = bytearray()
+    for name, typ, index, extra, value in props:
+        n, t = w.name(name), w.name(typ)
+        size = 0 if typ == 'BoolProperty' else len(value)
+        out += struct.pack('>iiiiii', n[0], n[1], t[0], t[1], size, index) + extra + value
+    n = w.name('None')
+    return bytes(out + struct.pack('>ii', *n))
+
+
+def fname_bytes(w, s):
+    return struct.pack('>ii', *w.name(s))
+
+
+# ---- Gears 1 material -> textures ----
+
+def g1_textures(p, mat):
+    """{'diffuse'|'normal'|'specular': texture export index (0-based)} for Gears 1 material export index mat"""
+    if mat < 0 or p.class_name(p.exports[mat]['class']) != 'Material': return {}
+    o, pr, end = levelinject.props_at(p, p.export_data(mat))
+    a = {n: v for n, t, k, v in pr}
+    out = {}
+    for slot, prop in (('diffuse', 'DiffuseColor'), ('normal', 'Normal'), ('specular', 'SpecularColor')):
+        if prop not in a: continue
+        start = {n: v for n, t, k, v in p.properties(a[prop][1], 0)[0]}.get('Expression', 0)
+        queue, seen = [start], set()
+        while queue and slot not in out:
+            ref = queue.pop(0)
+            if ref <= 0 or ref in seen: continue
+            seen.add(ref)
+            try:
+                _, epr, _ = levelinject.props_at(p, p.export_data(ref - 1))
+            except Exception:
+                continue
+            for n, t, k, v in epr:
+                if n == 'Texture' and t == 'ObjectProperty' and v > 0 and p.class_name(p.exports[v - 1]['class']) == 'Texture2D':
+                    out[slot] = v - 1; break
+                if t == 'StructProperty' and v[0] == 'ExpressionInput':
+                    queue.append({nn: vv for nn, tt, kk, vv in p.properties(v[1], 0)[0]}.get('Expression', 0))
+    if len(out) < 3 and 'ReferencedTextures' in a:                       # by name
+        raw = a['ReferencedTextures']; n = struct.unpack_from('>i', raw, 0)[0]
+        for r in struct.unpack_from(f'>{n}i', raw, 4):
+            if r <= 0: continue
+            nm = p.path(r - 1).lower()
+            for slot, keys in (('diffuse', ('_tex', 'diffuse', '_d')), ('normal', ('normal', '_n')), ('specular', ('spec', '_s'))):
+                if slot not in out and any(k in nm.split('.')[-1] for k in keys): out[slot] = r - 1
+    return out
+
+
+def g1_unlit(p, mat):
+    """a Gears 1 material drawn without lighting (LightingModel MLM_Unlit, or only an emissive input): skies,
+    backdrops, glows"""
+    if mat < 0 or p.class_name(p.exports[mat]['class']) != 'Material': return False
+    try:
+        o, pr, end = levelinject.props_at(p, p.export_data(mat))
+    except ValueError:
+        return False
+    a = {n: v for n, t, k, v in pr}
+    lm = a.get('LightingModel')                    # Gears 1: an int (MLM_Phong 0, NonDirectional 1, Unlit 2, SHPRT 3,
+    if lm == 2 or (isinstance(lm, tuple) and lm[1] == 'MLM_Unlit'): return True     # Custom 4); Gears 3: the enum name
+    return 'EmissiveColor' in a and 'DiffuseColor' not in a
+
+
+def g1_blend(p, ref, depth=0):
+    """a Gears 1 material reference's BlendMode (0 opaque, 1 masked, 2 translucent, 3 additive, 4 modulate),
+    following a material instance's Parent; None when not known (an import, unreadable)"""
+    if ref <= 0 or depth > 8: return None
+    cn = p.class_name(p.exports[ref - 1]['class'])
+    try:
+        o, pr, end = levelinject.props_at(p, p.export_data(ref - 1))
+    except ValueError:
+        return None
+    a = {n: v for n, t, k, v in pr}
+    if cn == 'Material':
+        b = a.get('BlendMode', 0)
+        return b if isinstance(b, int) else None
+    par = a.get('Parent')
+    return g1_blend(p, par, depth + 1) if isinstance(par, int) else None
+
+
+def g1_see_through(p, mesh_elements):
+    """every element of a Gears 1 static mesh drawn translucent / additive / modulated (light shafts, fog sheets):
+    the conversion's one material template is opaque, which drew them as solid white cones"""
+    modes = [g1_blend(p, el['material']) for el in mesh_elements]
+    return bool(modes) and all(m is not None and m >= 2 for m in modes)
+
+
+# ---- Gears 1 texture -> Gears 3 Texture2D serial data ----
+
+def texture_828(w, p3, template, src):
+    """(data, fixups) for a Gears 3 Texture2D export: template = a Gears 3 texture export index (its properties),
+    src = texture2d.Texture of a Gears 1 texture"""
+    d3 = p3.export_data(template)
+    props, end = raw_props(p3, d3, 4)
+    fmt = src.format if isinstance(src.format, str) else FORMATS_374.get(src.format, 'PF_DXT1')
+    # the cook dropped the top mip(s) (empty entries): the texture starts at the first stored mip, so a texture
+    # loaded whole (NeverStream) has its mips where the engine expects them
+    first = next(k for k, mm in enumerate(src.mips) if not mm['flags'] & 0x20)
+    mips = src.mips[first:]
+    sx, sy = mips[0]['w'], mips[0]['h']
+    tail = int(src.props.get('MipTailBaseIdx', len(src.mips) - 1)) - first
+    keep = []
+    for rec in props:
+        name = rec[0]
+        if name in ('TextureFileCacheName', 'FirstResourceMemMip', 'NeverStream'): continue
+        if name in ('SizeX', 'OriginalSizeX'): rec[4] = struct.pack('>i', sx)
+        elif name in ('SizeY', 'OriginalSizeY'): rec[4] = struct.pack('>i', sy)
+        elif name == 'Format': rec[4] = fname_bytes(w, fmt)
+        elif name == 'MipTailBaseIdx': rec[4] = struct.pack('>i', max(tail, 0))
+        keep.append(rec)
+    keep.append(['NeverStream', 'BoolProperty', 0, b'', b'\x01'])
+    out = bytearray(d3[:4]) + encode_props(w, keep)
+    fixups = []
+    out += struct.pack('>iiii', 0, 0, 0, 0)                               # SourceArt: empty (offset fixed below)
+    fixups.append((len(out) - 4, len(out)))
+    out += struct.pack('>i', len(mips))
+    for m, mip in enumerate(mips):
+        data = src.mip_bytes(first + m)
+        if data is None:
+            out += struct.pack('>Iiii', 0x21, 0, -1, -1)
+        else:
+            out += struct.pack('>Iiii', 0, len(data), len(data), 0)
+            fixups.append((len(out) - 4, len(out)))
+            out += data
+        out += struct.pack('>ii', mip['w'], mip['h'])
+    out += bytes(16) + bytes(4)                                          # cache GUID, trailer (an empty array)
+    return bytes(out), fixups
+
+
+# ---- material instance ----
+
+def mic_828(w, p3, template, textures, scalars=None):
+    """serial data for a clone of Gears 3 MaterialInstanceConstant export `template`, with texture parameters
+    replaced: textures = {'Diffuse_01': ref, ...} (object refs in the rewritten package), and scalar parameters
+    (scalars = {'OverallEmissive': 0.0, ...}) set where the template has them"""
+    d3 = bytearray(p3.export_data(template))
+    o, pr, end = levelinject.props_at(p3, bytes(d3))
+    if scalars:
+        v, size = levelinject.tag_value_offset(p3, bytes(d3), o, 'ScalarParameterValues')
+        if v is not None:
+            e = v + 4
+            for _ in range(struct.unpack_from('>i', d3, v)[0]):
+                recs, after = raw_props(p3, bytes(d3), e)
+                pname = next((p3.fname(*struct.unpack('>ii', r[4])) for r in recs if r[0] == 'ParameterName'), '')
+                q = e
+                for r in recs:
+                    hdr = 24 + len(r[3])
+                    if r[0] == 'ParameterValue' and pname in scalars:
+                        struct.pack_into('>f', d3, q + hdr, scalars[pname])
+                    q += hdr + len(r[4])
+                e = after
+    v, size = levelinject.tag_value_offset(p3, bytes(d3), o, 'TextureParameterValues')
+    n = struct.unpack_from('>i', d3, v)[0]
+    e = v + 4
+    for _ in range(n):                                  # elements: tagged {ParameterName, ParameterValue, ExpressionGUID}
+        recs, after = raw_props(p3, bytes(d3), e)
+        pname = next((p3.fname(*struct.unpack('>ii', r[4])) for r in recs if r[0] == 'ParameterName'), '')
+        q = e
+        for r in recs:
+            # walk to this record's value to patch it in place
+            hdr = 24 + len(r[3])
+            if r[0] == 'ParameterValue' and pname in textures:
+                struct.pack_into('>i', d3, q + hdr, textures[pname])
+            q += hdr + len(r[4])
+        e = after
+    return bytes(d3)
+
+
+def mic_texture_params(p, i):
+    """texture parameter names of MaterialInstanceConstant export i (Gears 3 package)"""
+    d = p.export_data(i)
+    try:
+        o, pr, end = levelinject.props_at(p, d)
+        v, size = levelinject.tag_value_offset(p, d, o, 'TextureParameterValues')
+    except Exception:
+        return []
+    if v is None: return []
+    out, e = [], v + 4
+    for _ in range(struct.unpack_from('>i', d, v)[0]):
+        recs, e = raw_props(p, d, e)
+        out += [p.fname(*struct.unpack('>ii', r[4])) for r in recs if r[0] == 'ParameterName']
+    return out

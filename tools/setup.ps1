@@ -135,8 +135,7 @@ $python = Find-Python
 if (-not $python) { Fail "Python 3 not found (https://www.python.org, or: winget install Python.Python.3.12)" }
 & $python -c "import Crypto" 2>$null
 if ($LASTEXITCODE -ne 0) { Write-Host "installing pycryptodome"; Run $python @('-m', 'pip', 'install', '--user', 'pycryptodome') }
-$bash = (Get-Command bash -ErrorAction SilentlyContinue).Source
-foreach ($c in @("$env:ProgramFiles\Git\bin\bash.exe", "${env:ProgramFiles(x86)}\Git\bin\bash.exe")) { if (-not $bash -and (Test-Path -LiteralPath $c)) { $bash = $c } }
+$bash = Find-Bash   # Git for Windows' bash: on a PC with WSL, the "bash" on PATH is WSL's (System32 bash.exe)
 if (-not $bash) { Fail "Git for Windows not found (bash is needed: winget install Git.Git)" }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) { Fail "git not found (winget install Git.Git)" }
 cmd /c "`"$Root\tools\env.cmd`""

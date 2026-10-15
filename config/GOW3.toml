@@ -50,7 +50,7 @@ functions = [
 [[midasm_hook]]
 name = "GoW3MaxTickRateHook"
 address = 0x8253D9B0
-registers = ["r3"]
+registers = ["r3", "f1"]
 jump_address_on_true = 0x8253D9B4
 
 [[midasm_hook]]
@@ -89,12 +89,6 @@ after_instruction = true
 name = "GoW3DepthOfFieldHook"
 address = 0x82593DC4
 registers = ["r11"]
-after_instruction = true
-
-[[midasm_hook]]
-name = "GoW3BloomHook"
-address = 0x82593DC0
-registers = ["r10"]
 after_instruction = true
 
 [[midasm_hook]]

@@ -2,7 +2,9 @@
 // Addresses from Xenia's game-patches for this XEX ("4D5308AB - Gears of War 3.patch.toml", hash EF4AD5E9DD1982ED;
 // illusion, boma, Sowa_95), each checked against the instruction it replaces. Here they follow gow3.ini instead
 // of being fixed edits.
-//  - frame rate: 8253D9B0 loads the engine's 30 fps tick cap (lfs f1,0x4C8(r3)); skipped, f1 stays 0.0 = no cap.
+//  - frame rate: 8253D9B0 loads the engine's 30 fps tick cap (lfs f1,0x4C8(r3)); the player's frame rate is returned
+//    instead. (The game patch's 0.0, "no cap", let the engine tick as fast as the CPU allows whenever it presents no
+//    frame, as while loading; in the Gears 2 port that ran the net driver at ~1000 Hz and broke campaign co-op.)
 //    82AF66BC `li r11,2` is the D3D presentation interval (every 2nd vblank); 1 presents every vblank.
 //  - 82969614 `lwz r5,0x344(r30)`: MaxAnisotropy -> 16.
 //  - the effects: each site loads a GSystemSettings flag into a register; 0 turns the effect off.
@@ -15,7 +17,12 @@ namespace
     bool Unlocked() { return settings::Get().frameRate > 30; }
 }
 
-bool GoW3MaxTickRateHook(PPCRegister& r3) { return Unlocked(); }          // true: skip the load of the cap
+bool GoW3MaxTickRateHook(PPCRegister& r3, PPCRegister& f1)
+{
+    if (!Unlocked()) return false;                  // the game's own 30 fps cap
+    f1.f64 = double(settings::Get().frameRate);     // the cap is the player's frame rate
+    return true;                                    // skip the load of the console's cap
+}
 void GoW3PresentIntervalHook(PPCRegister& r11) { if (Unlocked()) r11.u64 = 1; }
 void GoW3AnisotropyHook(PPCRegister& r5) { if (settings::Get().anisotropic16x) r5.u64 = 16; }
 

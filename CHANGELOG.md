@@ -5,6 +5,8 @@
 - Logs are safe to post: network lines keep only the first two numbers of public addresses and hide join codes
   (`GOW3_LOG_ADDRESSES=1` logs them in full).
 - CONTRIBUTING.md and a bug report form for GitHub issues.
+- Fix: the setup's disc check expected the wrong default.xex (Gears of War 2's hash), so it turned every Gears of War 3
+  disc away.
 
 ## 0.2.0 (2026-10-14)
 

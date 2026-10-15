@@ -3,7 +3,7 @@
 # usage: powershell -File tools/playtest.ps1 -Script tests\load_and_look.txt -Seconds 180 -Shots "150,160"
 # Tests keep their own saves and profile (build\testdata; -Fresh empties it first) and their own mods (none, or the
 # mod folders given with -Mods "examples\mods\A,examples\mods\B", copied to build\testmods), so the player's saves in
-# %LOCALAPPDATA%\GoW3Recomp and mods in build\mods are never touched, and their own settings (build	estdata\gow3.ini:
+# %LOCALAPPDATA%\GoW3Recomp and mods in build\mods are never touched, and their own settings (build\testdata\gow3.ini:
 # the defaults, or -Settings <ini>). -PlayerData uses the player's own saves, mods and settings (careful).
 param([string]$Script, [int]$Seconds = 120, [string]$Shots = "", [string]$Disc = "",
       [string]$Mods = "", [string]$Settings = "", [switch]$Fresh, [switch]$PlayerData)

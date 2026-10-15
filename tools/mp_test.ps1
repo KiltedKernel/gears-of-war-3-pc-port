@@ -15,7 +15,7 @@
 #           first one on the network instead
 #   unreachable  the second enters a code nobody answers at: it must say so, then join the game open on the network
 # -HostData <folder>: the host starts with a copy of that data folder's saves and settings (content\,
-# profile_settings.bin), e.g. build	estdata after tests/continue.txt made a checkpoint (tests/mp_host_coop.txt)
+# profile_settings.bin), e.g. build\testdata after tests/continue.txt made a checkpoint (tests/mp_host_coop.txt)
 # Folders: build\mp\host and build\mp\join (gow3.log, shots\, gow3.ini; data\ unless samepc: build\mp\data).
 param([string]$HostScript, [string]$JoinScript = "", [int]$Seconds = 240, [string]$Shots = "", [int]$JoinDelay = 5,
       [string]$HostData = "", [int]$Port = 3174, [ValidateSet('lan', 'samepc', 'direct', 'code', 'server', 'hairpin', 'unreachable')][string]$Connect = 'lan', [string]$Disc = "")

@@ -765,6 +765,15 @@ bool QueryHub(const sockaddr_in& to, vnet::Info& info, int& pingMs, int timeoutM
             pingMs = int(GetTickCount64() - start);
             ok = true;
         }
+        else if (n >= int(sizeof(vnet::Reject)) && vnet::Valid(buf, n) && ((vnet::Header*)buf)->type == vnet::kReject)
+        {
+            // the other game's server or game (its Reject says which): listed, with the reason
+            info = {};
+            vnet::SetText(info.name, std::string("Not for ") + vnet::kGameName);
+            vnet::SetText(info.motd, vnet::Text(((vnet::Reject*)buf)->reason));
+            pingMs = int(GetTickCount64() - start);
+            ok = true;
+        }
     }
     closesocket(s);
     return ok;

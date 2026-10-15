@@ -61,9 +61,10 @@ namespace
 
     void SendTo(const sockaddr_in& to, const void* p, int n) { sendto(g_socket, (const char*)p, n, 0, (const sockaddr*)&to, sizeof(to)); }
 
-    void Reject(const sockaddr_in& to, const std::string& why)
+    void Reject(const sockaddr_in& to, const std::string& why, uint32_t magic = kMagic)
     {
         vnet::Reject r{ MakeHeader(kReject), {} };
+        r.h.magic = magic;
         SetText(r.reason, why);
         SendTo(to, &r, sizeof(r));
     }
@@ -191,6 +192,14 @@ namespace
             if (n > 0 && n >= int(sizeof(Header)) && ((Header*)buf.data())->magic == kMagic && ((Header*)buf.data())->version != kVersion)
             {
                 if (((Header*)buf.data())->type == kHello) Reject(from, "a different version of the PC port: both need the same one");
+            }
+            else if (n >= int(sizeof(Header)) && OtherGame(((Header*)buf.data())->magic))
+            {
+                // the other game's port: its Hello (or its launcher's Query) gets a Reject it can read (its magic; version 2
+                // layout in both)
+                const uint8_t type = ((Header*)buf.data())->type;
+                if (type == kHello || (type == kQuery && n >= int(sizeof(Query))))
+                    Reject(from, std::string("this is for ") + kGameName + ", not " + OtherGame(((Header*)buf.data())->magic), ((Header*)buf.data())->magic);
             }
             else if (n > 0 && Valid(buf.data(), n))
             {

@@ -15,7 +15,13 @@
 
 namespace vnet
 {
-    constexpr uint32_t kMagic = 0x4E563347;          // "G3VN"
+    // each game's port has its own magic, so a Gears 3 game never mixes with a Gears 2 one: a hub turns the other
+    // game away with a Reject in that game's own magic, which its player can read
+    constexpr uint32_t kMagicGears2 = 0x4E563247;    // "G2VN"
+    constexpr uint32_t kMagicGears3 = 0x4E563347;    // "G3VN"
+    constexpr uint32_t kMagic = kMagicGears3;
+    constexpr const char* kGameName = "Gears of War 3";
+    inline const char* OtherGame(uint32_t magic) { return magic == kMagicGears2 ? "Gears of War 2" : nullptr; }
     constexpr uint8_t kVersion = 2;
     constexpr uint16_t kDefaultPort = 3074;          // the Xbox's own port; any UDP port works
     constexpr uint16_t kDiscoveryPort = 3075;        // LAN: "who hosts?" broadcasts and the hubs' answers

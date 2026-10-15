@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 (2026-10-15)
+
+Fixes: the setup accepts Gears of War 3 discs again, works on PCs with WSL, and the frame-rate unlock keeps the
+network healthy.
 
 - Logs are safe to post: network lines keep only the first two numbers of public addresses and hide join codes
   (`GOW3_LOG_ADDRESSES=1` logs them in full).
@@ -12,6 +15,7 @@
   co-op. Versus over System Link re-verified.
 - Fix: the setup's disc check expected the wrong default.xex (Gears of War 2's hash), so it turned every Gears of War 3
   disc away.
+- Fix: on a PC with WSL the setup ran WSL's bash (System32\bash.exe) instead of Git for Windows', and step 2 failed.
 
 ## 0.2.0 (2026-10-14)
 

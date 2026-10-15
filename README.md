@@ -8,7 +8,7 @@ replace or add packages, configuration and campaign chapters.
 **No game files are included.** The installation wizard reads your disc image and makes everything game-derived on
 your PC.
 
-Version 0.2.0: the whole campaign (all five acts) loads and plays, as do Horde, Versus with bots and Beast offline;
+Version 0.2.1: the whole campaign (all five acts) loads and plays, as do Horde, Versus with bots and Beast offline;
 multiplayer over System Link, on a LAN, over the internet with a friend's code, or on a server; keyboard, mouse and controller;
 mods. See [docs/STATUS.md](docs/STATUS.md) for what is
 verified and what is next, and [CHANGELOG.md](CHANGELOG.md).

@@ -32,6 +32,8 @@ namespace portgpu
         int antialiasing;     // 0 none, 1 FXAA, 2 FXAA extreme (swap post effect)
         // called on the GPU thread before a texture's guest data is uploaded (button prompts); may be null
         void (*onTextureLoad)(uint32_t address, uint32_t size, uint32_t format, uint32_t width, uint32_t height, bool tiled);
+        // called when the window is closed, just before the process ends (multiplayer: leave the session); may be null
+        void (*onExit)();
     };
 
     // Window + D3D12 + Xenia's command processor. False if D3D12 is unavailable (the runtime keeps its null GPU).
@@ -73,6 +75,10 @@ namespace portgpu
 
     // save the guest's current output image (what the game presented) as a PNG; false if nothing presented yet
     bool CaptureScreenshot(const char* pngPath);
+
+    // a short message over the game, bottom centre (multiplayer: joined, cannot reach...); any thread. Several are
+    // shown one after another
+    void ShowNotice(const char* title, const char* text, int seconds);
 
     // toggle fullscreen (F11 / Alt+Enter)
     void ToggleFullscreen();

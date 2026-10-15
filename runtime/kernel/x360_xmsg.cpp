@@ -10,6 +10,7 @@
 #include <map>
 
 uint32_t CompleteOverlapped(XXOVERLAPPED* ov, uint32_t result, uint32_t length);   // xam.cpp
+namespace x360k { bool XgiSession(uint32_t message, uint32_t buffer, uint32_t length, uint32_t& result); }   // x360_session.cpp
 
 namespace x360k
 {
@@ -32,8 +33,13 @@ namespace
     {
         switch (app)
         {
+        case 0xFB:   // XGI: sessions (x360_session.cpp); achievements, rich presence, stats: accepted
+        {
+            uint32_t result;
+            if (XgiSession(message, buffer, length, result)) return result;
+            return 0;
+        }
         case 0xFA:   // XMP: no custom soundtrack playing
-        case 0xFB:   // XGI: achievements, rich presence, stats: accepted, nothing to report offline
         case 0xFE:   // XAM
             return 0;
         case 0xFC:   // XLiveBase (Xenia xlivebase_app.cc): not signed in to Live
@@ -43,6 +49,12 @@ namespace
                 if (buffer) *(be<uint32_t>*)g_memory.Translate(buffer) = 1;
                 return 0;
             case 0x00058006:   // XLiveBaseGetNatType
+                if (getenv("GOW3_FAKE_LIVE"))
+                {
+                    if (buffer) *(be<uint32_t>*)g_memory.Translate(buffer) = 1;   // XONLINE_NAT_OPEN
+                    return 0;
+                }
+                return 0x80151802;
             case 0x00058007:   // XOnlineGetServiceInfo
                 return 0x80151802;   // X_ONLINE_E_LOGON_NOT_LOGGED_ON
             case 0x0005800E:   // XPresenceInitialize

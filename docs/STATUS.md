@@ -1,6 +1,6 @@
 # Status and roadmap
 
-Current release: **0.1.1** (CHANGELOG.md).
+Current release: **0.2.0** (CHANGELOG.md).
 
 ## Verified (scripted playtests in tests/, see ENGINEERING_LOG.md)
 
@@ -17,14 +17,19 @@ Current release: **0.1.1** (CHANGELOG.md).
   (Standard, Arcade), Versus Private, Horde Private, Beast Private.
 - 60 fps (frame-rate unlock), 16x anisotropy, effect toggles, resolution scaling, native mouse look, keyboard/mouse
   button prompts, launcher with options.
+- Multiplayer over System Link (docs/MULTIPLAYER.md), with no host / join to choose: two games on one PC
+  (tools/mp_test.ps1) find each other with no code (also as two copies of one install), join through a code or on a
+  gow3_server, recover from a code that points back into the network, and play a Private Team Deathmatch together
+  (tests/mp_host.txt, mp_join.txt). Messages over the game say who joined and what went wrong. Horde and Beast over
+  System Link play wave 1 with both players; campaign co-op joins the host's campaign (tests/mp_host_*.txt).
 - Mods: folders with `mod.ini`, priorities and conflicts, merged table of contents, configuration fragments merged
   at startup (several mods changing the config stack), new campaign chapters (32-49) in Select Chapter loading their
   own maps.
 
 ## Not done / known issues
 
-- No Xbox Live: online modes, party UI (the game asks for xam.xex through XexLoadImage, which fails; it then skips the
-  party features).
+- No Xbox Live: Casual / Standard matchmaking ask for it (System Link replaces them). Not yet tested: multiplayer
+  between two PCs, a real router's UPnP, the second player dropping in to campaign co-op. No voice chat.
 - Acts 2-5: every chapter loads and plays its first minutes (tools/chapter_test.py); none has been played through
   to its end in tests.
 - `tools/xpack` does not decode every LZX block (GearGame.xxx blocks 340-347): packages compressed as a whole cannot

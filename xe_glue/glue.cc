@@ -12,7 +12,10 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "third_party/stb/stb_image_write.h"
 
+#include <algorithm>
 #include <atomic>
+#include <cmath>
+#include <deque>
 #include <filesystem>
 #include <future>
 #include <set>
@@ -32,6 +35,10 @@
 #include "xenia/gpu/d3d12/d3d12_command_processor.h"
 #include "xenia/gpu/d3d12/d3d12_graphics_system.h"
 #include "xenia/memory.h"
+#include "xenia/ui/graphics_provider.h"
+#include "xenia/ui/immediate_drawer.h"
+#include "xenia/ui/presenter.h"
+#include "xenia/ui/ui_drawer.h"
 #include "xenia/ui/window.h"
 #include "xenia/ui/window_win.h"
 #include "xenia/ui/windowed_app_context_win.h"
@@ -144,12 +151,138 @@ class CloseListener : public xe::ui::WindowListener {
  public:
   void OnClosing(xe::ui::UIEvent& e) override {
     XELOGI("port: window closed, exiting");
+    if (g_host.onExit) g_host.onExit();   // multiplayer: say goodbye, give the router's port back
     xe::FlushLog();
     TerminateProcess(GetCurrentProcess(), 0);
   }
 };
 CloseListener g_close_listener;
 std::atomic<bool> g_running{false};
+
+// ---- notices: short messages over the game (multiplayer: joined, cannot reach...) ----
+// Each is drawn once with GDI into a bitmap (a dark panel with a green bar, a bold title and wrapped text, sized for
+// the window), then shown one after another at the bottom centre by a UI drawer of the presenter, fading in and out.
+struct PendingNotice {
+  std::vector<uint8_t> rgba;
+  uint32_t width = 0, height = 0;
+  int seconds = 6;
+  std::unique_ptr<xe::ui::ImmediateTexture> texture;
+  uint64_t shown_ms = 0;
+};
+std::mutex g_notice_mutex;
+std::deque<PendingNotice> g_notices;
+std::unique_ptr<xe::ui::ImmediateDrawer> g_immediate_drawer;
+
+PendingNotice RenderNotice(const std::string& title, const std::string& text, int seconds) {
+  PendingNotice n;
+  n.seconds = std::clamp(seconds, 2, 30);
+  RECT client{0, 0, 1280, 720};
+  if (HWND w = (HWND)portgpu::GetWindowHandle()) GetClientRect(w, &client);
+  const float scale = std::max(0.6f, float(client.bottom - client.top) / 1080.0f);
+  const int pad = int(20 * scale), bar = int(6 * scale), max_text = int(620 * scale);
+  HDC dc = CreateCompatibleDC(nullptr);
+  auto font = [&](int px, int weight) {
+    return CreateFontW(-px, 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                       ANTIALIASED_QUALITY, DEFAULT_PITCH, L"Segoe UI");
+  };
+  HFONT title_font = font(int(30 * scale), FW_SEMIBOLD), text_font = font(int(23 * scale), FW_NORMAL);
+  auto wide = [](const std::string& s) {
+    std::wstring w(s.size(), L'\0');
+    w.resize(size_t(MultiByteToWideChar(CP_UTF8, 0, s.data(), int(s.size()), w.data(), int(w.size()))));
+    return w;
+  };
+  const std::wstring wt = wide(title), wx = wide(text);
+  RECT tr{0, 0, max_text, 0}, xr{0, 0, max_text, 0};
+  SelectObject(dc, title_font);
+  DrawTextW(dc, wt.c_str(), int(wt.size()), &tr, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX);
+  SelectObject(dc, text_font);
+  if (!wx.empty()) DrawTextW(dc, wx.c_str(), int(wx.size()), &xr, DT_CALCRECT | DT_WORDBREAK | DT_NOPREFIX);
+  const int inner_w = std::min<int>(max_text, std::max<int>(tr.right, xr.right));
+  const int gap = wx.empty() ? 0 : int(6 * scale);
+  n.width = uint32_t(bar + pad * 2 + inner_w);
+  n.height = uint32_t(pad * 2 + tr.bottom + gap + xr.bottom);
+  BITMAPINFO bi{{sizeof(BITMAPINFOHEADER), LONG(n.width), -LONG(n.height), 1, 32, BI_RGB}};
+  void* bits = nullptr;
+  HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+  HGDIOBJ old = SelectObject(dc, bmp);
+  RECT all{0, 0, LONG(n.width), LONG(n.height)}, accent{0, 0, bar, LONG(n.height)};
+  HBRUSH panel = CreateSolidBrush(RGB(18, 20, 18)), green = CreateSolidBrush(RGB(110, 190, 60));
+  FillRect(dc, &all, panel);
+  FillRect(dc, &accent, green);
+  SetBkMode(dc, TRANSPARENT);
+  SelectObject(dc, title_font);
+  SetTextColor(dc, RGB(150, 220, 90));
+  RECT t{bar + pad, pad, bar + pad + inner_w, pad + tr.bottom};
+  DrawTextW(dc, wt.c_str(), int(wt.size()), &t, DT_SINGLELINE | DT_NOPREFIX | DT_END_ELLIPSIS);
+  SelectObject(dc, text_font);
+  SetTextColor(dc, RGB(235, 235, 235));
+  RECT x{bar + pad, pad + tr.bottom + gap, bar + pad + inner_w, LONG(n.height) - pad};
+  if (!wx.empty()) DrawTextW(dc, wx.c_str(), int(wx.size()), &x, DT_WORDBREAK | DT_NOPREFIX);
+  GdiFlush();
+  n.rgba.resize(size_t(n.width) * n.height * 4);
+  const uint8_t* src = (const uint8_t*)bits;   // BGRX
+  for (size_t i = 0; i < size_t(n.width) * n.height; i++) {
+    n.rgba[i * 4 + 0] = src[i * 4 + 2];
+    n.rgba[i * 4 + 1] = src[i * 4 + 1];
+    n.rgba[i * 4 + 2] = src[i * 4 + 0];
+    n.rgba[i * 4 + 3] = 248;
+  }
+  SelectObject(dc, old);
+  DeleteObject(bmp);
+  DeleteObject(panel);
+  DeleteObject(green);
+  DeleteObject(title_font);
+  DeleteObject(text_font);
+  DeleteDC(dc);
+  return n;
+}
+
+class NoticeDrawer : public xe::ui::UIDrawer {
+ public:
+  void Draw(xe::ui::UIDrawContext& context) override {
+    if (!g_immediate_drawer) return;
+    std::lock_guard<std::mutex> lock(g_notice_mutex);
+    if (g_notices.empty()) return;
+    PendingNotice& n = g_notices.front();
+    const uint64_t now = GetTickCount64();
+    if (!n.texture) {
+      n.texture = g_immediate_drawer->CreateTexture(n.width, n.height, xe::ui::ImmediateTextureFilter::kLinear, false,
+                                                    n.rgba.data());
+      n.shown_ms = now;
+      if (!n.texture) { g_notices.pop_front(); return; }
+    }
+    const float t = float(now - n.shown_ms) / 1000.0f, life = float(n.seconds);
+    if (t >= life) {
+      g_notices.pop_front();
+      context.presenter().RequestUIPaintFromUIThread();
+      return;
+    }
+    const float alpha = std::clamp(std::min(t / 0.25f, (life - t) / 0.5f), 0.0f, 1.0f);
+    const float w = float(context.render_target_width()), h = float(context.render_target_height());
+    const float left = std::floor((w - float(n.width)) * 0.5f), top = std::floor(h * 0.94f - float(n.height));
+    const float right = left + float(n.width), bottom = top + float(n.height);
+    const uint32_t color = (uint32_t(alpha * 255.0f) << 24) | 0x00FFFFFF;
+    const xe::ui::ImmediateVertex v[4] = {{left, top, 0, 0, color}, {right, top, 1, 0, color},
+                                          {right, bottom, 1, 1, color}, {left, bottom, 0, 1, color}};
+    const uint16_t indices[6] = {0, 1, 2, 0, 2, 3};
+    g_immediate_drawer->Begin(context, w, h);
+    xe::ui::ImmediateDrawBatch batch;
+    batch.vertices = v;
+    batch.vertex_count = 4;
+    batch.indices = indices;
+    batch.index_count = 6;
+    g_immediate_drawer->BeginDrawBatch(batch);
+    xe::ui::ImmediateDraw draw;
+    draw.primitive_type = xe::ui::ImmediatePrimitiveType::kTriangles;
+    draw.count = 6;
+    draw.texture = n.texture.get();
+    g_immediate_drawer->Draw(draw);
+    g_immediate_drawer->EndDrawBatch();
+    g_immediate_drawer->End();
+    context.presenter().RequestUIPaintFromUIThread();
+  }
+};
+NoticeDrawer g_notice_drawer;
 
 }  // namespace
 
@@ -380,6 +513,12 @@ bool portgpu::Start(const Host& host) {
     paint.SetCasAdditionalSharpness(sharpness);
     g_graphics->presenter()->SetGuestOutputPaintConfigFromUIThread(paint);
     if (fullscreen) g_window->SetFullscreen(true);
+    // notices over the game (portgpu::ShowNotice)
+    g_immediate_drawer = g_graphics->provider()->CreateImmediateDrawer();
+    if (g_immediate_drawer) {
+      g_immediate_drawer->SetPresenter(g_graphics->presenter());
+      g_graphics->presenter()->AddUIDrawerFromUIThread(&g_notice_drawer, 1000);
+    }
   });
   using SwapPostEffect = xe::gpu::CommandProcessor::SwapPostEffect;
   g_graphics->command_processor()->SetDesiredSwapPostEffect(host.antialiasing == 1   ? SwapPostEffect::kFxaa
@@ -391,10 +530,38 @@ bool portgpu::Start(const Host& host) {
 
 void portgpu::Shutdown() {
   if (g_graphics) {
-    if (g_app_context) g_app_context->CallInUIThreadSynchronous([]() { g_window->SetPresenter(nullptr); });
+    if (g_app_context)
+      g_app_context->CallInUIThreadSynchronous([]() {
+        if (g_immediate_drawer) {
+          g_graphics->presenter()->RemoveUIDrawerFromUIThread(&g_notice_drawer);
+          g_immediate_drawer->SetPresenter(nullptr);
+          std::lock_guard<std::mutex> lock(g_notice_mutex);
+          g_notices.clear();
+          g_immediate_drawer.reset();
+        }
+        g_window->SetPresenter(nullptr);
+      });
     g_graphics->Shutdown();
     g_graphics.reset();
   }
+}
+
+void portgpu::ShowNotice(const char* title, const char* text, int seconds) {
+  PendingNotice n = RenderNotice(title ? title : "", text ? text : "", seconds);
+  {
+    std::lock_guard<std::mutex> lock(g_notice_mutex);
+    while (g_notices.size() > 4) g_notices.erase(g_notices.begin() + 1);   // a burst: keep the one shown and the newest
+    if (!g_notices.empty() && g_notices.front().texture) {
+      // the one on screen gives way sooner when others wait
+      const int shown = int((GetTickCount64() - g_notices.front().shown_ms) / 1000);
+      g_notices.front().seconds = std::min(g_notices.front().seconds, shown + 3);
+    }
+    g_notices.push_back(std::move(n));
+  }
+  if (g_app_context)
+    g_app_context->CallInUIThread([]() {
+      if (g_graphics && g_graphics->presenter()) g_graphics->presenter()->RequestUIPaintFromUIThread();
+    });
 }
 
 void portgpu::InitializeRingBuffer(uint32_t ptr, uint32_t size_log2) { g_graphics->InitializeRingBuffer(ptr, size_log2); }

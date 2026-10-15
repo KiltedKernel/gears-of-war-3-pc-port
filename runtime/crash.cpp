@@ -49,6 +49,21 @@ static LONG WINAPI OnCrash(EXCEPTION_POINTERS* ep)
         }
     }
 
+    // the first 64 bytes each pointer register points at (the object the crashing code was reading)
+    if (auto* g = GetPPCContext())
+    {
+        const PPCRegister* regs[] = { &g->r3, &g->r4, &g->r29, &g->r30, &g->r31 };
+        const int numbers[] = { 3, 4, 29, 30, 31 };
+        for (int k = 0; k < 5; k++)
+        {
+            const uint32_t o = regs[k]->u32;
+            if (o < 0x10000 || !ue3::Readable(o, 64)) continue;
+            std::string hex;
+            for (int i = 0; i < 64; i += 4) hex += fmt::format(" {:08X}", ue3::Read32(o + i));
+            LOGFN_ERROR("guest: [r{}]{}", numbers[k], hex);
+        }
+    }
+
     // walk the host stack; recompiled functions are named sub_<guest address>
     CONTEXT ctx = *ep->ContextRecord;
     STACKFRAME64 frame{};

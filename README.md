@@ -8,8 +8,9 @@ replace or add packages, configuration and campaign chapters.
 **No game files are included.** The installation wizard reads your disc image and makes everything game-derived on
 your PC.
 
-Version 0.1.0: the whole campaign (all five acts) loads and plays, as do Horde, Versus with bots and Beast offline;
-keyboard, mouse and controller; mods. Online play is not supported. See [docs/STATUS.md](docs/STATUS.md) for what is
+Version 0.2.0: the whole campaign (all five acts) loads and plays, as do Horde, Versus with bots and Beast offline;
+multiplayer over System Link, on a LAN, over the internet with a friend's code, or on a server; keyboard, mouse and controller;
+mods. See [docs/STATUS.md](docs/STATUS.md) for what is
 verified and what is next, and [CHANGELOG.md](CHANGELOG.md).
 
 ## Install
@@ -40,8 +41,8 @@ powershell -ExecutionPolicy Bypass -File tools\setup.ps1 -Iso "D:\Games\Gears of
 ## Playing
 
 Run **Gears of War 3** (`build\gow3.exe`) or **Gears of War 3 Launcher** (`build\gow3_launcher.exe`). The launcher
-sets display, resolution, frame rate (up to 240), effects, mouse, prompts and audio (`build\gow3.ini`), manages mods,
-and starts the game. `-nointro` skips the logo movies. Saves live in `%LOCALAPPDATA%\GoW3Recomp`.
+sets display, resolution, frame rate (up to 240), effects, mouse, prompts and audio (`build\gow3.ini`), your gamertag and
+multiplayer, manages mods, and starts the game. `-nointro` skips the logo movies. Saves live in `%LOCALAPPDATA%\GoW3Recomp`.
 
 | Keyboard / mouse | Controller |
 |---|---|
@@ -68,7 +69,15 @@ setup (`build\prompts`); if you own Gears of War: Reloaded on Steam, `python too
 keycap art instead (`python tools\make_prompts.py drawn` goes back).
 
 Offline modes: Campaign (Standard, Arcade, Select Chapter), Horde, Versus and Beast (each under **Private**, with bots).
-The Casual / Standard entries are online and ask for Xbox LIVE.
+The Casual / Standard entries are Xbox LIVE matchmaking and ask for Xbox LIVE.
+
+## Multiplayer
+
+Play over the game's **System Link**. In the launcher's **Multiplayer** tab, set a gamertag and choose **With
+friends** (games on your network find each other; over the internet, type a friend's code) or **On a server** (pick
+one from the list, or **Run my own**). Then, in the game, open Party Options (Back on the main menu), pick **System
+Link**, and create or join a party. The game tells you on screen who joins and what goes wrong. See
+[docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
 
 ## Mods
 

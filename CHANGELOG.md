@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.2.0 (2026-10-14)
+
+Multiplayer with friends, a player profile, and a settings audit.
+
+**Multiplayer** (docs/MULTIPLAYER.md)
+- The game's System Link runs over the internet: the port gives the game a virtual LAN carried over one UDP port to
+  a session hub. Parties, the System Link browser, lobbies and matches work as the game made them.
+- No host or join to choose. **With friends**: games on one network (or one PC) find each other by themselves; over
+  the internet, a friend types your code (your public address and port, `XXXXX-XXXXX`, the port opened by UPnP).
+  A code that points back into your own network is recognised and connected there. **On a server**: everyone on a
+  `gow3_server.exe` shares one lobby (or a private room), so the System Link list shows every party on it.
+- Everything is said in the game: a message panel over the picture when you connect, when someone joins or leaves,
+  when a friend's code does not answer (and what to do), when the connection drops (it reconnects).
+- Two copies of the game on one PC are two players: the second gets its own profile, player id and log.
+- The launcher's **Multiplayer** tab: gamertag; Offline / With friends / On a server; your code (Copy) and a friend's
+  code with **Check**; a server list with players, ping and who is online, Add, Remove and **Run my own**; private
+  room and password; Windows Firewall status with **Allow** / **Fix**; port and UPnP.
+- `gow3.ini [network]`: online, server, servers, join, room, password, port, upnp; offline by default, sending
+  nothing to the network.
+- Verified on one PC (tools/mp_test.ps1): two games join a System Link party and play Private Team Deathmatch
+  together with no code, as two copies of one install, and on a server; a code that cannot be reached falls back to
+  the game on the network. Horde, Beast and campaign co-op over System Link: both players in the same wave, or in
+  the host's campaign. Not yet tested between two PCs.
+
+**Profile**
+- `profile.ini` in the save folder: a gamertag shown to other players and a random player id, kept between runs.
+  Existing saves keep working.
+
+**Settings**
+- Every gow3.ini setting was traced to the code that reads it. Removed because they did nothing: `bloom` (Gears 3
+  never reads its own bloom flag), `texture_streaming_fix`, `black_shading_fix` and `shadow_resolution` (Gears 2
+  leftovers). Old gow3.ini files still load.
+- Turning sound off no longer risks a crash: the audio system runs muted instead of not at all.
+- Launcher: labels and check boxes are drawn on the page's own background.
+
+**Fixes**
+- XamVoiceCreate reports "no headset" instead of returning an unset voice.
+
 ## 0.1.1 (2026-10-13)
 
 Housekeeping: names, license notices, and the XEX decryption key no longer stored in the repository.

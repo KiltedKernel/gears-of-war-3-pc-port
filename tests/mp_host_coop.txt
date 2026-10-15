@@ -1,0 +1,19 @@
+# System link campaign co-op (tools/mp_test.ps1 -HostData build\testdata, with mp_join_coop.txt): the host has a
+# checkpoint (tests/continue.txt made it): Start, A (brightness screen), Back (party options) -> up ->
+# System Link -> Y create party; once the second player is in (about 95 s): CAMPAIGN -> STANDARD -> CONTINUE and A
+# through its screens; then walk
+45 pad 0010 250
+54 pad 1000 200
+60 pad 0020 200
+64 pad 0001 150
+67 pad 1000 200
+76 pad 8000 200
+108 pad 1000 200
+113 pad 1000 200
+118 pad 1000 200
+123 pad 1000 200
+128 pad 1000 200
+133 pad 1000 200
+250 key 57 2500
+280 key 57 2500
+310 key 57 2500

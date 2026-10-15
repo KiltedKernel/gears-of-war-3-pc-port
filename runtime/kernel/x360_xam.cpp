@@ -1,4 +1,4 @@
-// XAM: one local, offline profile in slot 0 (Xenia semantics as reference), launch data, notifications, empty
+// XAM: one local, offline profile in slot 0 (user/profile.cpp: gamertag and XUID; Xenia semantics as reference), launch data, notifications, empty
 // achievement/stat enumerators, inet_addr.
 #include <stdafx.h>
 #include <cpu/ppc_context.h>
@@ -7,6 +7,7 @@
 #include "xdm.h"
 #include "heap.h"
 #include <os/logger.h>
+#include <user/profile.h>
 
 uint32_t XamCreateEmptyEnumerator();   // xam.cpp
 uint32_t CompleteOverlapped(XXOVERLAPPED* ov, uint32_t result, uint32_t length);   // xam.cpp
@@ -16,14 +17,15 @@ namespace x360k
 
 namespace
 {
-    constexpr uint64_t kXuid = 0xB13EBABEBABEBABEull;   // the local profile (also Xenia's default)
-    constexpr const char* kGamertag = "Player";
     constexpr uint32_t ERROR_NO_SUCH_USER_ = 0x525, X_E_NO_SUCH_USER = 0x80070525, X_ERROR_NOT_FOUND = 0x490;
 }
 
+// GOW3_FAKE_LIVE=1 (experiment): player 1 counts as signed in to Xbox LIVE (2), to see what LIVE matchmaking asks for
+static uint32_t SigninState() { static const uint32_t s = getenv("GOW3_FAKE_LIVE") ? 2 : 1; return s; }
+
 uint32_t XamUserGetSigninState(uint32_t userIndex)
 {
-    return userIndex == 0 ? 1 : 0;   // 1 = eXUserSigninState_SignedInLocally
+    return userIndex == 0 ? SigninState() : 0;   // 1 = eXUserSigninState_SignedInLocally
 }
 
 uint32_t XamUserGetSigninInfo(uint32_t userIndex, uint32_t flags, XUSER_SIGNIN_INFO* info)
@@ -31,9 +33,10 @@ uint32_t XamUserGetSigninInfo(uint32_t userIndex, uint32_t flags, XUSER_SIGNIN_I
     if (userIndex != 0)
         return ERROR_NO_SUCH_USER_;
     memset(info, 0, sizeof(*info));
-    info->xuid = kXuid;
-    info->SigninState = 1;
-    strncpy(info->Name, kGamertag, sizeof(info->Name) - 1);
+    info->xuid = profile::Xuid();
+    info->SigninState = SigninState();
+    if (SigninState() == 2) info->dwField08 = 1;   // dwInfoFlags: XUSER_INFO_FLAG_LIVE_ENABLED
+    strncpy(info->Name, profile::Gamertag().c_str(), sizeof(info->Name) - 1);
     return 0;
 }
 
@@ -41,7 +44,7 @@ uint32_t XamUserGetXUID(uint32_t userIndex, uint32_t typeMask, be<uint64_t>* xui
 {
     if (userIndex != 0)
         return X_E_NO_SUCH_USER;
-    *xuid = kXuid;
+    *xuid = profile::Xuid();
     return 0;
 }
 
@@ -51,9 +54,20 @@ uint32_t XamUserGetName(uint32_t userIndex, char* buffer, uint32_t bufferSize)
         return ERROR_NO_SUCH_USER_;
     if (bufferSize)
     {
-        strncpy(buffer, kGamertag, bufferSize - 1);
-        buffer[std::min<size_t>(strlen(kGamertag), bufferSize - 1)] = 0;
+        const std::string& name = profile::Gamertag();
+        strncpy(buffer, name.c_str(), bufferSize - 1);
+        buffer[std::min<size_t>(name.size(), bufferSize - 1)] = 0;
     }
+    return 0;
+}
+
+// every privilege is granted (multiplayer, communications, user content...): there is no Xbox Live account to limit
+uint32_t XamUserCheckPrivilege(uint32_t userIndex, uint32_t privilege, be<uint32_t>* result)
+{
+    if (userIndex != 0 && userIndex != 0xFF) return ERROR_NO_SUCH_USER_;
+    if (result) *result = 1;
+    static int logged = 0;
+    if (logged++ < 10) LOGFN("XamUserCheckPrivilege({}, {}) -> granted", userIndex, privilege);
     return 0;
 }
 
@@ -134,6 +148,7 @@ uint32_t NetDll_inet_addr(uint32_t a1, uint32_t a2)
 GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninState, x360k::XamUserGetSigninState);
 GUEST_FUNCTION_HOOK(__imp__XamUserGetSigninInfo, x360k::XamUserGetSigninInfo);
 GUEST_FUNCTION_HOOK(__imp__XamUserGetXUID, x360k::XamUserGetXUID);
+GUEST_FUNCTION_HOOK(__imp__XamUserCheckPrivilege, x360k::XamUserCheckPrivilege);
 GUEST_FUNCTION_HOOK(__imp__XamUserGetName, x360k::XamUserGetName);
 GUEST_FUNCTION_HOOK(__imp__XamLoaderGetLaunchDataSize, x360k::XamLoaderGetLaunchDataSize);
 GUEST_FUNCTION_HOOK(__imp__XamLoaderGetLaunchData, x360k::XamLoaderGetLaunchData);

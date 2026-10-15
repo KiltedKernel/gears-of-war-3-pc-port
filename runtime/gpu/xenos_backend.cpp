@@ -13,6 +13,7 @@
 #include <kernel/physical.h>
 #include <map>
 #include <user/settings.h>
+#include <net/vnet.h>
 #include <os/logger.h>
 #include "../../xe_glue/port_gpu.h"
 #include <filesystem>
@@ -192,6 +193,7 @@ void gpu::Initialize()
     host.windowHeight = cfg.windowHeight;
     host.scaleThreshold = uint32_t(cfg.scaleThreshold);
     host.onTextureLoad = prompts::OnTextureLoad;
+    host.onExit = [] { vnet::Stop(); };   // multiplayer: leave the session, give the router's port back
     if (!portgpu::Start(host))
     {
         LOGN_WARNING("gpu: Direct3D 12 backend unavailable, using the null command processor");
@@ -232,13 +234,15 @@ void gpu::Initialize()
         }).detach();
     }
 
-    if (!cfg.audio || !portgpu::StartAudio())
-        LOGN_WARNING("audio: disabled");
+    // started even with [audio] enabled = false (muted in kernel/x360_audio.cpp): without the XMA decoder the title's
+    // sound voices are left unset, and stopping one crashed (a system link join, 2026-10-14)
+    if (!portgpu::StartAudio())
+        LOGN_WARNING("audio: disabled (no audio device)");
     else
     {
         g_deviceCount = 2;
         g_devices[1].Protect(false);
-        LOGN("audio: XAudio2 + XMA decoder (Xenia)");
+        LOGFN("audio: XAudio2 + XMA decoder (Xenia){}", cfg.audio ? "" : ", muted ([audio] enabled = false)");
     }
 }
 

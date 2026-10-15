@@ -1,0 +1,16 @@
+# System link player (tools/mp_test.ps1, with mp_host.txt; fresh profiles): Start, A (brightness screen), Back (party
+# options) -> up -> System Link (A: the browser) -> X refresh -> A join the host's party -> B: no to the multiplayer
+# preferences prompt; then follows the host. Co-op (tests/mp_host_coop.txt): walk and look once playing
+45 pad 0010 250
+54 pad 1000 200
+60 pad 0020 200
+64 pad 0001 150
+67 pad 1000 200
+80 pad 4000 200
+88 pad 1000 200
+100 pad 2000 200
+250 key 57 2500
+254 mouse 400 0 600
+280 key 57 2500
+284 mouse -400 0 600
+310 key 57 2500

@@ -17,6 +17,7 @@
 #include <hid/hid.h>
 #include <user/settings.h>
 #include <os/logger.h>
+#include <ue3/reflection.h>
 #include <Xinput.h>
 #include <atomic>
 #include <cmath>
@@ -45,11 +46,15 @@ namespace
 
     // ---- scripted input (GOW3_INPUT_SCRIPT=<file>): timed events played into this layer, for testing without
     // touching the real keyboard/mouse or needing window focus. Lines: "<seconds> key <vk hex> <hold ms>",
-    // "<seconds> mouse <dx> <dy> [ms]" (spread over ms, default 200), "<seconds> capture". '#' starts a comment.
+    // "<seconds> mouse <dx> <dy> [ms]" (spread over ms, default 200), "<seconds> capture", "<seconds> walkto <x> <y>
+    // [s]" (the player walks to a map position, WalkTo), "<seconds> face <x> <y>" (the camera turns toward it).
+    // '#' starts a comment.
     bool g_scripted = false;
     std::atomic<bool> g_scriptKeys[256];
     std::atomic<uint8_t> g_scriptLT{ 0 }, g_scriptRT{ 0 };   // "t trig L|R ms": a virtual controller's triggers
     std::atomic<uint16_t> g_scriptPadButtons{ 0 };   // "t pad <XInput buttons hex> ms": a virtual controller
+    std::atomic<int16_t> g_scriptLX{ 0 }, g_scriptLY{ 0 };   // "t walkto <x> <y> [s]": the virtual left stick
+    std::atomic<int16_t> g_scriptRX{ 0 };                    // "t face <x> <y>": the virtual right stick
     // scripted menu mouse: "t cursor <x> <y>" (UI space), "t click L|R [ms]", "t wheel <notches>"
     std::atomic<int> g_scriptCursorX{ -1 }, g_scriptCursorY{ -1 }, g_scriptWheel{ 0 };
     std::atomic<bool> g_scriptLeft{ false }, g_scriptRight{ false };
@@ -220,6 +225,85 @@ namespace
         return held;
     }
 
+    // the local player's pawn: the PlayerController whose Player is a LocalPlayer (a host also has controllers for
+    // the remote players, whose Player is their connection)
+    uint32_t g_localController = 0;   // LocalPawn's controller (its Rotation is the camera's)
+    uint32_t LocalPawn()
+    {
+        static uint32_t pcClass = 0, localPlayer = 0;
+        static int pawnOff = -1, playerOff = -1;
+        if (!ue3::Ready() && !ue3::Init()) return 0;
+        if (!pcClass)
+        {
+            pcClass = ue3::FindClass("PlayerController");
+            localPlayer = ue3::FindClass("LocalPlayer");
+            const uint32_t controller = ue3::FindClass("Controller");
+            pawnOff = controller ? ue3::PropertyOffset(controller, "Pawn") : -1;
+            playerOff = pcClass ? ue3::PropertyOffset(pcClass, "Player") : -1;
+            if (!pcClass || !localPlayer || pawnOff < 0 || playerOff < 0) { pcClass = 0; return 0; }
+        }
+        for (uint32_t pc : ue3::FindInstancesOf(pcClass))
+        {
+            const uint32_t player = ue3::Read32(pc + playerOff);
+            if (player && ue3::IsA(player, localPlayer)) { g_localController = pc; return ue3::Read32(pc + pawnOff); }
+        }
+        return 0;
+    }
+
+    // "walkto x y [seconds]": steer the local player to (x, y) with the left stick, relative to the camera (the
+    // controller's yaw: Gears moves relative to the camera). Stops within 100 units, when
+    // stuck for 3 s, or after the time (default 20 s); logs where it ended. Positions: GOW3_LOG_POS / GOW3_LOG_ACTORS.
+    void WalkTo(double tx, double ty, double seconds)
+    {
+        static const uint32_t actor = ue3::FindClass("Actor");
+        const int loc = actor ? ue3::PropertyOffset(actor, "Location") : -1, rot = actor ? ue3::PropertyOffset(actor, "Rotation") : -1;
+        uint32_t pawn = LocalPawn();
+        if (!pawn || loc < 0) { LOGFN("input: walkto: no player pawn"); return; }
+        const uint64_t t0 = GetTickCount64();
+        double bestDist = 1e9; uint64_t bestAt = t0;
+        double x = 0, y = 0;
+        for (;;)
+        {
+            if (GetTickCount64() % 1000 < 50) if (uint32_t p = LocalPawn()) pawn = p;   // a new pawn after a respawn
+            x = ue3::ReadFloat(pawn + loc); y = ue3::ReadFloat(pawn + loc + 4);
+            const double dx = tx - x, dy = ty - y, dist = std::sqrt(dx * dx + dy * dy);
+            if (dist < 100 || double(GetTickCount64() - t0) / 1000.0 > seconds) break;
+            if (dist < bestDist - 20) { bestDist = dist; bestAt = GetTickCount64(); }
+            if (GetTickCount64() - bestAt > 3000) { LOGFN("input: walkto: stuck"); break; }
+            const double yaw = double(int32_t(ue3::Read32(g_localController + rot + 4)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
+            const double want = std::atan2(dy, dx), diff = want - yaw;
+            g_scriptLY = int16_t(std::lround(std::cos(diff) * 32000));   // forward
+            g_scriptLX = int16_t(std::lround(std::sin(diff) * 32000));   // right (UE3: +y is to the right of +x)
+            Sleep(50);
+        }
+        g_scriptLX = 0; g_scriptLY = 0;
+        LOGFN("input: walkto {:.0f},{:.0f}: ended at {:.0f},{:.0f} after {:.1f} s", tx, ty, x, y, double(GetTickCount64() - t0) / 1000.0);
+    }
+
+    // "face x y": turn the camera (right stick) until it looks toward (x, y), within 3 degrees or 5 s
+    void Face(double tx, double ty)
+    {
+        static const uint32_t actor = ue3::FindClass("Actor");
+        const int loc = actor ? ue3::PropertyOffset(actor, "Location") : -1, rot = actor ? ue3::PropertyOffset(actor, "Rotation") : -1;
+        const uint32_t pawn = LocalPawn();
+        if (!pawn || loc < 0) { LOGFN("input: face: no player pawn"); return; }
+        const uint64_t t0 = GetTickCount64();
+        double diff = 0;
+        while (GetTickCount64() - t0 < 5000)
+        {
+            const double x = ue3::ReadFloat(pawn + loc), y = ue3::ReadFloat(pawn + loc + 4);
+            const double yaw = double(int32_t(ue3::Read32(g_localController + rot + 4)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
+            diff = std::remainder(std::atan2(ty - y, tx - x) - yaw, 2 * 3.14159265358979);
+            if (std::fabs(diff) < 0.05) break;
+            // proportional, with a floor so the stick leaves its dead zone
+            const double amount = std::clamp(std::fabs(diff) / 1.0, 0.35, 1.0) * (diff > 0 ? 1 : -1);
+            g_scriptRX = int16_t(std::lround(amount * 32000));
+            Sleep(30);
+        }
+        g_scriptRX = 0;
+        LOGFN("input: face {:.0f},{:.0f}: {:.1f} degrees off", tx, ty, diff * 57.2958);
+    }
+
     void ScriptThread(std::string path)
     {
         struct Ev { double t; std::string kind; double a, b, c; };
@@ -240,6 +324,8 @@ namespace
             else if (e.kind == "click") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 120; }
             else if (e.kind == "wheel") { in >> e.a; }
             else if (e.kind == "trig") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 200; }
+            else if (e.kind == "walkto") { in >> e.a >> e.b >> e.c; if (!e.c) e.c = 20; }
+            else if (e.kind == "face") { in >> e.a >> e.b; }
             evs.push_back(e);
         }
         std::sort(evs.begin(), evs.end(), [](const Ev& x, const Ev& y) { return x.t < y.t; });
@@ -294,6 +380,8 @@ namespace
             {
                 std::thread([b = uint16_t(e.a), hold = e.b] { g_scriptPadButtons = b; Sleep(DWORD(hold)); g_scriptPadButtons = 0; }).detach();
             }
+            else if (e.kind == "walkto") std::thread(WalkTo, e.a, e.b, e.c).detach();
+            else if (e.kind == "face") std::thread(Face, e.a, e.b).detach();
         }
     }
 
@@ -382,6 +470,10 @@ namespace
         XINPUT_STATE pad{};
         bool hasPad = !g_scripted && XInputGetState(user, &pad) == ERROR_SUCCESS;
         if (g_scripted && user == 0 && g_scriptPadButtons) { pad.Gamepad.wButtons = g_scriptPadButtons; hasPad = true; }
+        if (g_scripted && user == 0 && (g_scriptLX || g_scriptLY || g_scriptRX))
+        {
+            pad.Gamepad.sThumbLX = g_scriptLX; pad.Gamepad.sThumbLY = g_scriptLY; pad.Gamepad.sThumbRX = g_scriptRX; hasPad = true;
+        }
         if (g_scripted && user == 0 && (g_scriptLT || g_scriptRT))
         {
             pad.Gamepad.bLeftTrigger = g_scriptLT; pad.Gamepad.bRightTrigger = g_scriptRT; hasPad = true;

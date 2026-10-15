@@ -44,8 +44,13 @@ target_link_libraries(gow3 PRIVATE
 set_source_files_properties(${RT}/thirdparty/o1heap/o1heap.c PROPERTIES COMPILE_DEFINITIONS "O1HEAP_ASSERT(x)=do{if(!(x))__debugbreak();}while(0)")
 
 # ---- launcher: options window for gow3.ini + Play (launcher/) ----
-add_executable(gow3_launcher WIN32 ${CMAKE_SOURCE_DIR}/launcher/launcher.cpp ${CMAKE_SOURCE_DIR}/launcher/launcher.rc)
+add_executable(gow3_launcher WIN32 ${CMAKE_SOURCE_DIR}/launcher/launcher.cpp ${CMAKE_SOURCE_DIR}/launcher/launcher.rc ${RT}/net/upnp.cpp)
 target_compile_options(gow3_launcher PRIVATE /W3 -Wno-everything $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
 target_compile_definitions(gow3_launcher PRIVATE UNICODE _UNICODE GOW3_VERSION=L"${GOW3_VERSION}")
 set_target_properties(gow3_launcher PROPERTIES LINK_FLAGS "/MANIFEST:NO")
-target_link_libraries(gow3_launcher PRIVATE comctl32 shcore shell32)
+target_link_libraries(gow3_launcher PRIVATE comctl32 shcore shell32 ole32 oleaut32 ws2_32)
+
+# ---- server: the multiplayer session hub as a standalone server (server/, runtime/net/hub.cpp) ----
+add_executable(gow3_server ${CMAKE_SOURCE_DIR}/server/server.cpp ${RT}/net/hub.cpp ${RT}/net/upnp.cpp)
+target_compile_options(gow3_server PRIVATE /W3 $<$<COMPILE_LANGUAGE:CXX>:/EHsc>)
+target_link_libraries(gow3_server PRIVATE ws2_32 ole32 oleaut32)

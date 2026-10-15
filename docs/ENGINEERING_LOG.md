@@ -1677,3 +1677,100 @@ layouts, never started for Gears 3) were removed; so were the distortion / fog_v
 only system_settings applied. The XEX retail key moved out of tools/xex_unpack.py (read from XenonRecomp's
 XenonUtils/xex.h); history rewritten without it. This machine's gears3-pc now has its own XenonRecomp and Xenia
 checkouts (tools/XenonRecomp, xenia/), fetched and built from scratch by the setup scripts as a check.
+
+## 2026-10-14: Multiplayer over System Link, settings audit (0.2.0)
+- **Settings audit.** Each gow3.ini key was traced to its reader. `texture_streaming_fix`, `black_shading_fix` and
+  `shadow_resolution` had none (Gears 2 leftovers): removed. The effect hooks were checked in the recompiled code: motion
+  blur, depth of field, lens flares, ambient occlusion and anisotropy each gate a branch, but **bloom** did not. Its
+  only read, `lwz r10,72(r11)` at 82593DC0 in sub_82593DB8, is followed by `cmplwi cr6,r10,0` and then
+  `cmplwi cr6,r11,0` (2B0A0000 2B0B0000) before the branch, so the flag is dead in the shipped code. The setting is
+  gone. Screenshot A/B (chapter 1 at 45 s, each effect off): depth of field and AO change the image; the rest are
+  noise-level in that scene. Engine SystemSettings changed through a mod config fragment (MaxShadowResolution,
+  FogVolumes, Distortion, bAllowLightShafts, MaxDrawDistanceScale, DetailMode) changed nothing visible.
+  TextureStreaming PoolSize=300 gave a black screen. None of these are launcher options.
+- **Audio off crashed system link.** With `[audio] enabled = false` the XMA decoder never started, the title's sound
+  voices stayed unset (`[r4]` DEADBEEF CF800001 ...), and stopping a sound in sub_8299C720 called through garbage.
+  Audio now always starts and is muted in XAudioSubmitRenderDriverFrame. XamVoiceCreate's stub returned success
+  without writing the voice pointer: now it reports no headset (null, ERROR_ACCESS_DENIED), as Xenia does.
+- **Profile** (user/profile.cpp): gamertag and a random offline XUID (E000...) in profile.ini. Save folders keep the
+  0.1 owner id (B13EBABEBABEBABE). A different XUID still loads old checkpoints (tests/continue.txt). A run that looked
+  like it didn't load them had no profile_settings.bin in its test data.
+- **System link.** The title calls NetDll_XNetSetSystemLinkPort(14000) and binds UDP sockets on virtual ports 1000,
+  1001 and 14001. Party Options > System Link opens the System Link Browser, which broadcasts. Implemented: virtual UDP
+  sockets (kernel/x360_net.cpp) on a 10.73/16 virtual LAN, a session hub and relay (net/hub.cpp, relay/), LAN discovery
+  (UDP 3075), join codes, UPnP, XNetGetTitleXnAddr / XNetInAddrToXnAddr on the virtual address,
+  XamSessionCreateHandle / RefObjByHandle, and XSessionCreate filling the host's XSESSION_INFO (flags 0x21 host,
+  0x20 joiner). Before that, the info was zero, so the joiner connected to 0.0.0.0, which is itself.
+- **Verified** with tools/mp_test.ps1 (two games, loopback only): browse finds "HostTest 1/10", JoinTest joins, the
+  joiner sees "HostTest IS SELECTING: VERSUS", and Private Team Deathmatch on Checkout runs with both players and AI at
+  55-60 fps. The same through a relay, a join code (127.0.0.1) and a LAN search. Not yet on two PCs.
+- Launcher: the Multiplayer tab (gamertag, Offline / Host / Join, the join box, Get my code / Copy, port, UPnP, relay,
+  room, Run a relay here). Labels on every page are now drawn on the tab's own background (a pattern brush of the
+  pane) instead of white boxes.
+
+## 2026-10-14: Multiplayer without host / join; servers; messages in the game
+- **What failed for the player.** Two copies on one PC, one "host", one "join" with the host's code. The log showed
+  `joining code xxxxx-xxxxx (<own public address>:3074)` then `could not reach the session ... (still trying)`, and nothing on
+  screen. The code holds the public address, and most routers do not loop a public address back into the network
+  (hairpin NAT). Both copies also shared one profile (one XUID), which the hub keeps one virtual address for. The
+  earlier test passed because it gave each copy its own data folder and the joiner 127.0.0.1.
+- **No host / join.** Direct play: a game asks the LAN who is open (UDP 3075, 1.2 s); with a friend's code it takes
+  the LAN game that announces that code (Announce carries the hub's code), else the code's address, and after 6 s
+  without an answer says so and joins a LAN game if there is one. Without a code it joins a LAN game or opens its own
+  hub (SO_EXCLUSIVEADDRUSE; a taken port means another copy just opened one: ask the LAN again before trying the
+  next port). Two hubs opened at once merge: the higher random hub id moves to the lower while alone and before any
+  XSessionCreate (vnet::NoteSession). A watcher thread does that LAN check: on the receive thread, the 400 ms check
+  plus Windows' 64 KB default receive buffer lost the "joined" notice in one run (buffers are now 1 MB).
+- **Two copies on one PC**: a named mutex per copy (named after the user folder's path hash) numbers them; copy N > 1
+  uses `<user folder>\instanceN` (profile "<gamertag> N", new XUID, profile_settings.bin copied from the first) and
+  logs to gow3-N.log. The hub also refuses a second endpoint with an XUID it heard from in the last 4 s.
+- **Servers**: gow3_server.exe (server/server.cpp) is the hub with a name, message of the day, optional password,
+  UPnP and a timestamped console. Protocol 2 adds Query / Info (name, players, gamertags; the launcher's list and
+  Check), Notice (joins, leaves, shutdown), a keep-alive answer (the game notices a dead hub after 8 s and
+  reconnects), and Reject for another protocol version. Hello and Query are padded so no answer is larger than its
+  request (no amplification).
+- **Messages in the game**: portgpu::ShowNotice renders a panel with GDI (Segoe UI, sized from the window height) into
+  RGBA and draws it as one textured quad through Xenia's ImmediateDrawer, from a UIDrawer added to the presenter;
+  queued, one at a time, faded. Xenia's ImGuiDrawer was not used: it pulls in xenia-hid. The game window's close
+  handler now calls vnet::Stop (Bye, hub notice, UPnP mapping removed).
+- **Launcher**: Offline / With friends / On a server. Your code (UPnP on a thread), Check (LAN first, then a Query),
+  a server list queried on threads (WM_APP messages), Run my own, private room and password, Windows Firewall read
+  through INetFwPolicy2 (a block rule for gow3.exe is what a dismissed prompt leaves) and fixed with an elevated
+  netsh. GOW3_LAUNCHER_NETTEST=1 runs the live queries in the screenshot test.
+- **Verified** (tools/mp_test.ps1, loopback only): lan, samepc (also both started at the same moment), hairpin,
+  unreachable and server; lan, samepc and server play Private Team Deathmatch on Checkout with both players.
+
+## 2026-10-14: Horde, Beast and campaign co-op over System Link; scripted walking
+- **Horde's wave 1 waits for the Command Post** (as found on Gridlock earlier): offline and over System Link the
+  countdown stays at 0:30 until someone buys it. New script commands steer the player through UE3 reflection:
+  `walkto x y [s]` pushes the left stick toward a map position relative to the camera (the local PlayerController's
+  yaw; the local one is the controller whose Player is a LocalPlayer, since a host also holds the remote players'),
+  stopping within 100 units or when stuck for 3 s; `face x y` turns the camera with the right stick to within 3
+  degrees. `GOW3_LOG_ACTORS=Class[:Property]` logs actor positions. On Checkout the four markers whose
+  FlagSpawnProtectionRadius is not the default 1500 are the Command Post spots; the one by the player start is
+  (7224, -648). Walk there, face it, hold Y: "Buy Command Post: 0", the countdown runs, wave 1 comes.
+- **Over System Link** (tools/mp_test.ps1 -Connect lan): Horde (tests/mp_host_horde.txt): the joiner sees the post
+  built and the countdown, wave 1 attacks both idle players, both get WAVE 1 FAILED (the joiner "WAITING FOR HOST").
+  Beast (mp_host_beast.txt, mp_join_beast.txt): both pick a creature and play wave 1; the host's pause shows "The host
+  has paused the game" to the joiner. Campaign co-op (mp_host_coop.txt -HostData build\testdata): CAMPAIGN >
+  STANDARD > CONTINUE loads the host's Raven's Nest checkpoint for both; the joiner watches with "Please Wait to Join
+  Game" while the objective is "Get Dom". From the prologue the same: its dream is single-player. The wave timers in
+  the two games' screenshots differ by 3-5 s only because the second game starts 5 s later.
+- tools/contact_sheet.py: a run's screenshots in a grid (labels, one column per player).
+
+## 2026-10-14: Xbox LIVE matchmaking (Casual / Standard): what the game asks for
+- Experiment switch `GOW3_FAKE_LIVE=1` (off by default): XamUserGetSigninState / GetSigninInfo say player 1 is
+  signed in to LIVE (2, LIVE-enabled flag), XLiveBaseGetNatType answers open.
+- Then the party is "JOINABLE" (a LIVE party) and Versus > Casual offers START MATCH. The game creates the party
+  session (XSessionCreate flags 0x82B) and reads the skill leaderboard (XGI 0x000B0021 XUserReadStats: view
+  0xFFFE0002, 4 columns 0x3D-0x40; the results size is passed by value, 188 bytes, not as a pointer). Answering
+  "success" without filling the results crashed in OnlineSubsystemLive (GearLeaderboardVersusSkill); it is now
+  implemented: one row per player, every column XUSER_DATA_TYPE_NULL (x360_session.cpp).
+- With that, Casual goes straight to hosting: XSessionCreate 0x2D (host, stats, matchmaking, arbitration), the map
+  (Sandbar) and Team Deathmatch with bots. **No XSessionSearch is ever sent**, with or without an open NAT type. The
+  retail game matched players through Epic's own services, and the decision to search lives in GearGame's
+  UnrealScript, which the offline unpacker cannot fully decode yet (GearGame.xxx LZX blocks 340-347). Answering
+  CXLiveFriends::Enumerate (0x58020) with success and no data hangs the boot, so it still fails.
+- So LIVE matchmaking is not emulated. System Link on a gow3_server lobby is the replacement: everyone on the server
+  sees every party. Next steps, if it is pursued: find the matchmaking flow in GearGame's script (memory dump), and
+  answer its search with the server's parties.

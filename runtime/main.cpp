@@ -35,13 +35,43 @@ std::filesystem::path GetSharedUserPath()
     return std::filesystem::path(buf) / "GoW3Recomp";
 }
 
-std::filesystem::path GetUserPath()
+// the user folder before GetInstanceNumber: GOW3_DATA_DIR, else %LOCALAPPDATA%\GoW3Recomp
+std::filesystem::path GetBaseUserPath()
 {
     static const std::filesystem::path path = [] {
         wchar_t buf[MAX_PATH];
         const DWORD n = GetEnvironmentVariableW(L"GOW3_DATA_DIR", buf, MAX_PATH);
         return n > 0 && n < MAX_PATH ? std::filesystem::path(buf) : GetSharedUserPath();
     }();
+    return path;
+}
+
+// Copies of the game running at once with one user folder (two players on one PC, for system link): the first is 1,
+// the next 2... A named mutex per copy, held until the process ends; named after the user folder, so tests with their
+// own GOW3_DATA_DIR are each a first copy.
+int GetInstanceNumber()
+{
+    static const int number = [] {
+        std::wstring base = GetBaseUserPath().wstring();
+        for (auto& c : base) c = c == L'\\' ? L'/' : towlower(c);
+        const std::wstring prefix = L"Local\\GoW3Recomp." +std::to_wstring(std::hash<std::wstring>{}(base)) + L".";
+        for (int i = 1; i < 16; i++)
+        {
+            HANDLE m = CreateMutexW(nullptr, FALSE, (prefix + std::to_wstring(i)).c_str());
+            if (m && GetLastError() != ERROR_ALREADY_EXISTS) return i;
+            if (m) CloseHandle(m);
+        }
+        return 16;
+    }();
+    return number;
+}
+
+// the user folder: the base one for the first copy of the game; instance<N> in it for the Nth (its own profile, saves
+// and settings, so two copies are two players)
+std::filesystem::path GetUserPath()
+{
+    static const std::filesystem::path path = GetInstanceNumber() == 1 ? GetBaseUserPath()
+        : GetBaseUserPath() / ("instance" + std::to_string(GetInstanceNumber()));
     return path;
 }
 
@@ -63,6 +93,10 @@ static void KiSystemStartup()
 
     std::error_code ec;
     std::filesystem::create_directories(GetSavePath(), ec);
+    // a second copy of the game starts with the first one's game settings (brightness, controls...)
+    if (GetInstanceNumber() > 1)
+        std::filesystem::copy_file(GetBaseUserPath() / "profile_settings.bin", GetUserPath() / "profile_settings.bin",
+            std::filesystem::copy_options::skip_existing, ec);
     std::filesystem::create_directories(GetUserPath() / "cache", ec);   // cache:\ (game data cache partition)
     std::filesystem::create_directories(GetUserPath() / "hdd", ec);     // \Device\Harddisk0\Partition1
     XamRegisterContent(XamMakeContent(XCONTENTTYPE_SAVEDATA, "GearsSave"), (const char*)GetSavePath().u8string().c_str());
@@ -106,6 +140,8 @@ int wmain(int argc, wchar_t* argv[])
         g_gamePath = std::filesystem::path(exe).parent_path().parent_path().parent_path() / "gow3-decomp" / "disc";
     }
     LOGFN("Gears of War 3 PC port {}; game files: {}", GOW3_VERSION, g_gamePath.string());
+    if (GetInstanceNumber() > 1)
+        LOGFN("copy {} of the game on this PC: its own profile and saves in {}", GetInstanceNumber(), GetUserPath().string());
 
     KiSystemStartup();
     gpu::Initialize();   // window + Direct3D 12 (Xenia's GPU), before the game touches the GPU

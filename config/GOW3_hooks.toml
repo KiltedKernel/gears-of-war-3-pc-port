@@ -45,12 +45,6 @@ registers = ["r11"]
 after_instruction = true
 
 [[midasm_hook]]
-name = "GoW3BloomHook"
-address = 0x82593DC0
-registers = ["r10"]
-after_instruction = true
-
-[[midasm_hook]]
 name = "GoW3LensFlaresHook"
 address = 0x82861FD0
 registers = ["r10"]

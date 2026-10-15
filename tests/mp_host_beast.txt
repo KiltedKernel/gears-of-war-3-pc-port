@@ -1,0 +1,26 @@
+# System link Beast (tools/mp_test.ps1, with mp_join_beast.txt; fresh profiles): the host makes the party as in
+# mp_host.txt, then once the second player is in (about 95 s): BEAST (3 down) -> PRIVATE (1 down) -> A through its
+# screens -> lobby: Start (select the map and start) -> wave 1: A (choose your creature), A (the first creature)
+45 pad 0010 250
+54 pad 1000 200
+60 pad 0020 200
+64 pad 0001 150
+67 pad 1000 200
+76 pad 8000 200
+108 pad 0002 150
+110 pad 0002 150
+112 pad 0002 150
+115 pad 1000 200
+119 pad 0002 150
+122 pad 1000 200
+128 pad 1000 200
+134 pad 1000 200
+150 pad 0010 250
+158 pad 0010 250
+185 pad 1000 200
+192 pad 1000 200
+199 pad 1000 200
+206 pad 1000 200
+213 pad 1000 200
+225 trig R 900
+235 trig R 900

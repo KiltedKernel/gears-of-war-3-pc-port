@@ -9,6 +9,7 @@
 #include "memory.h"
 #include <os/logger.h>
 #include "../../xe_glue/port_gpu.h"
+#include <user/settings.h>
 
 namespace x360k
 {
@@ -76,6 +77,8 @@ uint32_t XAudioSubmitRenderDriverFrame(uint32_t driver, uint32_t samples)
         windowStart = now; frames = 0; peak = 0;
     }
 
+    // [audio] enabled = false: the audio system still runs (the title needs its XMA decoding and voices), silently
+    if (!settings::Get().audio) memset(g_memory.Translate(samples), 0, 256 * 6 * sizeof(float));
     if ((driver & 0xFFFF) != 0xFFFF) portgpu::AudioSubmitFrame(int(driver & 0xFFFF), samples);
     return 0;
 }

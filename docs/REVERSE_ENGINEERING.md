@@ -60,8 +60,9 @@ The kernel, threading and heap come from Unleashed Recompiled (GPL-3.0); the res
 
 From Xenia's game-patches for this XEX, each turned into a mid-asm hook: frame-rate unlock (tick cap load 8253D9B0
 skipped; presentation interval `li r11,2` at 82AF66BC -> 1), 16x anisotropy 82969614, motion blur
-82430640/827A2BCC, depth of field 824BAA50/82593DC4, bloom 82593DC0, lens flares 82861FD0, ambient occlusion
-82762C54/827C9628. Rendering: render targets 64 < pitch <= 160 stay at native size under resolution scaling
+82430640/827A2BCC, depth of field 824BAA50/82593DC4, lens flares 82861FD0, ambient occlusion
+82762C54/827C9628. No bloom switch: the only read of GSystemSettings.Bloom (82593DC0) is dead code (its `cmplwi
+cr6` is overwritten by the next compare before the branch). Rendering: render targets 64 < pitch <= 160 stay at native size under resolution scaling
 (`[graphics] scale_threshold = 160`; the ambient-light buffer turned green when upscaled).
 
 ### Fixes found during bring-up

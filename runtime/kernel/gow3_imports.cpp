@@ -42,6 +42,16 @@ uint32_t XamUserGetDeviceContext(uint32_t userIndex, uint32_t unknown, be<uint32
 }
 
 uint32_t XamVoiceIsActiveProcess() { return 0; }   // no voice chat
+// no headset: XamVoiceCreate fails with a null voice (as Xenia); the title then skips voice chat. The stub left the
+// out pointer unwritten, and a system link join crashed calling through it
+uint32_t XamVoiceCreate(uint32_t userIndex, uint32_t maxPackets, be<uint32_t>* voice)
+{
+    if (voice) *voice = 0;
+    return 5;   // ERROR_ACCESS_DENIED
+}
+uint32_t XamVoiceClose(uint32_t voice) { return 0; }
+uint32_t XamVoiceHeadsetPresent(uint32_t voice) { return 0; }
+uint32_t XamVoiceSubmitPacket(uint32_t voice, uint32_t size, uint32_t data) { return 0; }
 
 // XamContentGetLicenseMask(mask, overlapped): a disc title has no marketplace licenses
 uint32_t XamContentGetLicenseMask(be<uint32_t>* mask, uint32_t overlapped)
@@ -62,5 +72,9 @@ GUEST_FUNCTION_HOOK(__imp__MmMapIoSpace, gow3k::MmMapIoSpace);
 GUEST_FUNCTION_HOOK(__imp__KeInitializeDpc, gow3k::KeInitializeDpc);
 GUEST_FUNCTION_HOOK(__imp__XamUserGetDeviceContext, gow3k::XamUserGetDeviceContext);
 GUEST_FUNCTION_HOOK(__imp__XamVoiceIsActiveProcess, gow3k::XamVoiceIsActiveProcess);
+GUEST_FUNCTION_HOOK(__imp__XamVoiceCreate, gow3k::XamVoiceCreate);
+GUEST_FUNCTION_HOOK(__imp__XamVoiceClose, gow3k::XamVoiceClose);
+GUEST_FUNCTION_HOOK(__imp__XamVoiceHeadsetPresent, gow3k::XamVoiceHeadsetPresent);
+GUEST_FUNCTION_HOOK(__imp__XamVoiceSubmitPacket, gow3k::XamVoiceSubmitPacket);
 GUEST_FUNCTION_HOOK(__imp__XamContentGetLicenseMask, gow3k::XamContentGetLicenseMask);
 GUEST_FUNCTION_HOOK(__imp__XAudioGetSpeakerConfig, gow3k::XAudioGetSpeakerConfig);

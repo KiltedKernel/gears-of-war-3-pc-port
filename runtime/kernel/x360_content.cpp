@@ -11,6 +11,7 @@
 #include "xam.h"
 #include "xdm.h"
 #include <os/logger.h>
+#include <user/profile.h>
 #include <user/paths.h>
 #include <fstream>
 
@@ -22,7 +23,6 @@ namespace x360k
 namespace
 {
     constexpr uint32_t kDeviceHdd = 1;
-    constexpr uint64_t kXuid = 0xB13EBABEBABEBABEull;   // x360_xam.cpp's local profile
     constexpr uint32_t kTitle = 0x4D5308AB;
     constexpr uint32_t X_ERROR_FILE_NOT_FOUND = 2, X_ERROR_PATH_NOT_FOUND = 3, X_ERROR_ALREADY_EXISTS = 183,
                        X_ERROR_DEVICE_NOT_CONNECTED = 0x48F, X_ERROR_NO_SUCH_USER = 0x525;
@@ -31,7 +31,7 @@ namespace
 
     std::filesystem::path TypeFolder(uint32_t type)
     {
-        const uint64_t owner = type == XCONTENTTYPE_SAVEDATA ? kXuid : 0;
+        const uint64_t owner = type == XCONTENTTYPE_SAVEDATA ? profile::SaveOwnerFolder() : 0;   // (fixed: saves stay put)
         return GetUserPath() / "content" / fmt::format("{:016X}", owner) / fmt::format("{:08X}", kTitle) / fmt::format("{:08X}", type);
     }
 
@@ -118,7 +118,7 @@ uint32_t XamContentDelete(uint32_t userIndex, const XCONTENT_DATA* data, XXOVERL
 uint32_t XamContentGetCreator(uint32_t userIndex, const XCONTENT_DATA* data, be<uint32_t>* isCreator, be<uint64_t>* creator, XXOVERLAPPED* overlapped)
 {
     if (isCreator) *isCreator = 1;
-    if (creator) *creator = data->dwContentType == XCONTENTTYPE_SAVEDATA ? kXuid : 0;
+    if (creator) *creator = data->dwContentType == XCONTENTTYPE_SAVEDATA ? profile::Xuid() : 0;
     return Finish(overlapped, 0);
 }
 

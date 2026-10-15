@@ -1,0 +1,20 @@
+# System link host (tools/mp_test.ps1, with mp_join.txt; fresh profiles): Start, A (brightness screen), Back (party
+# options) -> up -> System Link (A: the browser) -> Y create party; once the second player
+# has joined (about 95 s): VERSUS -> PRIVATE (2 down) -> TEAM DEATHMATCH -> START GAME -> Yes -> pregame lobby
+# (both players + AI) -> Start (map) -> Start (match)
+45 pad 0010 250
+54 pad 1000 200
+60 pad 0020 200
+64 pad 0001 150
+67 pad 1000 200
+76 pad 8000 200
+108 pad 0002 150
+111 pad 1000 200
+115 pad 0002 150
+117 pad 0002 150
+120 pad 1000 200
+126 pad 1000 200
+132 pad 1000 200
+138 pad 1000 200
+164 pad 0010 250
+170 pad 0010 250

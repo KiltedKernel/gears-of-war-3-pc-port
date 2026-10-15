@@ -21,6 +21,8 @@ void GoW3AnisotropyHook(PPCRegister& r5) { if (settings::Get().anisotropic16x) r
 
 void GoW3MotionBlurHook(PPCRegister& r) { if (!settings::Get().motionBlur) r.u64 = 0; }
 void GoW3DepthOfFieldHook(PPCRegister& r) { if (!settings::Get().depthOfField) r.u64 = 0; }
-void GoW3BloomHook(PPCRegister& r) { if (!settings::Get().bloom) r.u64 = 0; }
+// bloom: no setting. The only read of GSystemSettings.Bloom (82593DC0) is dead in the shipped code (its compare is
+// overwritten by the next one), so zeroing it changed nothing. Kept empty for code generated before 0.2.
+void GoW3BloomHook(PPCRegister& r) {}
 void GoW3LensFlaresHook(PPCRegister& r) { if (!settings::Get().lensFlares) r.u64 = 0; }
 void GoW3AmbientOcclusionHook(PPCRegister& r) { if (!settings::Get().ambientOcclusion) r.u64 = 0; }

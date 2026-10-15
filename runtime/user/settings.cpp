@@ -34,22 +34,15 @@ namespace
         "[graphics]\n"
         "; sharper textures at angles\n"
         "anisotropic_16x = true\n"
-        "; larger texture streaming pool: less texture pop-in (recommended with resolution_scale 2-3)\n"
-        "texture_streaming_fix = false\n"
-        "; no black/blocky shading on characters (turns off the game's tiled MSAA rendering)\n"
-        "black_shading_fix = true\n"
         "; MSAA at the console's sample positions (fewer broken edges and triangles)\n"
         "xenos_sample_positions = true\n"
         "; keep compiled shaders on disk (%LOCALAPPDATA%\\GoW3Recomp\\shader_cache): no stutter the second time\n"
         "shader_cache = true\n"
-        "; shadow map size cap: 0 = the game's 800; up to 1536 (more detailed character and world shadows)\n"
-        "shadow_resolution = 1280\n"
         "; render targets this narrow (pixels) are not upscaled: Gears 3's tiny ambient-light buffer turns shadows green\n"
         "scale_threshold = 160\n"
         "; post-processing and effects\n"
         "motion_blur = true\n"
         "depth_of_field = true\n"
-        "bloom = true\n"
         "ambient_occlusion = true\n"
         "lens_flares = true\n"
         "\n"
@@ -63,7 +56,21 @@ namespace
         "prompts = auto\n"
         "\n"
         "[audio]\n"
-        "enabled = true\n";
+        "enabled = true\n"
+        "\n"
+        "[network]\n"
+        "; multiplayer (system link, docs/MULTIPLAYER.md): false = offline, nothing is sent to the network\n"
+        "online = false\n"
+        "; a server's address[:port] to play on (empty: play directly with friends)\n"
+        "server =\n"
+        "; direct play: a friend's code or address (empty: find a game on this network, or open one friends can join)\n"
+        "join =\n"
+        "; server: a private room's name (empty: the server's lobby) and the server's password, if it has one\n"
+        "room =\n"
+        "password =\n"
+        "; direct play: the UDP port friends connect to, and whether to ask the router to forward it (UPnP)\n"
+        "port = 3074\n"
+        "upnp = true\n";
 
     // build\gow3.ini; GOW3_SETTINGS=<file> uses another (tools/playtest.ps1: tests run with the defaults, not the
     // player's settings)
@@ -124,8 +131,6 @@ namespace
                 else s.frameRate = std::clamp(atoi(value.c_str()), 30, 360);
             }
             else if (k == "graphics.anisotropic_16x") s.anisotropic16x = ParseBool(value);
-            else if (k == "graphics.texture_streaming_fix") s.textureStreamingFix = ParseBool(value);
-            else if (k == "graphics.black_shading_fix") s.blackShadingFix = ParseBool(value);
             else if (k == "graphics.xenos_sample_positions") s.xenosSamplePositions = ParseBool(value);
             else if (k == "graphics.shader_cache") s.shaderCache = ParseBool(value);
             else if (k == "display.skip_intro_movies") s.skipIntroMovies = ParseBool(value);
@@ -133,16 +138,22 @@ namespace
             else if (k == "display.window_height") s.windowHeight = std::clamp(atoi(value.c_str()), 360, 4320);
             else if (k == "graphics.motion_blur") s.motionBlur = ParseBool(value);
             else if (k == "graphics.depth_of_field") s.depthOfField = ParseBool(value);
-            else if (k == "graphics.bloom") s.bloom = ParseBool(value);
             else if (k == "graphics.ambient_occlusion") s.ambientOcclusion = ParseBool(value);
             else if (k == "graphics.lens_flares") s.lensFlares = ParseBool(value);
             else if (k == "graphics.scale_threshold") s.scaleThreshold = std::clamp(atoi(value.c_str()), 0, 1280);
             else if (k == "input.prompts") s.prompts = value == "keyboard" ? 1 : value == "controller" ? 2 : 0;
-            else if (k == "graphics.shadow_resolution") s.shadowResolution = value == "0" ? 0 : std::clamp(atoi(value.c_str()), 256, 1536);
             else if (k == "input.mouse_sensitivity") s.mouseSensitivity = std::clamp(float(atof(value.c_str())), 0.05f, 20.0f);
             else if (k == "input.invert_mouse_y") s.invertMouseY = ParseBool(value);
             else if (k == "input.mouse_mode") s.nativeMouse = value != "stick";
             else if (k == "audio.enabled") s.audio = ParseBool(value);
+            else if (k == "network.online") s.netOnline = ParseBool(value);
+            else if (k == "network.mode") s.netOnline = s.netOnline || value == "host" || value == "join";   // 0.2.0 betas
+            else if (k == "network.server" || (k == "network.relay" && s.netServer.empty())) s.netServer = value;
+            else if (k == "network.join") s.netJoin = value;
+            else if (k == "network.room") s.netRoom = value;
+            else if (k == "network.password") s.netPassword = value;
+            else if (k == "network.port") s.netPort = std::clamp(atoi(value.c_str()), 1, 65535);
+            else if (k == "network.upnp") s.netUpnp = ParseBool(value);
         }
         // environment overrides for testing
         if (const char* v = getenv("GOW3_MOUSE_SENS")) s.mouseSensitivity = float(atof(v));

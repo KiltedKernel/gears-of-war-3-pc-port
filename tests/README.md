@@ -33,5 +33,27 @@ Screenshots land in `build\shots`, the log in `build\gow3.log`. Tests run with t
 | menu_esc_then_click.txt | profile | Esc back, then a click opens the next menu |
 | menu_esc_root.txt | profile | Esc / right click on the main menu's first page do nothing; a click on PRESS START starts |
 | menu_title_back.txt | profile | back to PRESS START, Start opens the main menu again |
+| mp_host.txt + mp_join.txt | fresh | System Link: party created, browsed and joined, Private Team Deathmatch with both players (tools/mp_test.ps1) |
+| mp_host_horde.txt + mp_join.txt | fresh | System Link Horde on Checkout: the host walks to the Command Post marker and buys it (walkto, face), the countdown runs, wave 1 attacks both players, both see the wave result |
+| mp_host_beast.txt + mp_join_beast.txt | fresh | System Link Beast on Checkout: both players pick a creature and play wave 1 |
+| mp_host_coop.txt + mp_join_coop.txt | -HostData build\testdata | System Link campaign co-op: the host continues its checkpoint, the second player joins the campaign and watches until the drop-in point ("Please Wait to Join Game") |
+
+Multiplayer runs two games at once, each with its own settings and log in `build\mp\host` and `build\mp\join`,
+connected through loopback only (no firewall prompt). `-Connect` picks the setup: `lan` (no code: the second finds
+the first), `samepc` (one data folder, as two copies of one install: the second gets `instance2`), `direct`, `code`,
+`server` (a gow3_server.exe started for the test), `hairpin` (a friend's code whose address cannot be reached from
+inside the network: found on the network instead) and `unreachable` (a code nobody answers at: a message, then the
+game on the network). The `net:` lines of each log show every step, `net: [title] text` the messages shown in the
+game:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\mp_test.ps1 -HostScript tests\mp_host.txt -JoinScript tests\mp_join.txt -Seconds 240 -Shots "115,235" -Connect samepc
+```
+
+Scripts can steer the player: `<s> walkto <x> <y> [seconds]` walks to a map position, `<s> face <x> <y>` turns
+the camera toward one (hid/hid.cpp). Positions come from `GOW3_LOG_POS=1` (pawns) and
+`GOW3_LOG_ACTORS=Class[:Property],...` (any actors, e.g. GearFortificationMarker:FlagSpawnProtectionRadius).
+`python tools/contact_sheet.py out.png build\mp\host\shots build\mp\join\shots` puts a run's screenshots side by
+side.
 
 Campaign coverage (every chapter booted directly, no menus) is `python tools\chapter_test.py`; see the README.

@@ -47,7 +47,8 @@ namespace
     // ---- scripted input (GOW3_INPUT_SCRIPT=<file>): timed events played into this layer, for testing without
     // touching the real keyboard/mouse or needing window focus. Lines: "<seconds> key <vk hex> <hold ms>",
     // "<seconds> mouse <dx> <dy> [ms]" (spread over ms, default 200), "<seconds> capture", "<seconds> walkto <x> <y>
-    // [s]" (the player walks to a map position, WalkTo), "<seconds> face <x> <y>" (the camera turns toward it).
+    // [s]" (the player walks to a map position, WalkTo), "<seconds> face <x> <y>" (the camera turns toward it),
+    // "<seconds> follow <pawn class part> [s] [distance]" (the player walks after that pawn, Follow).
     // '#' starts a comment.
     bool g_scripted = false;
     std::atomic<bool> g_scriptKeys[256];
@@ -280,6 +281,48 @@ namespace
         LOGFN("input: walkto {:.0f},{:.0f}: ended at {:.0f},{:.0f} after {:.1f} s", tx, ty, x, y, double(GetTickCount64() - t0) / 1000.0);
     }
 
+    // "follow <pawn class part> [seconds] [distance]": walk toward a pawn whose class name contains the text (COGDom: the
+    // converted levels' squad leader, whose scripted moves lead the way), stopping within the distance (default 250)
+    // and walking again when it moves on, for the time (default 60 s); logs both positions every 5 s
+    void Follow(std::string what, double seconds, double keep)
+    {
+        static const uint32_t actor = ue3::FindClass("Actor"), gearPawn = ue3::FindClass("GearPawn");
+        const int loc = actor ? ue3::PropertyOffset(actor, "Location") : -1, rot = actor ? ue3::PropertyOffset(actor, "Rotation") : -1;
+        if (keep <= 0) keep = 250;
+        const uint64_t t0 = GetTickCount64();
+        uint64_t lastLog = 0, lastFind = 0;
+        uint32_t target = 0, pawn = 0;
+        while (double(GetTickCount64() - t0) / 1000.0 < seconds)
+        {
+            const uint64_t now = GetTickCount64();
+            if (now - lastFind > 1000)
+            {
+                lastFind = now;
+                pawn = LocalPawn();
+                target = 0;
+                for (uint32_t p : gearPawn ? ue3::FindInstancesOf(gearPawn) : std::vector<uint32_t>{})
+                    if (p != pawn && ue3::ObjectName(ue3::ClassOf(p)).find(what) != std::string::npos) { target = p; break; }
+            }
+            if (!pawn || !target || loc < 0) { g_scriptLX = g_scriptLY = 0; Sleep(200); continue; }
+            const double x = ue3::ReadFloat(pawn + loc), y = ue3::ReadFloat(pawn + loc + 4);
+            const double tx = ue3::ReadFloat(target + loc), ty = ue3::ReadFloat(target + loc + 4);
+            const double dx = tx - x, dy = ty - y, dist = std::sqrt(dx * dx + dy * dy);
+            if (now - lastLog > 5000)
+            {
+                lastLog = now;
+                LOGFN("input: follow {}: at {:.0f},{:.0f}, {} at {:.0f},{:.0f} ({:.0f} away)", what, x, y, ue3::ObjectName(target), tx, ty, dist);
+            }
+            if (dist < keep) { g_scriptLX = g_scriptLY = 0; Sleep(50); continue; }
+            const double yaw = double(int32_t(ue3::Read32(g_localController + rot + 4)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
+            const double diff = std::atan2(dy, dx) - yaw;
+            g_scriptLY = int16_t(std::lround(std::cos(diff) * 32000));
+            g_scriptLX = int16_t(std::lround(std::sin(diff) * 32000));
+            Sleep(50);
+        }
+        g_scriptLX = 0; g_scriptLY = 0;
+        LOGFN("input: follow {}: done after {:.0f} s", what, double(GetTickCount64() - t0) / 1000.0);
+    }
+
     // "face x y": turn the camera (right stick) until it looks toward (x, y), within 3 degrees or 5 s
     void Face(double tx, double ty)
     {
@@ -306,7 +349,7 @@ namespace
 
     void ScriptThread(std::string path)
     {
-        struct Ev { double t; std::string kind; double a, b, c; };
+        struct Ev { double t; std::string kind; double a, b, c; std::string text; };
         std::vector<Ev> evs;
         std::ifstream f(path);
         std::string line;
@@ -326,6 +369,7 @@ namespace
             else if (e.kind == "trig") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 200; }
             else if (e.kind == "walkto") { in >> e.a >> e.b >> e.c; if (!e.c) e.c = 20; }
             else if (e.kind == "face") { in >> e.a >> e.b; }
+            else if (e.kind == "follow") { in >> e.text >> e.a >> e.b; if (!e.a) e.a = 60; }
             evs.push_back(e);
         }
         std::sort(evs.begin(), evs.end(), [](const Ev& x, const Ev& y) { return x.t < y.t; });
@@ -382,6 +426,7 @@ namespace
             }
             else if (e.kind == "walkto") std::thread(WalkTo, e.a, e.b, e.c).detach();
             else if (e.kind == "face") std::thread(Face, e.a, e.b).detach();
+            else if (e.kind == "follow") std::thread(Follow, e.text, e.a, e.b).detach();
         }
     }
 

@@ -40,6 +40,10 @@ CLASS_RENAME = {} if os.environ.get('OBJCOPY_NO_RENAME') else {
     'SeqAct_AIMoveToActor': 'SeqAct_AIMove',
     'SeqAct_ToggleHammerOfDawn': 'SeqAct_ToggleHOD',        # 68
     'SeqAct_TempHUDFade': 'SeqAct_CameraFade',              # 132
+    # objectives: Gears 3's SeqAct_ManageObjectives {ObjectiveName, ObjectiveDesc, bNotifyPlayer} takes Gears 1's
+    # add and complete through its inputs (LINK_ALIAS); clearing them has no counterpart (a pass-through)
+    'SeqAct_AddObjective': 'SeqAct_ManageObjectives',
+    'SeqAct_CompleteObjective': 'SeqAct_ManageObjectives',
 }   # Gears 3 fires "Beginning of Level" on this one
 
 # classes not copied (yet): Gears 1's AI spawner holds Gears 1 spawn sets, and its Gears 3 PostLoad crashed the load
@@ -53,7 +57,8 @@ EDITOR_COMPONENTS = {'DrawFrustumComponent', 'DrawLightConeComponent', 'DrawLigh
 # Gears 1 AI pawn classes -> Gears 3 content classes (GearGameContent.<name>: loaded with the content packages of the
 # game mode / map; levelinject passes the classes available, a factory spawning another is dropped)
 PAWN_MAP = {
-    'Pawn_GeistLocust': 'GearPawn_LocustDrone', 'Pawn_GeistLocustSniper': 'GearPawn_LocustSniper',
+    # the classic Drone is cooked only into Horde's packages; the campaign's is the Savage Drone (a carrier level)
+    'Pawn_GeistLocust': ['GearPawn_LocustDrone', 'GearPawn_LocustDroneSavage'], 'Pawn_GeistLocustSniper': 'GearPawn_LocustSniper',
     'Pawn_GeistTroikaGunner': 'GearPawn_LocustDrone', 'Pawn_GeistTroikaSpotter': 'GearPawn_LocustDrone',
     'Pawn_GeistBoomer': 'GearPawn_LocustBoomer', 'Pawn_GeistTheron': 'GearPawn_LocustTheron',
     'Pawn_GeistHunterArmorNoGrenades': 'GearPawn_LocustHunterArmorNoGrenades',
@@ -587,6 +592,7 @@ LINK_ARRAYS = (('InputLinks', None), ('OutputLinks', 'Links'), ('VariableLinks',
                ('EventLinks', 'LinkedEvents'))
 LINK_ALIAS = {('SeqAct_AIMoveToActor', 'finished'): 'reached goal', ('SeqAct_AIMoveToActor', 'destination'): 'move to',
               ('SeqAct_WarCheckPoint', 'set active checkpoint'): 'save',
+              ('SeqAct_AddObjective', 'in'): 'add/update objective', ('SeqAct_CompleteObjective', 'in'): 'completed objective',
               ('SeqEvent_LevelLoaded', 'out'): 'loaded and visible',
               ('SeqEvent_LevelBeginning', 'out'): 'beginning of level'}
 
@@ -815,6 +821,7 @@ class Upgrader:
 # Left alone, the Prison's opening SeqAct_MultiLevelStreaming (10 Gears 1 sublevels, blocking) hung the match load.
 STREAMING = {'SeqAct_LevelStreaming': ('LevelName',), 'SeqAct_LevelVisibility': ('LevelName',),
              'SeqAct_MultiLevelStreaming': ('Levels',), 'SeqAct_WaitForLevelsVisible': ('LevelNames',)}
+NAME_ARRAYS = ('LevelNames', 'InitiallyLoadedSecondaryLevelNames')
 
 
 # A chapter of its own (tools/levelpkg.py) keeps the source's streaming: every source package is converted into a
@@ -839,7 +846,7 @@ def rename_streaming(up, made):
             if r[0] not in STREAMING[cn]: continue
             if r[1] == 'NameProperty':
                 r[4] = rename(r[4]) or struct.pack('>ii', *w.name('None'))
-            elif r[0] == 'LevelNames':                 # array of names
+            elif r[0] in NAME_ARRAYS:                  # array of names
                 cnt = struct.unpack_from('>i', r[4], 0)[0]
                 names = [rename(r[4][4 + 8 * k:12 + 8 * k]) for k in range(cnt)]
                 names = [x for x in names if x]
@@ -1350,6 +1357,74 @@ if os.environ.get('OBJCOPY_CHARACTER_VARS'):          # (experiment: with SeqVar
     for _v in CHARACTER_VARS:
         CLASS_RENAME[_v] = 'SeqVar_Character'
         FIXUPS[_v] = character_var
+
+
+# ---- scripted damage ----
+# Gears 1's SeqAct_CauseDamage {DamageAmount, DamageType, Momentum, Instigator} is Gears 3's SeqAct_ModifyHealth
+# {Amount, DamageType, Momentum, Instigator, bHeal false}: the prison's scripted kills (a prisoner, the ceiling) were
+# pass-throughs. A damage type with no Gears 3 class becomes GearDamageType (a damage type is needed to deal damage).
+def cause_damage(c, props):
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    out = []
+    for r in recs:
+        if r[0] == 'DamageAmount': r = ['Amount', r[1], r[2], r[3], r[4]]
+        if r[0] == 'DamageType' and struct.unpack('>i', r[4])[0] == 0: continue
+        out.append(r)
+    if not any(r[0] == 'DamageType' for r in out):
+        ref = c.class_ref('GearDamageType')
+        if ref: out.append(['DamageType', 'ClassProperty', 0, b'', struct.pack('>i', ref)])
+    return encode(c.w, out)
+
+
+if not os.environ.get('OBJCOPY_NO_RENAME'):
+    CLASS_RENAME['SeqAct_CauseDamage'] = 'SeqAct_ModifyHealth'
+    FIXUPS['SeqAct_CauseDamage'] = cause_damage
+
+
+# ---- the chapter's end ----
+# Gears 1 ends a chapter in its Kismet: SeqAct_PrepareMapChange (the next chapter's map, MainLevelName, loaded in the
+# background), SeqAct_ChapterComplete (no properties: its chapter came from the map), SeqAct_CommitMapChange. Gears
+# 3's chapters end the same way (SP_Ravens_P: PrepareMapChange sp_ravens2_p, ChapterComplete, CommitMapChange), its
+# SeqAct_ChapterComplete {ChapterCompleted: EChapterPoint} = the finished chapter + 1 (GearGameSP_Base.
+# ProcessEndOfChapter: XP, stats, the profile's chapter progress through ClientCompleteChapter(ChapterCompleted - 1)).
+# A chapter of its own (CHAPTER_NUMBER, set by levelinject --chapter-number) gets ChapterCompleted = its number + 1;
+# PrepareMapChange's names are renamed like the other streaming actions (the next chapter's persistent level among
+# STREAMING_BUILT when it is built: trilogy.py passes it); with no next chapter built (CHAPTER_LAST), the commit
+# becomes SeqAct_EndGame (credits skipped): the players return to the main menu after the chapter.
+CHAPTER_NUMBER = None
+CHAPTER_LAST = False
+
+
+def chapter_complete(c, props):
+    if CHAPTER_NUMBER is None or not c.g3: return props
+    en = c.g3.enums.get('ChapterCompleted')
+    if not en or CHAPTER_NUMBER + 1 >= len(en[1]): return props
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] != 'ChapterCompleted']
+    recs.append(['ChapterCompleted', 'ByteProperty', 0, struct.pack('>ii', *c.w.name(en[0])),
+                 struct.pack('>ii', *c.w.name(en[1][CHAPTER_NUMBER + 1]))])
+    return encode(c.w, recs)
+
+
+def end_game(c, props):
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    return encode(c.w, [r for r in recs if r[0] != 'bShouldSkipCredits'] + [['bShouldSkipCredits', 'BoolProperty', 0, b'', b'\x01']])
+
+
+FIXUPS['SeqAct_ChapterComplete'] = chapter_complete
+
+
+def set_chapter(number, last):
+    """(levelinject --chapter-number / --last-chapter) the converted chapter's number and whether a next one exists"""
+    global CHAPTER_NUMBER, CHAPTER_LAST
+    CHAPTER_NUMBER, CHAPTER_LAST = number, last
+    STREAMING['SeqAct_PrepareMapChange'] = ('MainLevelName', 'InitiallyLoadedSecondaryLevelNames')
+    if last:
+        CLASS_RENAME['SeqAct_CommitMapChange'] = 'SeqAct_EndGame'
+        FIXUPS['SeqAct_CommitMapChange'] = end_game
 
 
 # ---- checkpoints ----

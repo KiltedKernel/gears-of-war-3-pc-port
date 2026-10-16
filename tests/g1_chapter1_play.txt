@@ -1,0 +1,30 @@
+# (fresh; needs the Gears1_Chapter1 mod: python -P tools/trilogy.py build gears1_ch1) Gears 1's first chapter played
+# along Gears 1's own route (python -P tools/levelroute.py on its scripting packages): Select Chapter (as
+# g1_chapter1.txt), out of the cell over the door trigger (Trigger_0), after Dom to the "Choose path" trigger
+# (Trigger_3), the left path (the left trigger: UIScene_PathChoice), then after Dom through the prison. Run with
+# GOW3_KISMET_TRACE=GOW1_ and GOW3_LOG_POS=1 to follow it in build\gow3.log; about 12 minutes
+45 pad 0010 250
+52 pad 1000 250
+60 pad 1000 250
+64 pad 1000 250
+68 pad 0002 150
+70 pad 1000 250
+74 pad 0008 150
+76 pad 0008 150
+78 pad 0008 150
+80 pad 0008 150
+82 pad 0008 150
+86 pad 1000 250
+90 pad 1000 250
+94 pad 1000 250
+98 pad 1000 250
+102 pad 1000 250
+106 pad 1000 250
+200 capture
+201 walkto 138 1042 15
+220 follow COGDom 25 120
+250 walkto -429 1150 15
+268 trig L 300
+274 trig L 300
+282 trig L 300
+290 follow COGDom 420 150

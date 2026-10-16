@@ -1,0 +1,21 @@
+# (fresh; needs the Gears1_Chapter1 mod: python -P tools/trilogy.py build gears1_ch1) Gears 1's first chapter as a
+# chapter of its own: title -> calibration -> Campaign -> Standard -> Select Chapter -> right x5 (Act VI: Gears of
+# War) -> its chapter 1 -> difficulty -> start. The opening cutscene plays in Gears 1's prison cell, then Dom
+# (squad slot 2) walks to the cell door on the converted navmesh
+45 pad 0010 250
+52 pad 1000 250
+60 pad 1000 250
+64 pad 1000 250
+68 pad 0002 150
+70 pad 1000 250
+74 pad 0008 150
+76 pad 0008 150
+78 pad 0008 150
+80 pad 0008 150
+82 pad 0008 150
+86 pad 1000 250
+90 pad 1000 250
+94 pad 1000 250
+98 pad 1000 250
+102 pad 1000 250
+106 pad 1000 250

@@ -186,6 +186,10 @@ def main():
     ap.add_argument('--streaming-prefix', default=None, help="a chapter of its own: level names in streaming actions get "
                     "this prefix (the converted packages' names) when in --streaming-built, else are dropped")
     ap.add_argument('--streaming-built', default='', help='with --streaming-prefix: the source package names built')
+    ap.add_argument('--chapter-number', type=int, default=None, help="a chapter of its own: its campaign chapter "
+                    "number (Gears 1's chapter complete gets ChapterCompleted = number + 1)")
+    ap.add_argument('--last-chapter', action='store_true', help="with --chapter-number: no next chapter is built (the "
+                    "chapter's map change ends the game instead)")
     ap.add_argument('--player-starts', action='store_true', help="with --kismet: the sources' PlayerStarts copied too (a "
                     "chapter's persistent level: the campaign starts there)")
     args = ap.parse_args()
@@ -194,6 +198,9 @@ def main():
         import objcopy
         objcopy.STREAMING_PREFIX = args.streaming_prefix
         objcopy.STREAMING_BUILT = {x.strip().lower() for x in args.streaming_built.split(',') if x.strip()}
+    if args.chapter_number is not None:
+        import objcopy
+        objcopy.set_chapter(args.chapter_number, args.last_chapter)
 
     # one or more source packages (a Gears 1 level and its streamed sublevels share world coordinates): actors,
     # meshes and materials are keyed by (source index, export index)
@@ -658,6 +665,7 @@ def main():
         dist = []; reached = set()
         for k, (r, j) in enumerate(pairs):
             ti = link_refs[r]
+            if not len(P): break                       # (no source cover among the target's links: nothing to aim at)
             if j >= len(old_pos.get(ti, [])): continue
             dd = np.linalg.norm(P - old_pos[ti][j], axis=1); m = int(dd.argmin()); dist.append(dd[m])
             struct.pack_into('>iB', ld, pairs_at + 5 * k, flat[m][0], flat[m][1]); reached.add(m)

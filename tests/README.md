@@ -22,6 +22,8 @@ Screenshots land in `build\shots`, the log in `build\gow3.log`. Tests run with t
 | combat.txt | checkpoint | moving, aiming (right mouse), firing (left mouse), reloading (R) |
 | esc_pause.txt | checkpoint | Esc pauses in play, Esc resumes |
 | select_chapter.txt | checkpoint | Select Chapter (overwrites slot 1) to Act VI (needs examples\mods\ExampleChapter: `-Mods`) |
+| g1_chapter1.txt | fresh | (trilogy; `-Mods` the Gears1_Chapter1 mod from `tools\trilogy.py build gears1_ch1`) Select Chapter > Act VI > 1: Gears 1's prison as a chapter of its own; Marcus starts in the cell, the opening plays, Dom (squad slot 2) walks to the cell door |
+| g1_chapter1_play.txt | fresh | (trilogy, as above; about 12 minutes) along Gears 1's route: out of the cell, the "Choose path" prompt (left), then after Dom through the prison. With `GOW3_KISMET_TRACE=GOW1_` and `GOW3_LOG_POS=1` |
 | g1_follow_dom.txt | fresh | (trilogy; `-Mods` the Gears1_Prison mod from `tools\trilogy.py build gears1_prison`) a new campaign starts in Gears 1's cell: its cutscene, then Marcus follows Dom out along the corridor |
 | horde_private.txt | profile | Horde > Private lobby |
 | versus_bots.txt | fresh | Versus > Private > Team Deathmatch with 9 bots, played |

@@ -86,7 +86,7 @@ def patch_level(folder, recipe, g3cooked, g1cooked):
         run([sys.executable, '-P', os.path.join(HERE, 'stripkismet.py'), folder, g3cooked, pkg] + opts, f'{pkg}: {" ".join(opts) or "Kismet off"}')
 
 
-def generate_navmesh(folder, nav, out):
+def generate_navmesh(folder, nav, out, required=True):
     """runs the game (tools/playtest.ps1: its own test profile and mods, the player's untouched) on the converted
     level with Gears 3's navmesh builder armed; the meshes it builds are dumped to out"""
     script = os.path.join(tempfile.gettempdir(), 'trilogy_navmesh_input.txt')
@@ -104,13 +104,15 @@ def generate_navmesh(folder, nav, out):
     import navmesh
     meshes = navmesh.read_dump(out) if os.path.isfile(out) and os.path.getsize(out) else {}
     if not any(m['polys'] for k, m in meshes.items() if k.endswith('.path')):
+        if not required: return {}
         raise SystemExit(f'navmesh: the game built no walkable mesh (see {log}); build again, or pass --no-navmesh')
     return meshes
 
 
-def slot_navmesh(folder, nav, g1cooked, g3cooked, out):
+def slot_navmesh(folder, nav, g1cooked, g3cooked, out, rename_to=None):
     """the level's geometry converted into a multiplayer map's slot (nav: slot, sources, options, offset), the
-    navmesh generated there and moved back by -offset into out"""
+    navmesh generated there and moved back by -offset into out; rename_to: the target's pylons {name: location},
+    each slot pylon renamed to the nearest one (a chapter's section has its template's pylon names)"""
     import navmesh
     work = os.path.join(REPO, 'build', 'trilogy', os.path.basename(folder) + '_navslot')
     if os.path.exists(work): shutil.rmtree(work)
@@ -118,11 +120,130 @@ def slot_navmesh(folder, nav, g1cooked, g3cooked, out):
     sources = [os.path.join(g1cooked, s.strip() + '.xxx') for s in nav['sources'].split(',') if s.strip()]
     levelinject(work, os.path.join(g3cooked, nav['slot'] + '.xxx'), sources, nav['options'].split(), g3cooked)
     raw = out + '.slot'
-    meshes = generate_navmesh(work, dict(nav, level=nav['slot'].lower()), raw)
+    slot_pylons = pylon_locations(os.path.join(work, 'GearGame', 'CookedXbox360', nav['slot'] + '.xxx'))
+    meshes = generate_navmesh(work, dict(nav, level=nav['slot'].lower()), raw, required=rename_to is None)
+    if not meshes:
+        shutil.rmtree(work)
+        return False
     dx, dy, dz = (float(v) for v in nav.get('offset', '0,0,0').split(','))
-    navmesh.write_dump(out, navmesh.shift_dump(meshes, (-dx, -dy, -dz)))
+    rename = None
+    if rename_to:
+        rename = {}
+        for name, (x, y, z) in slot_pylons.items():
+            near = min(rename_to, key=lambda n: (rename_to[n][0] - x + dx) ** 2 + (rename_to[n][1] - y + dy) ** 2 + (rename_to[n][2] - z + dz) ** 2)
+            rename[name] = near
+        print('  navmesh pylons: ' + ', '.join(f'{a} -> {b}' for a, b in rename.items()), flush=True)
+    navmesh.write_dump(out, navmesh.shift_dump(meshes, (-dx, -dy, -dz), rename))
     shutil.rmtree(work)
+    return True
     print('  navmesh: ' + ', '.join(f'{k} {len(m["polys"])} polygons' for k, m in meshes.items()), flush=True)
+
+
+def pylon_names(package):
+    import upk
+    p = upk.Package(package, tables_only=True)
+    return sorted(e['name'] for i, e in enumerate(p.exports)
+                  if p.class_name(e['class']) == 'Pylon' and p.path(i).startswith('TheWorld.PersistentLevel.'))
+
+
+def pylon_locations(package):
+    """{pylon name: (x, y, z)} of a level package's pylons"""
+    import upk, levelinject, struct
+    p = upk.Package(package)
+    out = {}
+    for i, e in enumerate(p.exports):
+        if p.class_name(e['class']) != 'Pylon' or not p.path(i).startswith('TheWorld.PersistentLevel.'): continue
+        o, pr, end = levelinject.props_at(p, p.export_data(i), (26,))
+        a = {n: v for n, t, k, v in pr}
+        if 'Location' in a: out[e['name']] = struct.unpack('>3f', a['Location'][1][:12])
+    return out
+
+
+def build_chapter(c, folder, g1cooked, g3cooked, args):
+    """a chapter of its own (docs/TRILOGY.md, "A chapter's packages"): the source level's packages as Gears 3
+    packages named <prefix><name>: the persistent level (a blanked clone of the kit template, the source's persistent
+    content, Kismet, player start, streaming levels, post-process) and one section per source package (a blanked
+    clone of the section template; materials are child instances of the kit's), the navmesh of each region generated
+    in a multiplayer map's slot and written into a section's pylon, and the chapter in the campaign's chapter list"""
+    import levelpkg
+    ch = c['chapter']
+    prefix = ch.get('prefix', 'GOW1_')
+    persistent = ch['persistent']
+    sections = [s.strip() for s in ch['sections'].replace('\n', ',').split(',') if s.strip()]
+    built = [persistent] + sections
+    out_dir = os.path.join(folder, 'GearGame', 'CookedXbox360')
+    work = os.path.join(REPO, 'build', 'trilogy', os.path.basename(folder) + '_work')
+    if os.path.exists(work): shutil.rmtree(work)
+    os.makedirs(work)
+    src = lambda n: os.path.join(g1cooked, n + '.xxx')
+    missing = [n for n in built if not os.path.isfile(src(n))]
+    if missing: raise SystemExit('missing Gears 1 packages: ' + ', '.join(missing))
+    # carriers: Gears 3 level packages streamed in with the chapter (always loaded) for the characters cooked into them
+    # (a pawn class spawns only if a loaded package carries it: docs/TRILOGY.md), all their actors and Kismet off
+    carriers = []
+    for name in [x.strip() for x in ch.get('carriers', '').split(',') if x.strip()]:
+        out = os.path.join(out_dir, f'{prefix}Carrier_{name}.xxx')
+        os.makedirs(out_dir, exist_ok=True)
+        levelpkg.clone(os.path.join(g3cooked, name + '.xxx'), out, keep=('WorldInfo',))
+        carriers.append(out)
+        print(f'  {prefix}Carrier_{name}: the characters cooked into {name}', flush=True)
+    content = ','.join([ch.get('content', 'GEARGAMESP_SF')] + carriers)
+    # the next chapter's persistent level (its own recipe, built into the same mods folder): Gears 1's map change at
+    # the chapter's end goes there; without one the chapter ends the game
+    nxt = ch.get('next', '').strip()
+    nxt_built = bool(nxt) and os.path.isfile(os.path.join(os.path.dirname(folder), ch.get('next_folder', ''), 'GearGame', 'CookedXbox360', prefix + nxt + '.xxx'))
+    common = ['--streaming-prefix', prefix, '--streaming-built', ','.join(built + ([nxt] if nxt_built else [])), '--content', content,
+              '--chapter-number', ch['number']] + ([] if nxt_built else ['--last-chapter'])
+    materials = ['--materials', ch['materials']] if ch.get('materials') else []
+    # the persistent level: the kit
+    kit_target = os.path.join(work, prefix + persistent + '.xxx')
+    kept, removed = levelpkg.clone(os.path.join(g3cooked, ch['kit'] + '.xxx'), kit_target)
+    print(f'  {prefix}{persistent}: the kit ({ch["kit"]}: {kept} actors kept, {removed} off)', flush=True)
+    levelinject(folder, kit_target, [src(persistent)], ['--kismet', '--player-starts', '--replace'] + materials + common
+                + ch.get('persistent_options', '').split(), g3cooked)
+    kit = os.path.join(out_dir, prefix + persistent + '.xxx')
+    n, kill_z, npp = levelpkg.persistent(kit, src(persistent), [prefix + s for s in sections],
+                                         os.path.join(g3cooked, ch.get('look', 'SP_Nightmare_P') + '.xxx'),
+                                         [os.path.splitext(os.path.basename(x))[0] for x in carriers])
+    print(f'  {prefix}{persistent}: {n} streaming levels, {npp} post-process settings', flush=True)
+    # the sections
+    navs = {sec.split(None, 1)[1]: dict(c[sec]) for sec in c.sections() if sec.startswith('navmesh ')}
+    nav_for = {nav['section']: name for name, nav in navs.items()}
+    for s in sections:
+        opts = c[f'section {s}'] if c.has_section(f'section {s}') else {}
+        options = opts.get('options', ch.get('options', '--bsp --replace --cover --kismet')).split()
+        keep = levelpkg.KEEP_SECTION if s in nav_for else tuple(k for k in levelpkg.KEEP_SECTION if k != 'Pylon')
+        target = os.path.join(work, prefix + s + '.xxx')
+        levelpkg.clone(os.path.join(g3cooked, ch['section_template'] + '.xxx'), target, keep=keep)
+        if s in nav_for:                               # its pylon where the region's navmesh is generated from
+            nav = navs[nav_for[s]]
+            options += [f'--pylon-at={nav["pylon_at"]}', '--pylon-radius', nav.get('pylon_radius', '6000')]
+            if nav.get('pylons_at'): options += [f'--pylons-at={nav["pylons_at"]}']
+        levelinject(folder, target, [src(s)] + [src(x.strip()) for x in opts.get('extra_sources', '').split(',') if x.strip()],
+                    ['--kit', kit] + materials + options + common, g3cooked)
+    # navmesh: per region, generated in a multiplayer map's slot (the geometry converted again there, 20000 up),
+    # moved back and written into the section's pylon(s)
+    if not args.no_navmesh:
+        for name, nav in navs.items():
+            navm = os.path.join(REPO, 'build', 'trilogy', f'{os.path.basename(folder)}_{name}.navm')
+            os.makedirs(os.path.dirname(navm), exist_ok=True)
+            package = os.path.join(out_dir, prefix + nav['section'] + '.xxx')
+            if getattr(args, 'reuse_navmesh', False) and os.path.isfile(navm):
+                print(f'  navmesh {name}: reusing {navm}', flush=True)
+                navinject(package, navm); continue
+            # (a region whose seeds find no ground is reported and left without a navmesh: the rest still builds)
+            if slot_navmesh(folder, nav, g1cooked, g3cooked, navm, rename_to=pylon_locations(package)):
+                navinject(package, navm)
+            else:
+                print(f'  navmesh {name}: no walkable ground found from its pylons (pylon_at / pylons_at must be standing '
+                      'room on the converted floor): left without a navmesh', flush=True)
+    # the chapter
+    os.makedirs(os.path.join(folder, 'config'), exist_ok=True)
+    run([sys.executable, '-P', os.path.join(HERE, 'campaign.py'), 'fragment', '--chapter', ch['number'], '--act', ch['act'],
+         '--map', prefix + persistent, '--title', ch['title'], '--act-title', ch.get('act_title', 'Gears of War')]
+        + (['--location', ch['location']] if ch.get('location') else []) + (['--time', ch['time']] if ch.get('time') else [])
+        + ['--out', os.path.join(folder, 'config', 'chapters.ini')], f'chapter {ch["number"]}: {ch["title"]}')
+    shutil.rmtree(work)
 
 
 def cmd_list(args):
@@ -146,7 +267,7 @@ def cmd_build(args):
                          f'python -P tools/xdvdfs.py <Gears 1 .iso> <folder>)')
     if not os.path.isfile(os.path.join(HERE, 'xpack', 'xpack.exe')):
         run(['cmd', '/c', os.path.join(HERE, 'build_xpack.cmd')], 'building tools\\xpack (the package decompressor)')
-    m, conv = c['mod'], c['convert']
+    m = c['mod']
     folder = os.path.join(mods_dir, m['folder'])
     if os.path.exists(folder):
         if not args.replace: raise SystemExit(f'{folder} exists (--replace builds it again)')
@@ -154,6 +275,14 @@ def cmd_build(args):
     start = time.time()
     print(f'{m["name"]} -> {folder}', flush=True)
     write_manifest(folder, m['name'], m.get('version', '0.1'), m.get('description', ''), m.get('side', 'everyone'))
+    if c.has_section('chapter'):                       # a chapter of its own
+        build_chapter(c, folder, g1cooked, g3cooked, args)
+        import modtool
+        print('checking the mod:', flush=True)
+        bad = modtool.cmd_check(argparse.Namespace(mods=mods_dir, g3=g3, folder=folder))
+        print(f'{"done" if not bad else "built with problems"} in {int(time.time() - start)} s: {folder}')
+        return bad
+    conv = c['convert']
     target = os.path.join(g3cooked, conv['target'] + '.xxx')
     sources = [os.path.join(g1cooked, s.strip() + '.xxx') for s in conv['sources'].split(',') if s.strip()]
     missing = [s for s in sources + [target] if not os.path.isfile(s)]
@@ -213,6 +342,8 @@ def main():
     b.add_argument('recipe'); b.add_argument('--navmesh', help='a navmesh dump to use instead of generating one')
     b.add_argument('--no-navmesh', action='store_true', help="keep the Gears 3 level's navmesh (enemies walk it)")
     b.add_argument('--replace', action='store_true', help='build again over an existing mod folder')
+    b.add_argument('--reuse-navmesh', action='store_true', help="a chapter: the regions' navmeshes generated by an "
+                   "earlier build (build/trilogy/<folder>_<region>.navm) are used again; only missing ones are generated")
     v = sub.add_parser('convert-map', help="Gears 1 packages into a Gears 3 map's slot, as a mod")
     v.add_argument('--source', required=True); v.add_argument('--target', required=True); v.add_argument('--mod', required=True)
     v.add_argument('--options', help='tools/levelinject.py options (default: a multiplayer map conversion)')

@@ -309,10 +309,15 @@ namespace
             {
                 reached = WalkStep(pts[k].first, pts[k].second, seconds);
                 if (reached) break;
-                // stuck: use (X: a door's button, a pickup), then A (mantle over low cover), then wait (a door opening,
-                // a cinematic holding the player)
+                // stuck (a straight line into a pillar, a closed door, a cinematic holding the player): use (X: a
+                // door's button, a pickup), then a step to the side, the other side, back (out of cover: A at a wall
+                // takes cover, and the stick then slides along it), with A (mantle over low cover) once in between
+                auto stick = [](int16_t lx, int16_t ly, int ms) { g_scriptLX = lx; g_scriptLY = ly; Sleep(ms); g_scriptLX = 0; g_scriptLY = 0; };
                 g_scriptPadButtons = 0x4000; Sleep(250); g_scriptPadButtons = 0; Sleep(400);
-                g_scriptPadButtons = 0x1000; Sleep(250); g_scriptPadButtons = 0; Sleep(1500);
+                if (attempt == 0) stick(-32000, 0, 800);
+                else if (attempt == 1) { g_scriptPadButtons = 0x1000; Sleep(250); g_scriptPadButtons = 0; Sleep(600); stick(32000, 0, 1600); }
+                else if (attempt == 2) stick(0, -32000, 1000);
+                Sleep(1000);
             }
             LOGFN("input: route point {}/{} ({:.0f},{:.0f}) {}", k + 1, pts.size(), pts[k].first, pts[k].second, reached ? "reached" : "skipped");
         }
@@ -644,10 +649,11 @@ uint32_t hid::GetCapabilities(uint32_t userIndex, XAMINPUT_CAPABILITIES* caps)
 namespace gfx_menu { void OnGameThread(); }     // ui/gfx_menu.cpp
 namespace navmesh_build { void OnGameThread(); }   // ue3/navmesh_build.cpp
 namespace campaign_chapters { void OnGameThread(); }   // ue3/campaign_chapters.cpp
+namespace content_packages { void OnGameThread(); }    // ue3/content_packages.cpp
 
 uint32_t hid::GetState(uint32_t userIndex, XAMINPUT_STATE* state)
 {
-    if (userIndex == 0) { gfx_menu::OnGameThread(); navmesh_build::OnGameThread(); campaign_chapters::OnGameThread(); }   // the game thread, once a frame
+    if (userIndex == 0) { gfx_menu::OnGameThread(); navmesh_build::OnGameThread(); campaign_chapters::OnGameThread(); content_packages::OnGameThread(); }   // the game thread, once a frame
     XINPUT_GAMEPAD g;
     if (userIndex >= 4)
         return ERROR_DEVICE_NOT_CONNECTED;

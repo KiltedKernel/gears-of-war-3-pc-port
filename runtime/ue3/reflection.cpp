@@ -95,10 +95,18 @@ namespace
         return buf;
     }
 
+    // the engine's hardcoded names come first (None, then the property types: ByteProperty, IntProperty...). Not a
+    // later name at a fixed index: names made while the configuration loads come before GameViewportClient, so a
+    // mod's configuration fragment moved it off index 10043 and the tables were never found
     bool CheckNames(uint32_t table)
     {
-        const uint32_t e0 = Read32(table), ev = Read32(table + 4 * kViewportName);
-        return EntryName(e0) == "None" && EntryName(ev) == "GameViewportClient";
+        if (EntryName(Read32(table)) != "None") return false;
+        for (uint32_t i = 1; i <= 3; i++)
+        {
+            const std::string n = EntryName(Read32(table + 4 * i));
+            if (n.size() < 9 || n.compare(n.size() - 8, 8, "Property") != 0) return false;
+        }
+        return true;
     }
 
     bool CheckObjects(uint32_t table)
@@ -118,6 +126,12 @@ namespace
     {
         // fast path: the addresses seen in every dump so far
         if (const uint32_t n = Read32(kGNamesVar); n && CheckNames(n)) g_names = n;
+        else if (static bool logged = false; n && !logged)
+        {
+            logged = true;
+            LOGFN("ue3: names table at {:08X} not recognised (0: {}, 1: {}, 10043: {})", n, EntryName(Read32(n)),
+                  EntryName(Read32(n + 4)), EntryName(Read32(n + 4 * kViewportName)));
+        }
         if (const uint32_t o = Read32(kGObjectsVar); g_names && o && CheckObjects(o)) g_objects = o;
         if (!g_names)
         {
@@ -257,6 +271,7 @@ uint32_t FindClass(const char* name)
         if (it != g_classCache.end()) return it->second;
     }
     uint32_t found = 0;
+    Refresh();                      // (the tables are found early in the boot: the count grows after)
     for (uint32_t i = 0; i < g_objectCount && !found; i++)
     {
         const uint32_t o = Read32(g_objects + 4 * i);
@@ -325,6 +340,22 @@ std::vector<uint32_t> FindInstancesOf(uint32_t cls)
         }
         if (it->second && ObjectName(o).rfind("Default__", 0) != 0) out.push_back(o);
     }
+    return out;
+}
+
+std::vector<uint32_t> AllObjects()
+{
+    std::vector<uint32_t> out;
+    Refresh();
+    for (uint32_t n = g_objectCount, bad = 0; n < 3000000 && bad < 4096; n++)
+    {
+        const uint32_t x = Read32(g_objects + 4 * n);
+        if (x && Read32(x + kSlot) == n) { g_objectCount = n + 1; bad = 0; } else bad++;
+    }
+    std::vector<uint32_t> table(g_objectCount);
+    if (!g_objectCount || !Copy(g_objects, table.data(), table.size() * 4)) return out;
+    out.reserve(table.size());
+    for (uint32_t raw : table) if (raw) out.push_back(ByteSwap(raw));
     return out;
 }
 

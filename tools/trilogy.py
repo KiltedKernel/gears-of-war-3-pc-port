@@ -43,13 +43,13 @@ def run(cmd, what):
     if subprocess.call(cmd): raise SystemExit(f'{what}: failed')
 
 
-def write_manifest(folder, name, version, description, side):
+def write_manifest(folder, name, version, description, side, content=''):
     os.makedirs(os.path.join(folder, 'GearGame', 'CookedXbox360'), exist_ok=True)
     with open(os.path.join(folder, 'mod.ini'), 'w', encoding='utf-8') as f:
         f.write('; Made by tools/trilogy.py from your own discs: derived game data, not to be shared with people who do\n'
                 '; not own the games.\n'
                 f'[mod]\nname = {name}\nversion = {version}\nauthor = trilogy port\ndescription = {description}\n'
-                f'priority = 0\nenabled = true\nside = {side}\n')
+                f'priority = 0\nenabled = true\nside = {side}\n' + (f'content = {content}\n' if content else ''))
 
 
 def levelinject(folder, target, sources, options, g3cooked):
@@ -206,6 +206,34 @@ def pylon_locations(package):
     return out
 
 
+def objective_strings(folder, g1root):
+    """Gears 1's objective texts (WarGame/Localization/Coalesced.int: warfaregame.int [OBJECTIVES]) as a config
+    fragment of the mod for Gears 3's level_objectives.int [Objectives], where Gears 3's objectives look their names up
+    (without it an objective shows "?INT?level_objectives.Objectives.PRISON_OBJ_DOOR?"); returns the count"""
+    import struct
+    path = os.path.join(g1root, 'WarGame', 'Localization', 'Coalesced.int')
+    if not os.path.isfile(path): return 0
+    d = open(path, 'rb').read()
+    def rstr(o):
+        n = struct.unpack_from('>i', d, o)[0]; o += 4
+        if n < 0: return d[o:o - 2 * n].decode('utf-16-le', 'replace').rstrip(chr(0)), o - 2 * n
+        return d[o:o + n].decode('latin1').rstrip(chr(0)), o + n
+    o, lines, section = 4, [], None
+    while o < len(d):
+        name, o = rstr(o); body, o = rstr(o)
+        if not name.lower().endswith('warfaregame.int'): continue
+        for line in body.splitlines():
+            line = line.strip()
+            if line.startswith('['): section = line[1:-1].lower(); continue
+            if section == 'objectives' and '=' in line: lines.append(line)
+    if not lines: return 0
+    os.makedirs(os.path.join(folder, 'config'), exist_ok=True)
+    with open(os.path.join(folder, 'config', 'gears1_objectives.ini'), 'w', encoding='utf-8') as f:
+        f.write("; Gears 1's objective texts (from your disc) where Gears 3 looks them up\n##### level_objectives.int\n"
+                '[Objectives]\n' + '\n'.join(lines) + '\n')
+    return len(lines)
+
+
 def build_chapter(c, folder, g1cooked, g3cooked, args):
     """a chapter of its own (docs/TRILOGY.md, "A chapter's packages"): the source level's packages as Gears 3
     packages named <prefix><name>: the persistent level (a blanked clone of the kit template, the source's persistent
@@ -241,6 +269,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     nxt_built = bool(nxt) and os.path.isfile(os.path.join(os.path.dirname(folder), ch.get('next_folder', ''), 'GearGame', 'CookedXbox360', prefix + nxt + '.xxx'))
     common = ['--streaming-prefix', prefix, '--streaming-built', ','.join(built + ([nxt] if nxt_built else [])), '--content', content,
               '--chapter-number', ch['number']] + ([] if nxt_built else ['--last-chapter'])
+    if ch.get('pawn_classes'): common += ['--pawn-classes', ','.join(x.strip() for x in ch['pawn_classes'].split(','))]
     materials = ['--materials', ch['materials']] if ch.get('materials') else []
     # the persistent level: the kit
     kit_target = os.path.join(work, prefix + persistent + '.xxx')
@@ -271,8 +300,11 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         levelpkg.clone(os.path.join(g3cooked, ch['section_template'] + '.xxx'), target, keep=keep)
         if s in nav_for:                               # its pylon where the region's navmesh is generated from
             options += seed_options(navs[nav_for[s]], (0, 0, 0))
+        if ch.get('player_pawn') and ch['player_pawn'].split('@')[-1].split(':')[0].strip() == s:
+            cls, at = (x.strip() for x in ch['player_pawn'].split('@'))     # Class @ Section: op: output
+            options += ['--player-pawn', cls + ':' + at.split(':', 1)[1].strip()]
         levelinject(folder, target, [src(s)] + [src(x.strip()) for x in opts.get('extra_sources', '').split(',') if x.strip()],
-                    ['--kit', kit] + materials + options + common, g3cooked)
+                    ['--kit', kit, '--named-vars', src(persistent)] + materials + options + common, g3cooked)
     # navmesh: per region, generated in a multiplayer map's slot (the geometry converted again there, 20000 up),
     # moved back and written into the section's pylon(s)
     if not args.no_navmesh:
@@ -326,9 +358,11 @@ def cmd_build(args):
         shutil.rmtree(folder)
     start = time.time()
     print(f'{m["name"]} -> {folder}', flush=True)
-    write_manifest(folder, m['name'], m.get('version', '0.1'), m.get('description', ''), m.get('side', 'everyone'))
+    content = ' '.join(c['chapter'].get('load_packages', '').split()) if c.has_section('chapter') else ''
+    write_manifest(folder, m['name'], m.get('version', '0.1'), m.get('description', ''), m.get('side', 'everyone'), content)
     if c.has_section('chapter'):                       # a chapter of its own
         build_chapter(c, folder, g1cooked, g3cooked, args)
+        print(f'  objectives: {objective_strings(folder, g1)} Gears 1 objective texts', flush=True)
         import modtool
         print('checking the mod:', flush=True)
         bad = modtool.cmd_check(argparse.Namespace(mods=mods_dir, g3=g3, folder=folder))

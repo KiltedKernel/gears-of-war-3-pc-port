@@ -66,6 +66,7 @@ side = everyone
 | `enabled` | `false` / `0` / `no` turns the mod off |
 | `side` | who needs the mod in multiplayer: `everyone` (default), `host` or `client` (see [Mods in multiplayer](#mods-in-multiplayer)) |
 | `requires` | other mods it needs, by name or folder, separated by commas (`requires = Horde: big bank`). If one is missing or off, the game leaves this mod off and says why |
+| `content` | the game's own content packages the mod uses where the game would not load them, separated by commas (`content = MPCH_COGMarcusG2MP_SF`: a multiplayer character in a campaign level). Loaded once the game is up and kept loaded, so a level's imports of their objects resolve |
 | `game` | the game it is made for: `gears3` (default). A mod for another game (`gears2`) is left off |
 
 Files placed directly in `mods\` (not inside a folder with a `mod.ini`) still work, as one mod named

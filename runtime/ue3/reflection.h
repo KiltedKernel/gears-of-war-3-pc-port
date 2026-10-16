@@ -22,6 +22,7 @@ namespace ue3
     bool IsA(uint32_t object, uint32_t cls);             // object's class is cls or derives from it
     uint32_t FindInstance(const char* className);        // first non-default instance of exactly that class
     std::vector<uint32_t> FindInstancesOf(uint32_t cls); // every non-default instance of cls or a subclass
+    std::vector<uint32_t> AllObjects();                  // every object in GObjObjects
     uint32_t FindObject(const char* name);               // the first object of that name (Default__X included)
 
     // property offset (-1 if missing) and, for bools, the bit mask

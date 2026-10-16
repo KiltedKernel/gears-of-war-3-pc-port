@@ -190,6 +190,14 @@ def main():
                     "number (Gears 1's chapter complete gets ChapterCompleted = number + 1)")
     ap.add_argument('--last-chapter', action='store_true', help="with --chapter-number: no next chapter is built (the "
                     "chapter's map change ends the game instead)")
+    ap.add_argument('--pawn-classes', default='', help="Gears 1 pawn class=Gears 3 class, comma separated: factories "
+                    "spawn that class (its content package loaded by the mod: mod.ini content =)")
+    ap.add_argument('--player-pawn', default=None, help="with --kit: 'Class:op:output': after that op's output (its path "
+                    "in the source's Main_Sequence) an AI factory makes the player that Gears 3 class (squad slot 1), "
+                    "spawned on the kit's player start")
+    ap.add_argument('--named-vars', default=None, help="with --streaming-prefix: the chapter's persistent source package; "
+                    "named variables it defines, used by name in this package's Kismet, become imports of its converted "
+                    "variables (Gears 3 resolves a name in its own level only)")
     ap.add_argument('--player-starts', action='store_true', help="with --kismet: the sources' PlayerStarts copied too (a "
                     "chapter's persistent level: the campaign starts there)")
     args = ap.parse_args()
@@ -201,6 +209,23 @@ def main():
     if args.chapter_number is not None:
         import objcopy
         objcopy.set_chapter(args.chapter_number, args.last_chapter)
+    if args.pawn_classes:
+        import objcopy
+        objcopy.PAWN_OVERRIDE = dict(x.strip().split('=', 1) for x in args.pawn_classes.split(',') if '=' in x)
+    if args.player_pawn and args.kit:
+        import objcopy
+        cls, op, out = (x.strip() for x in args.player_pawn.split(':'))
+        kp = upk.Package(args.kit)
+        ps = next((e['name'] for e in kp.exports if kp.class_name(e['class']) == 'PlayerStart'), None)
+        if ps:
+            base, num = (ps.rsplit('_', 1)[0], int(ps.rsplit('_', 1)[1]) + 1) if ps.rsplit('_', 1)[-1].isdigit() else (ps, 0)
+            objcopy.PLAYER_PAWN = (cls, op, out)
+            objcopy.PLAYER_SPAWN = [('Core', 'Package', os.path.splitext(os.path.basename(args.kit))[0], 0), ('Engine', 'World', 'TheWorld', 0),
+                                    ('Engine', 'Level', 'PersistentLevel', 0), ('Engine', 'PlayerStart', base, num)]
+    if args.named_vars:
+        import objcopy
+        base = os.path.splitext(os.path.basename(args.named_vars))[0]
+        objcopy.NAMED_REMOTE = objcopy.persistent_named_vars(upk.Package(args.named_vars), (args.streaming_prefix or '') + base, f'G1_{base}')
 
     # one or more source packages (a Gears 1 level and its streamed sublevels share world coordinates): actors,
     # meshes and materials are keyed by (source index, export index)
@@ -849,6 +874,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
             stats['cutscenes: view restored after'] += objcopy.restore_view_after_cutscenes(up, made)
             stats['squad factories (player slot)'] += objcopy.squad_factories(up, made)
             stats['checkpoint events also on save'] += objcopy.checkpoint_events(up, made)
+            stats['named variables of the persistent level'] += objcopy.drop_remote_from_sequences(up, made)
+            if objcopy.player_pawn(up, made): print(f'kismet: the player becomes {objcopy.PLAYER_PAWN[0]} after {objcopy.PLAYER_PAWN[1]} ({objcopy.PLAYER_PAWN[2]})')
         for i in todo:
             if i not in made: stats['missing: ' + sp.class_name(sp.exports[i]['class'])] += 1
         for k, v in c.unconvertible.items(): stats['unconvertible: ' + k] += v
@@ -875,7 +902,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
     top_missing = sorted(((k, v) for k, v in stats.items() if k.startswith('missing')), key=lambda kv: -kv[1])[:8]
     print(f"kismet: links rebuilt from Gears 3's classes on {stats['ops upgraded']} ops, {stats['links kept from Gears 1']} Gears 1 "
           f"links without a Gears 3 counterpart kept; {stats['streaming actions emptied']} level streaming/visibility actions "
-          f"{'renamed' if objcopy.STREAMING_PREFIX is not None else 'emptied'}; {stats['squad factories (player slot)']} squad factories")
+          f"{'renamed' if objcopy.STREAMING_PREFIX is not None else 'emptied'}; {stats['squad factories (player slot)']} squad factories; "
+          f"{stats['named variables of the persistent level']} named variables of the persistent level imported")
     print(f"kismet: {len(added)} sequences, {stats['objects']} objects copied, {stats['dropped (no Gears 3 class)']} without a "
           f"Gears 3 class: {', '.join(f'{k[9:]} {v}' for k, v in top_missing)}")
 

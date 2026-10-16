@@ -65,6 +65,7 @@ def read_manifest(folder):
             m['side'] = s
         elif k == 'game': m['game'] = lower(v) or 'gears3'
         elif k == 'requires': m['requires'] = [r.strip(' \t\r\n') for r in v.split(',') if r.strip(' \t\r\n')]
+        elif k == 'content': m['content'] = [r.strip(' \t\r\n') for r in v.split(',') if r.strip(' \t\r\n')]
         elif k in ('name', 'version', 'author', 'description'): m[k] = v
     return m
 
@@ -227,6 +228,11 @@ def cmd_check(args):
         names = {lower(o['name']) for o in installed(mods_dir)} | {lower(os.path.basename(o['dir'])) for o in installed(mods_dir)}
         for r in m['requires']:
             print(f"  requires {r}: {'installed' if lower(r) in names else 'NOT installed (the game turns this mod off without it)'}")
+    for name in m.get('content', []):
+        found = any(os.path.isfile(os.path.join(d, name + '.xxx')) for d in (os.path.join(g3, 'GearGame', 'CookedXbox360'),
+                                                                              os.path.join(folder, 'GearGame', 'CookedXbox360')))
+        print(f"  content {name}: {'a game package, loaded when the game starts' if found else 'NOT a package of the game or this mod'}")
+        problems += not found
     ignored = []
     files = mod_files(m, mods_dir, ignored)
     for low, path in files:

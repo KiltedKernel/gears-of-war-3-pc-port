@@ -85,6 +85,9 @@ cr6` is overwritten by the next compare before the branch). Rendering: render ta
 | UProperty ArrayDim / ElementSize / Offset | +64 / +68 / +84 |
 | UBoolProperty mask | +104 |
 
+ObjectFlags is big-endian 64-bit: its low word at +12 holds RF_ClassDefaultObject (0x200) and RF_RootSet (0x4000).
+A cooked build detaches a seekfree package's linker once it has loaded: every object's Linker is null afterwards.
+
 GNames (pointer at 8343D148) is an array of FNameEntry pointers ({u32 Index = n*2, u32 HashNext, char Name[]},
 packed); GObjObjects pointer at 8343D188. "GameViewportClient" is name 10043. FNames are made by
 **sub_82302F28(FName* out, const TCHAR* name (UTF-16BE), EFindName = 1 add)**.
@@ -100,6 +103,9 @@ packed); GObjObjects pointer at 8343D188. "GameViewportClient" is name 10043. FN
 | GFxMovieView vtable slot 45 (82BCD738) | HandleEvent: the port sends mouse moves |
 | UGFxMoviePlayer vtable +0x148 / +0x190 | GetVariableNumber / Invoke (ActionScript from the runtime) |
 | Default__GearTypes.ChapterLevelNames | chapter number -> map (31 entries on the disc) |
+| 822B7328 | UObject::LoadPackageAsync(const FString& name, callback, user data, const FGuid*, FName type (64-bit)): as GearMPCharacterStore's native LoadPawnClass (82A29D98) loads "MPCH_" + class + "_SF" (name built by 82A2DF90); used for mod.ini `content =` (ue3/content_packages.cpp) |
+| GearGameSP_Base.PlayerSlots[4] {PawnClass, Owner} | the squad; Default__GearGameSP (GEARGAMESP_SF) holds the campaign's classes. SeqAct_AIFactory.AssignToPlayerSlot sets PlayerSlots[i].PawnClass to the spawned pawn's class and a human owner possesses it (Gears 3's own levels make Cole the player so: SP_Hanover_P's slot 1 factory); SuggestPawnClassFor reads the slot on respawn and checkpoint load |
+| SeqVar_Named | resolved in its own level only (Gears 1 searched every loaded level); a SeqCond_CompareBool with no variable is True |
 
 ### Menus (Scaleform)
 

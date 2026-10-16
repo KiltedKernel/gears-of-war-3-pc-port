@@ -78,7 +78,11 @@ already (textures, meshes).
 | Kismet | the same sequences with Gears 3's classes; 30 classes renamed to their Gears 3 counterparts; actions with no counterpart are pass-throughs (their chains keep running) | `objcopy`; see below |
 | streaming (LevelStreaming, LevelVisibility, MultiLevelStreaming, WaitForLevelsVisible) | the same actions, level names prefixed | names of levels not built are dropped (Gears 1's next chapter) |
 | SeqVar_Dom | GearSeqVar_Player, squad slot 2 | Gears 3's squad is four player slots, each a human or an AI; a co-op partner takes Dom's slot |
+| SeqVar_Named across levels ("Hard", "MarcusLeft", "dom") | "dom": GearSeqVar_Player slot 2; a variable of the chapter's persistent level: an import of that variable in the converted persistent package | Gears 1 resolves a name in any loaded level, Gears 3 in the variable's own level only. Unresolved, a CompareBool without variables is True (the prison's ceiling collapse dialog ended early and the hard route's door never opened) and AI orders on "dom" had no pawn |
+| SeqAct_TutorialManual, SeqAct_ToggleTutorialMode | SeqAct_ManageTutorials (Add / Complete Tutorial, System On / Off), the Gears 3 tutorial teaching the same thing | |
 | AI factory spawning Dom | the same, with "Player Slot" 2 | Gears 3's own levels spawn squad members so |
+| Gears 1 / 2 characters | Gears 3's versions where it has them: a recipe's `pawn_classes` (Pawn_COGDom=GearPawn_COGDomG2MP: Gears 3's classic Dom) and `load_packages` (its multiplayer character package, MPCH_COGDomG2MP_SF, written as the mod's `content =`: the runtime loads it and keeps it loaded) | classic Marcus, Dom, Cole, Baird... are multiplayer characters (MPCH_*G2MP_SF, their own meshes on Gears 3's skeleton); Marcus, the player, needs a slot 1 factory (as Gears 3's SP_Hanover_P makes Cole the player) |
+| objectives' texts | Gears 1's [OBJECTIVES] strings (Coalesced.int, warfaregame.int) as the mod's config fragment for Gears 3's level_objectives.int [Objectives] | other languages: the English text for now |
 | AI factory spawning Locust | the same, with Gears 3's class: Drone (classic in Horde, Savage in the campaign), Boomer, Theron, Wretch... | the class must be carried (above) |
 | SeqAct_WarCheckPoint + SeqEvt_CheckpointActivated | SeqAct_Checkpoint ("Save"), its "Out" linked to the event's targets; the event as SeqEvent_CheckpointLoaded | Gears 1's event fires on save and load, Gears 3's on load |
 | player start | PlayerStart in the persistent level, in its navigation list | |
@@ -161,6 +165,10 @@ To start a new chapter's recipe:
   package; `GOW3_LOG_POS=1` the pawns' positions; `GOW3_NO_PLAY_AREA_KILL=1` while a region has no navmesh.
 - Playtests: `tests/g1_chapter1.txt` (the chapter from Select Chapter on a fresh profile); the input script's
   `follow <class part> [s] [distance]` walks the player after a pawn (Dom leads the way in Gears 1).
+- A script that stops where its sequence "should" continue: check which output of a condition fired, then what it
+  read. The prison's ceiling collapse ended early because its CompareBool read a named variable of another level
+  (Gears 3 does not resolve those: converted to imports now). A player who stops moving may be in cover: the route
+  walker's A press at a wall takes cover (screenshots show it).
 
 ## Roadmap
 
@@ -174,10 +182,10 @@ rest), in play and in cutscenes.
 1. **The prison, end to end**: every section converts (done), navmesh for every region (four regions), the first
    enemies (the Drone carrier: done), the scripted fights, Gears 1's chapter end (done: chapter complete, then the
    main menu until a next chapter exists).
-2. **Characters from Gears 3**: the squad already plays as Gears 3 pawns (Marcus slot 1, Dom slot 2); cutscenes
-   still use Gears 1's skeletal meshes. Next: Gears 3's classic skins (its "G2" / classic character content) on the
-   squad pawns, and Gears 3 meshes in place of Gears 1's in Matinees (the skeletons differ: animations retargeted or
-   the cutscene's characters played by Gears 3 pawns).
+2. **Characters from Gears 3**: the squad plays as Gears 3 pawns (Marcus slot 1, Dom slot 2); Dom is Gears 3's
+   classic Dom (`pawn_classes`, `load_packages`). Next: classic Marcus (a slot 1 factory at the chapter's start),
+   then Gears 3 meshes in place of Gears 1's in Matinees (the skeletons differ: animations retargeted or the
+   cutscene's characters played by Gears 3 pawns).
 3. **Act 1, then the rest of Gears 1**: one recipe per chapter, chapters 32 and up in order, each leading to the next.
 4. **Gears of War 2**: the converter on version 575 packages; Baird and Gus as squad slots 3 and 4.
 5. **In the launcher**: a Trilogy page that finds the Gears 1 / 2 discs and builds the chapters.

@@ -9,6 +9,9 @@
 //   side = everyone | host | client        who needs the mod in multiplayer (below; default everyone)
 //   requires = Other Mod, Another          mods that must be enabled too (by name or folder), else this one is off
 //   game = gears3                          the game it is made for (gears3 if not given); others are turned off
+//   content = MPCH_COGMarcusG2MP_SF, ...   the game's own content packages the mod's levels use that the campaign
+//                                          does not load (multiplayer characters...): loaded once the engine is up
+//                                          and kept (runtime/ue3/content_packages.cpp)
 //
 // side: "client" changes only what this player sees or hears (menus, HUD, text): never compared. "host" changes the
 // rules the host's game applies (game modes' settings): it acts in matches you host and is not compared. "everyone"
@@ -37,6 +40,7 @@ namespace modinfo
         bool enabled = true;
         Side side = Side::Everyone;
         std::vector<std::string> needs;          // requires = ...
+        std::vector<std::string> content;        // content = ... (package names)
         std::string problem;                         // why a mod that is enabled in its mod.ini is not loaded
         std::filesystem::path dir;
         bool loose = false;                          // files placed directly in mods\ (no mod.ini)
@@ -81,14 +85,15 @@ namespace modinfo
             else if (key == "enabled") m.enabled = !(low == "false" || low == "0" || low == "no");
             else if (key == "side") m.side = low == "client" ? Side::Client : low == "host" || low == "server" ? Side::Host : Side::Everyone;
             else if (key == "game") m.game = low.empty() ? "gears3" : low;
-            else if (key == "requires")
+            else if (key == "requires" || key == "content")
             {
+                auto& list = key == "content" ? m.content : m.needs;
                 size_t a = 0;
                 while (a <= value.size())
                 {
                     const size_t b = (std::min)(value.find(',', a), value.size());
                     const std::string r = Trim(value.substr(a, b - a));
-                    if (!r.empty()) m.needs.push_back(r);
+                    if (!r.empty()) list.push_back(r);
                     a = b + 1;
                 }
             }

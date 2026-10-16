@@ -70,6 +70,9 @@ PAWN_MAP = {
     'Pawn_COGGus_Resonator': 'GearPawn_COGGus', 'Pawn_COGBaird': 'GearPawn_COGBaird',
     'Pawn_COGCarmine': ['GearPawn_COGCarmine', 'GearPawn_COGBenjaminCarmine'], 'Pawn_COGMinh': 'GearPawn_COGMinh',
 }   # (a list: the first one loaded in the game mode / map)
+# a recipe's choice over PAWN_MAP, taken as available (its package is the mod's content: mod.ini "content ="): Gears 3's
+# higher-quality characters in place of Gears 1's (Dom as Gears 3's classic Dom, GearPawn_COGDomG2MP)
+PAWN_OVERRIDE = {}
 PAWN_STANDIN = {'COG': ['GearPawn_COGOnyxGuard', 'GearPawn_COGRedShirt', 'GearPawn_COGDomG2'],
                 'Locust': ['GearPawn_LocustDrone', 'GearPawn_LocustHunterNoArmorNoGrenades', 'GearPawn_LocustTheron']}
 # controllers Gears 3 names differently (the rest: War* -> Gear*)
@@ -335,6 +338,9 @@ class Copier:
         (self.available_pawns: None = assume all); else 0 and the source class is recorded in self.missing_pawns"""
         if r == 0: return 0
         g1 = self.s.class_name(r)
+        if g1 in PAWN_OVERRIDE:
+            pk = self.find_import('Core', 'Package', 0, 'GearGameContent')
+            return self.find_import('Core', 'Class', pk, PAWN_OVERRIDE[g1])
         cands = PAWN_MAP.get(g1)
         cands = [cands] if isinstance(cands, str) else (cands or [])
         avail = getattr(self, 'available_pawns', None)
@@ -415,6 +421,42 @@ class Copier:
                 and (cs <= PLAYER_CONTROL_OPS or ('SeqAct_ToggleCinematicMode' in cs
                                                   and cs <= PLAYER_CONTROL_OPS | {'SeqAct_ToggleHidden'}))}
 
+    def named_target(self, i, exports):
+        """a SeqVar_Named (source export i) whose name no variable among exports defines: 'squad' for a squad
+        member's name (NAMED_SQUAD), the import of the persistent level's variable of that name (NAMED_REMOTE), else
+        None (copied as is)"""
+        import materialconv
+        try: recs, _ = materialconv.raw_props(self.s, self.s.export_data(i), 4)
+        except Exception: return None
+        fv = next((r[4] for r in recs if r[0] == 'FindVarName'), None)
+        if fv is None: return None
+        want = self.s.fname(*struct.unpack('>ii', fv[:8])).lower()
+        if want in NAMED_SQUAD and SQUAD_SLOTS:
+            self.current_named = getattr(self, 'current_named', {}); self.current_named[i] = want
+            return 'squad'
+        if want not in NAMED_REMOTE: return None
+        if not hasattr(self, 'local_var_names'):
+            self.local_var_names = set()
+            for k in exports:
+                if not self.s.class_name(self.s.exports[k]['class']).startswith('SeqVar'): continue
+                try: rr, _ = materialconv.raw_props(self.s, self.s.export_data(k), 4)
+                except Exception: continue
+                v = next((r[4] for r in rr if r[0] == 'VarName'), None)
+                if v is not None: self.local_var_names.add(self.s.fname(*struct.unpack('>ii', v[:8])).lower())
+        if want in self.local_var_names: return None
+        return self.remote_import(NAMED_REMOTE[want])
+
+    def remote_import(self, chain):
+        """an object of another package by its path: chain [(class package, class, name, number)] from the package
+        down; the imports are made once each"""
+        cache = self.__dict__.setdefault('remote_cache', {})
+        outer, key = 0, ()
+        for cp, cls, name, number in chain:
+            key += ((cls, name, number),)
+            if key not in cache: cache[key] = self.w.add_import(cp, cls, outer, name, number)
+            outer = cache[key]
+        return outer
+
     def factory_output_var(self, candidates):
         """the variable among candidates (source export indices) that an AI factory's variable links write to"""
         import materialconv
@@ -448,6 +490,14 @@ class Copier:
             e = self.s.exports[i]
             cn = self.s.class_name(e['class'])
             if i in aliases: continue
+            if cn == 'SeqVar_Named':
+                target = self.named_target(i, exports)
+                if target == 'squad':                          # a squad member by name: Gears 3's slot variable
+                    cn = 'SeqVar_NamedSquad'
+                elif target:                                   # the persistent level's variable itself (an import)
+                    self.obj_map[i + 1] = target
+                    self.remote_refs = getattr(self, 'remote_refs', set()) | {target}
+                    continue
             cls = self.class_ref(self.g3_class(cn)) if cn not in SKIP_CLASSES else 0
             if i in as_player and self.class_ref('GearSeqVar_Player'):
                 cls = self.class_ref('GearSeqVar_Player')
@@ -514,7 +564,8 @@ class Copier:
             if kind == 'component' and cn in COMPONENT_DROP:
                 props = self.without(props, COMPONENT_DROP[cn])
             self.current_src = i
-            if cn in FIXUPS: props = FIXUPS[cn](self, props)
+            if i in getattr(self, 'current_named', {}): props = named_squad_var(self, props)
+            elif cn in FIXUPS: props = FIXUPS[cn](self, props)
             if i in getattr(self, 'passthrough_src', ()):
                 props = self.without(props, {'bOutputToScreen'})
                 wn = lambda a_, n_: (self.w.names[a_] if n_ == 0 else f'{self.w.names[a_]}_{n_ - 1}')
@@ -1564,6 +1615,182 @@ if SQUAD_SLOTS:
     for _v in SQUAD_VARS:
         CLASS_RENAME[_v] = 'GearSeqVar_Player'
         FIXUPS[_v] = squad_var
+
+
+# ---- named variables across levels ----
+# Gears 1 finds a SeqVar_Named's variable in any loaded level: its sublevels' scripts read and write the persistent
+# level's variables by name ("Hard": the route the player chose, "MarcusLeft", "dom"). Gears 3 looks in the
+# variable's own level only: unresolved, a CompareBool with no variable is True (the prison's ceiling collapse
+# dialog took its early exit, and the hard route's door never opened) and an AI order on "dom" had no pawn (Dom
+# stood still after the path choice). Converted: a name of a squad member (NAMED_SQUAD) becomes Gears 3's slot
+# variable; a name the chapter's persistent level defines (NAMED_REMOTE, from persistent_named_vars) becomes an
+# import of that variable in the converted persistent package (loaded for the whole chapter), and leaves the
+# sequence's object list (drop_remote_from_sequences).
+NAMED_SQUAD = {'dom': ('Dom', 2)}
+NAMED_REMOTE = {}                                       # lower-case name -> import chain (objcopy.remote_import)
+
+
+def named_squad_var(c, props):
+    name, slot = NAMED_SQUAD[c.current_named[c.current_src]]
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in ('FindVarName', 'ExpectedType', 'bStatusIsOk', 'PlayerIdx', 'bAllPlayers', 'VarName')]
+    recs += [['bAllPlayers', 'BoolProperty', 0, b'', b'\x00'], ['PlayerIdx', 'IntProperty', 0, b'', struct.pack('>i', slot)]]
+    return encode(c.w, recs)
+
+
+CLASS_RENAME['SeqVar_NamedSquad'] = 'GearSeqVar_Player'
+FIXUPS['SeqVar_NamedSquad'] = named_squad_var
+
+
+def persistent_named_vars(src, package_name, root_name, classes=None):
+    """{lower-case name: import chain} of every named variable in a persistent level's Kismet (source package src),
+    as converted into package_name (its Main_Sequence renamed root_name). classes: Gears 3 class -> script package"""
+    import materialconv
+    out = {}
+    for i, e in enumerate(src.exports):
+        cn = src.class_name(e['class'])
+        if not cn.startswith('SeqVar') or cn == 'SeqVar_Named': continue
+        try: recs, _ = materialconv.raw_props(src, src.export_data(i), 4)
+        except Exception: continue
+        v = next((r[4] for r in recs if r[0] == 'VarName'), None)
+        if v is None: continue
+        name = src.fname(*struct.unpack('>ii', v[:8]))
+        if name == 'None' or name.lower() in NAMED_SQUAD: continue
+        chain, k = [], i
+        while k >= 0:
+            ek = src.exports[k]; ck = src.class_name(ek['class'])
+            if ck in ('Level', 'World'): break
+            nm = root_name if (ck == 'Sequence' and ek['outer'] > 0 and src.class_name(src.exports[ek['outer'] - 1]['class']) == 'Level') else ek['name']
+            base, num = (nm.rsplit('_', 1)[0], int(nm.rsplit('_', 1)[1]) + 1) if '_' in nm and nm.rsplit('_', 1)[1].isdigit() else (nm, 0)
+            ck3 = CLASS_RENAME.get(ck, ck)
+            chain.append(((classes or {}).get(ck3, 'Engine'), ck3, base, num))
+            k = ek['outer'] - 1
+        else:
+            continue
+        if not chain or chain[-1][1] != 'Sequence': continue
+        out[name.lower()] = [('Core', 'Package', package_name, 0), ('Engine', 'World', 'TheWorld', 0),
+                             ('Engine', 'Level', 'PersistentLevel', 0)] + chain[::-1]
+    return out
+
+
+# ---- the player as one of Gears 3's characters ----
+# Gears 3 makes another character the player (Act 2's Cole, SP_Hanover_P) with an AI factory whose "Player Slot" is 1:
+# SeqAct_AIFactory.AssignToPlayerSlot sets PlayerSlots[0].PawnClass to the spawned class (respawns and checkpoints
+# keep it: SuggestPawnClassFor) and the human player possesses the new pawn, the old one is destroyed. A converted
+# chapter gets one (PLAYER_PAWN: the class, e.g. GearPawn_COGMarcusG2MP, Gears 3's classic Marcus) after an op of the
+# opening (once per new game: the opening cutscene's end), spawning on the chapter's player start (PLAYER_SPAWN: its
+# import chain, in the persistent package) with the old pawn's collision off first (a factory waits for a free spot).
+PLAYER_PAWN = None                                      # (Gears 3 class, 'op path in the source Kismet', 'output')
+PLAYER_SPAWN = None
+
+
+def player_pawn(up, made):
+    if not PLAYER_PAWN or not PLAYER_SPAWN: return 0
+    c, s, w = up.c, up.c.s, up.w
+    cls_name, at_op, at_out = PLAYER_PAWN
+    src = next((i for i in made if s.path(i).split('Main_Sequence.')[-1] == at_op), None)
+    if src is None: return 0
+    ref = made[src]
+    seq = struct.unpack_from('>i', w.exports[ref - 1], 8)[0]
+    if seq <= 0: return 0
+    need = {k: c.class_ref(k) for k in ('SeqAct_AIFactory', 'SeqAct_ChangeCollision', 'SeqVar_Int', 'SeqVar_Object', 'SeqVar_Player')}
+    if not all(need.values()): return 0
+    parent = ['ParentSequence', 'ObjectProperty', 0, b'', struct.pack('>i', seq)]
+    def new(cls, name, recs):
+        x = w.add_export(need[cls], seq, c.unique_name(name, 0), b'', flags=0x0007000100000000)
+        w.replace(x - 1, struct.pack('>i', -1) + up.enc(recs + [parent]))
+        return x
+    pk = c.find_import('Core', 'Package', 0, 'GearGameContent')
+    pawn = c.find_import('Core', 'Class', pk, cls_name)
+    v_player = new('SeqVar_Player', 'G1PlayerPawn', [['bAllPlayers', 'BoolProperty', 0, b'', b'\x00']])
+    v_slot = new('SeqVar_Int', 'G1PlayerSlot', [['IntValue', 'IntProperty', 0, b'', struct.pack('>i', 1)]])
+    v_spawn = new('SeqVar_Object', 'G1PlayerSpawn', [['ObjValue', 'ObjectProperty', 0, b'', struct.pack('>i', c.remote_import(PLAYER_SPAWN))]])
+    def links(cls, wire):
+        out = []
+        for prop, conn in LINK_ARRAYS[:3]:
+            dflt = up.g3.default_array(cls, prop)
+            if dflt is None: continue
+            els = [up.retag(e, dflt[0]) for e in up.elements(dflt[1], dflt[0].fname)]
+            for e in els:
+                desc = next((str_value(r[4]) for r in e if r[0] == 'LinkDesc'), '').lower()
+                if (prop, desc) in wire:
+                    e[:] = [r for r in e if r[0] != conn] + [[conn, 'ArrayProperty', 0, b'', wire[(prop, desc)]]]
+            out.append([prop, 'ArrayProperty', 0, b'', struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)])
+        return out
+    link_to = lambda op: up.enc([['LinkedOp', 'ObjectProperty', 0, b'', struct.pack('>i', op)], ['InputLinkIdx', 'IntProperty', 0, b'', struct.pack('>i', 0)]])
+    string = lambda t: struct.pack('>i', len(t) + 1) + t.encode('latin-1') + b'\0'
+    # a spawn set has its own links, as Gears 3's editor makes them (SP_Hanover_P): the factory's native code finds
+    # them by name ("Set 1 [Spawn Destinations]"...; without them it indexed with -1 and crashed)
+    set_vars = [('Set 1 [1]', 'spawn points'), ('Set 1 [Spawn Points]', 'spawn points'), ('Set 1 [Spawn Destinations]', 'spawn points'),
+                ('Set 1 [Max Alive]', 'player slot'), ('Set 1 [Spawn Total]', 'player slot')]
+    set_outs = [('Spawn 1 [1]', 'spawned')]
+    spawn_set = [['GearPawnClass', 'ObjectProperty', 0, b'', struct.pack('>i', pawn)], ['SpawnTotal', 'IntProperty', 0, b'', struct.pack('>i', 1)],
+                 ['MaxAlive', 'IntProperty', 0, b'', struct.pack('>i', 1)],
+                 ['VarLinkDescs', 'ArrayProperty', 0, b'', struct.pack('>i', len(set_vars)) + b''.join(string(d) for d, _ in set_vars)],
+                 ['OutLinkDescs', 'ArrayProperty', 0, b'', struct.pack('>i', len(set_outs)) + b''.join(string(d) for d, _ in set_outs)]]
+    frecs = links('SeqAct_AIFactory', {('VariableLinks', 'spawn points'): struct.pack('>ii', 1, v_spawn),
+                                       ('VariableLinks', 'player slot'): struct.pack('>ii', 1, v_slot)})
+    for r in frecs:
+        extra = set_vars if r[0] == 'VariableLinks' else set_outs if r[0] == 'OutputLinks' else []
+        if not extra: continue
+        els = up.elements(r[4], up.wname)
+        by_desc = {next((str_value(x[4]) for x in e if x[0] == 'LinkDesc'), '').lower(): e for e in els}
+        for desc, like in extra:
+            if like not in by_desc: continue
+            e = [list(x) for x in by_desc[like] if x[0] not in ('LinkDesc', 'LinkedVariables', 'Links', 'PropertyName', 'MinVars')]
+            e.insert(0, ['LinkDesc', 'StrProperty', 0, b'', string(desc)])
+            if r[0] == 'VariableLinks': e.append(['MinVars', 'IntProperty', 0, b'', struct.pack('>i', 0)])
+            els.append(e)
+        r[4] = struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)
+    factory = new('SeqAct_AIFactory', 'G1PlayerFactory', frecs + [['SpawnSets', 'ArrayProperty', 0, b'', struct.pack('>i', 1) + up.enc(spawn_set)]])
+    en = up.g3.enums.get('CollisionType')
+    coll = [['CollisionType', 'ByteProperty', 0, struct.pack('>ii', *w.name(en[0])), struct.pack('>ii', *w.name('COLLIDE_NoCollision'))]] if en else []
+    off = new('SeqAct_ChangeCollision', 'G1PlayerCollisionOff', links('SeqAct_ChangeCollision', {
+        ('VariableLinks', 'target'): struct.pack('>ii', 1, v_player), ('OutputLinks', 'out'): struct.pack('>i', 1) + link_to(factory)}) + coll)
+    # the op's output -> collision off -> the factory
+    recs, end = parse828(w.current(ref - 1), 4, up.wname)
+    for r in recs:
+        if r[0] != 'OutputLinks': continue
+        els = up.elements(r[4], up.wname)
+        for e in els:
+            if next((str_value(x[4]) for x in e if x[0] == 'LinkDesc'), '').lower() != at_out.lower(): continue
+            lr = next((x for x in e if x[0] == 'Links'), None)
+            if lr is None: e.append(['Links', 'ArrayProperty', 0, b'', struct.pack('>i', 1) + link_to(off)])
+            else: lr[4] = struct.pack('>i', struct.unpack_from('>i', lr[4], 0)[0] + 1) + lr[4][4:] + link_to(off)
+        r[4] = struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)
+    d = w.current(ref - 1)
+    w.replace(ref - 1, d[:4] + up.enc(recs) + d[end:])
+    sd = w.current(seq - 1)
+    srecs, send = parse828(sd, 4, up.wname)
+    for r in srecs:
+        if r[0] == 'SequenceObjects':
+            r[4] = struct.pack('>i', struct.unpack_from('>i', r[4], 0)[0] + 5) + r[4][4:] + struct.pack('>5i', v_player, v_slot, v_spawn, factory, off)
+    w.replace(seq - 1, sd[:4] + up.enc(srecs) + sd[send:])
+    return 1
+
+
+def drop_remote_from_sequences(up, made):
+    """the imported variables out of the copied sequences' object lists (a sequence initialises what it lists)"""
+    remote = getattr(up.c, 'remote_refs', set())
+    if not remote: return 0
+    s, w = up.c.s, up.w
+    n = 0
+    for i, ref in made.items():
+        if s.class_name(s.exports[i]['class']) != 'Sequence': continue
+        recs, end = parse828(w.current(ref - 1), 4, up.wname)
+        changed = False
+        for r in recs:
+            if r[0] != 'SequenceObjects': continue
+            cnt = struct.unpack_from('>i', r[4], 0)[0]
+            refs = struct.unpack_from(f'>{cnt}i', r[4], 4)
+            keep = [x for x in refs if x not in remote]
+            if len(keep) != cnt:
+                r[4] = struct.pack(f'>{len(keep) + 1}i', len(keep), *keep); changed = True; n += cnt - len(keep)
+        if changed:
+            d = w.current(ref - 1)
+            w.replace(ref - 1, d[:4] + up.enc(recs) + d[end:])
+    return n
 
 
 def squad_factories(up, made):

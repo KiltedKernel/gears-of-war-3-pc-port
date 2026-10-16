@@ -1878,3 +1878,69 @@ Back (nothing on the main menu's first page or title screen). In menus F is now 
 **Trace.** Each click and back logs the main menu's state ("deny 0 title 0 history 1 stacker 0 animating 0 server 1"),
 a main menu refusing input for 2 s is a warning with that state, and the menu input lines carry the time and the end
 of menu mode. Gears 2's menus (mouse_menu.cpp, UIScenes) are a different system and unchanged.
+
+## 2026-10-15: A chapter of its own: Gears 1's prison as new packages (the model for Gears 1 and 2 levels)
+
+The conversion so far put Gears 1's cell block into a Gears 3 level's slot (the prologue's SP_Nightmare_02_S). A
+level of its own needs new packages, so the questions were what Gears 3 accepts and how its campaign is wired. Each
+answer was checked in game:
+- **New package names load.** A byte copy of SP_Nightmare_P as SP_G1Test_P, chapter 32's MapName, played the
+  prologue from Select Chapter. (A chapter URL on the command line, GOW3_COMMAND_LINE, reads ChapterLevelNames before
+  the runtime fills chapters 32+, even polling every 50 ms: test chapters 32+ through the menu, tests/select_chapter.)
+- **Campaign structure.** GearGame_P stays the persistent level; the chapter's map (ChapterLevelNames[N]) is streamed
+  into it, then the map's own streaming levels. The player spawns at GearGame_P's PlayerStart (no Location: the
+  origin) before the map is in; a chapter map moves the player itself (Gears 1's opening: a checkpoint, then a
+  teleport to its PlayerStart). The world's navigation list is GearGame_P's WorldInfo's, the map's lists prepended.
+- **Cross-package imports resolve.** Cooked objects keep their original paths (COG_Minh.Minh_Kim, not
+  SP_Nightmare_P.COG_Minh...). An import of COG_Minh.Minh_Kim put into SP_Nightmare_01_S's skeletal mesh actor
+  resolved to SP_Nightmare_P's copy (GOW3_LOG_PROPS SkeletalMeshComponent:SkeletalMesh@). So a package can take
+  objects from one loaded before it: the chapter's persistent level is the **kit**.
+- **Materials as children.** A level MIC (MI_GR_Cliffwall_Tilable_01) is an import of a master in the startup
+  content (M_ES_Phong_Opaque_Master_01) plus its own static permutation (a 1760-byte tail, shaders in the package's
+  cache). A new MIC written from properties only (Parent = an import of the kit's MIC, texture parameters with the
+  kit's ExpressionGUIDs, no static permutation) uses the parent's compiled permutation: the converted sections'
+  materials render (materialconv.child_mic, levelinject --kit).
+- **Squad = player slots.** GearGameSP_Base.PlayerSlots[4] {PawnClass, Owner}; GEARGAMESP_SF's defaults: slot 1
+  GearPawn_COGMarcus, slot 2 GearPawn_COGDom. GearSeqVar_Player {PlayerIdx} is slot N's pawn (Gears 3's levels name
+  them Marcus/Dom/P3/P4 through SeqVar_Named), and SeqAct_AIFactory with "Player Slot" N spawns into that slot
+  (AssignToPlayerSlot: an AI owner is replaced; a human owner possesses the new pawn). The prologue's Squads sequence:
+  Dom's factory, Player Slot 2, Last Spawned -> "Dom". So Gears 1's SeqVar_Dom becomes GearSeqVar_Player slot 2 (it
+  works from every package; merging every Dom variable into the factory's output only worked within one) and a
+  factory spawning Pawn_COGDom gets Player Slot 2 (objcopy SQUAD_VARS / SQUAD_PAWNS; OBJCOPY_NO_SQUAD_SLOTS=1 the
+  old way). A co-op partner takes Dom's slot as in Gears 3.
+- **Characters are cooked into packages.** A pawn class can spawn only if a loaded package carries its cooked copy:
+  Dom in GEARGAMESP_SF (always in campaign), Marcus in GearGame.xxx; the classic GearPawn_LocustDrone only in
+  GEARGAMEHORDE_SF / HORDESET_Queen_SF (Horde, loaded by GearHordeEnemyList.Load, native); campaign maps carry
+  GearPawn_LocustDroneSavage, Wretches, Boomers, Kantus... (small levels too: SP_Fort_Wave_Boomers 1 MB, Baird and
+  Gus in SP_Wreckage_S_Squad2 1 MB). None carries Raam, Minh, Anthony Carmine or Skorge. Gears 1's whole chapter 1
+  needs Marcus, Dom, the Drone (Pawn_GeistLocust) and Lancer / Hammerburst / Snub / frag.
+- **Streaming.** Gears 1 streams per package from Kismet (25 actions in SP_Prison_P: Load/Visibility/
+  MultiLevelStreaming/WaitForLevelsVisible, 23 LevelStreamingKismet entries, 5 LevelStreamingVolumes). Kept as is:
+  every Gears 1 package becomes a Gears 3 package named GOW1_<name> (no collision with Gears 3 or 2 names), level
+  names in the actions renamed (objcopy STREAMING_PREFIX / STREAMING_BUILT; names of packages not built are dropped).
+- **Checkpoints.** Gears 1's SeqAct_WarCheckPoint ("Set Active Checkpoint", no outputs) continues through the
+  SeqEvt_CheckpointActivated of its checkpoint (saved or loaded); Gears 3's SeqEvent_CheckpointLoaded fires only on
+  a load. The input is now "Save", and the event's targets are linked from the checkpoint's "Out" too (objcopy
+  checkpoint_events): initialPlayerStuff then teleports Marcus into the cell.
+
+**Tools.** tools/levelpkg.py: `blank` (a clone of a Gears 3 level with its actors left out of Level.Actors but the
+mesh collections, cover links, pylons and WorldInfo; its Kismet emptied; its own package GUID: upkwrite
+Rewriter.guid), `persistent` (WorldInfo.StreamingLevels as new LevelStreamingKismet objects, KillZ, Gears 1's
+post-process on a Gears 3 map's DefaultPostProcessSettings). levelinject: --kit, --content (the packages whose
+GearGameContent classes are loaded), --streaming-prefix/--streaming-built, --player-starts; copied PlayerStarts and
+PathNodes join the level's navigation list (cover.append_nav_points; a copied point's own nextNavigationPoint had
+looped the list: the load never finished); a template without a light-map-free component or a Scale3D tag works;
+cover.level_lists searches every byte offset and knows DynamicPylon and the rewrite's new exports. Runtime:
+GOW3_KISMET_TRACE=<package part> logs every Kismet op that runs (SequenceOp.ActivateCount / SequenceEvent.
+TriggerCount sampled every 100 ms); GOW3_LOG_PROPS "Prop@" shows a reference by name and each object's package.
+tools/kismetgraph.py prints a sequence's ops with their output links and variables (Gears 1, 2 or 3).
+
+**Result** (by hand, scratchpad build_ch1.sh; trilogy.py next): the persistent level GOW1_SP_Prison_P (a blanked
+SP_Nightmare_02_S, the kit, with SP_Prison_P's Kismet, PlayerStart, triggers, 9 streaming levels and post-process)
+and nine sections (S01, S01_Scripting, S01_Audio, S02, S02_Meshes, S02_Scripting, S02_Audio, Audio, Cine_Start,
+each a blanked SP_Char_Tower_1a_S of 736 KB) in 45 s, chapter 32 "Act VI: Gears of War". From Select Chapter: all
+ten packages stream in through Gears 1's own Kismet, Marcus (GearPawn_COGMarcus, slot 1) starts in his cell, the
+opening cutscene plays, Dom (GearPawn_COGDom) spawns into slot 2 outside the cell and gets his move order; 60 fps.
+Next: the sections' navmesh (Dom does not move yet), the rest of the prison (S03-S07, World, Cine_End), recipes.
+The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt with these changes (Marcus at
+(-309, 1140), Dom at (-564, 1149)).

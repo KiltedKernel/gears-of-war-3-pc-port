@@ -149,7 +149,10 @@ def level_cover_tables(p, d):
     return [r - 1 for r in refs], q + 4, pairs
 
 
-def level_lists(p, d):
+PYLONS = ('Pylon', 'DynamicPylon')                    # the pylon list holds both (a lift's pylon is dynamic)
+
+
+def level_lists(p, d, w=None):
     """offsets in a Gears 3 Level's native data of the list ends (NavListEnd, CoverListEnd, PylonListEnd: Level refs)
     and the CoverLinkRefs table: {'nav_end', 'cover_end', 'pylon_end', 'refs_count' (offset or None), 'refs',
     'pairs_at', 'pairs'}. Normally found through CoverLinkRefs (the array of every CoverLink, level_cover_tables); a
@@ -162,10 +165,17 @@ def level_lists(p, d):
                 'pairs_at': pairs_at, 'pairs': pairs}
     except ValueError:
         pass
-    kind = lambda r: p.class_name(p.exports[r - 1]['class']) if 0 < r <= len(p.exports) else ''
-    for o in range(len(d) - 8, 16, -4):
+    def kind(r):                                       # (w: exports the rewrite added, e.g. new cover links)
+        if 0 < r <= len(p.exports): return p.class_name(p.exports[r - 1]['class'])
+        if w is not None and 0 < r <= len(w.exports):
+            c = struct.unpack_from('>i', w.exports[r - 1], 0)[0]
+            if c < 0 and -c <= len(w.imports):          # (a class import the rewrite may have added: its object name)
+                return w.names[struct.unpack('>7i', w.imports[-c - 1])[5]]
+            return p.class_name(c) if c > 0 else ''
+        return ''
+    for o in range(len(d) - 8, 16, -1):               # (every byte offset: the native data before need not align)
         cs, ce, ps, pe = struct.unpack_from('>4i', d, o - 8)
-        if kind(cs) == kind(ce) == 'CoverLink' and kind(ps) == kind(pe) == 'Pylon':
+        if kind(cs) == kind(ce) == 'CoverLink' and kind(ps) in PYLONS and kind(pe) in PYLONS:
             return {'nav_end': o - 12, 'cover_end': o - 4, 'pylon_end': o + 4, 'refs_count': None, 'refs': [],
                     'pairs_at': None, 'pairs': []}
     raise ValueError('the level\'s navigation / cover / pylon list ends were not found')
@@ -207,7 +217,7 @@ def add_links(p, w, count, template=None):
         new.append(ref - 1)
     # the Level: cover and navigation lists, CoverLinkRefs, Actors
     ld = bytearray(w.current(lvl))
-    L = level_lists(p, bytes(ld))
+    L = level_lists(p, bytes(ld), w)
     refs, q = L['refs'], L['refs_count']                  # CoverLinkRefs (None: the level has no table)
     nav_end_at, cover_end_at = L['nav_end'], L['cover_end']
     def relink(at, prop):
@@ -289,3 +299,30 @@ elif __name__ == '__main__':
             if bad <= 3: print('fail', p.path(i), ex)
     print(f'{ok} cover links parsed exactly, {bad} failed; slot types {dict(types)}')
     print('flag values:', {k: (flags[(k, 0)], flags[(k, 1)]) for k in FLAGS})
+
+
+def append_nav_points(p, w, new):
+    """navigation points copied into a Gears 3 level (PlayerStarts, PathNodes: export indices, 0-based) appended to
+    its navigation point list (nextNavigationPoint from NavListEnd; NavListEnd = the last): the game finds player
+    starts through that list (a copied PlayerStart outside it was never used: the player spawned at the origin and
+    fell to KillZ). Returns the count."""
+    import levelinject
+    if not new: return 0
+    lvl = next(i for i, e in enumerate(p.exports) if p.class_name(e['class']) == 'Level' and p.path(i) == 'TheWorld.PersistentLevel')
+    ld = bytearray(w.current(lvl))
+    at = level_lists(p, bytes(ld), w)['nav_end']
+    old_end = struct.unpack_from('>i', ld, at)[0]
+    # the last one ends the list: a copied point keeps the source's nextNavigationPoint, which can lead back into the
+    # chain (a loop: the level load never finished)
+    chain = [old_end - 1] + list(new) + [-1]
+    for a_, b_ in zip(chain, chain[1:]):
+        if a_ < 0: continue
+        d = bytearray(w.current(a_))
+        o, pr, end = levelinject.props_at(p, bytes(d), (26,) + tuple(range(0, 120, 2)))
+        v, size = levelinject.tag_value_offset(p, bytes(d), o, 'nextNavigationPoint')
+        if v is None: d = levelinject.set_property(p, w, d, o, 'nextNavigationPoint', struct.pack('>i', b_ + 1), 'ObjectProperty')
+        else: struct.pack_into('>i', d, v, b_ + 1)
+        w.replace(a_, bytes(d))
+    struct.pack_into('>i', ld, at, new[-1] + 1)
+    w.replace(lvl, bytes(ld))
+    return len(new)

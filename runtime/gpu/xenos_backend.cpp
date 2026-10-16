@@ -25,6 +25,7 @@ namespace pos_log { void Start(); }      // ue3/pos_log.cpp (GOW3_LOG_POS)
 namespace mem_find { void Start(); }     // ue3/mem_find.cpp (GOW3_FIND)
 namespace profiler { void Start(); }     // ue3/profiler.cpp (GOW3_PROFILE)
 namespace prop_log { void Start(); }
+namespace kismet_trace { void Start(); }   // ue3/kismet_trace.cpp (GOW3_KISMET_TRACE)
 namespace campaign_chapters { void Start(); }     // ue3/campaign_chapters.cpp
 namespace navmesh_build { void Init(); }  // ue3/navmesh_build.cpp (GOW3_NAVMESH_BUILD)
 namespace play_area { void Start(); }     // ue3/play_area.cpp (GOW3_NO_PLAY_AREA_KILL)
@@ -207,6 +208,7 @@ void gpu::Initialize()
     profiler::Start();           // GOW3_PROFILE: sampling profiler of the guest threads, every 10 s
     campaign_chapters::Start();  // chapters 32+ declared in config: their maps in ChapterLevelNames (ue3/campaign_chapters.cpp)
     prop_log::Start();           // GOW3_LOG_PROPS: chosen properties and states of live objects, every 2 s
+    kismet_trace::Start();       // GOW3_KISMET_TRACE: which Kismet ops run (converted levels' scripts)
     navmesh_build::Init();       // GOW3_NAVMESH_BUILD: Gears 3's leftover navmesh generator passes on the Pylons
     play_area::Start();          // GOW3_NO_PLAY_AREA_KILL: no out-of-play-area kill (free-roam converted levels)
     SeedRegisters();

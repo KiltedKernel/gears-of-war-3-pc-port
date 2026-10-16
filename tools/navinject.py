@@ -30,7 +30,7 @@ def main():
         i = next((i for i, e in enumerate(p.exports) if p.path(i) == f'TheWorld.PersistentLevel.{py}'), None)
         if i is None: continue
         d = bytearray(p.export_data(i)); o, pr, end = levelinject.props_at(p, bytes(d), (26,))
-        d = levelinject.set_property(p, w, d, o, 'bDisabled', b'', 'BoolProperty')
+        d = levelinject.set_property(p, w, d, o, 'bDisabled', b'\x01', 'BoolProperty')
         w.replace(i, bytes(d))
         print(f'{py}: no walkable ground found from it: disabled')
     # cover slots of the package's own CoverLinks (after levelinject --cover: Gears 1's)

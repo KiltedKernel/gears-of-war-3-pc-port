@@ -67,7 +67,7 @@ def add_pylons(p, w, positions, radius, template=None):
         new.append(ref - 1)
     # the level: actors, navigation list, pylon list
     ld = bytearray(w.current(lvl))
-    L = cover.level_lists(p, bytes(ld))
+    L = cover.level_lists(p, bytes(ld), w)
     nav_end_at, pylon_end_at = L['nav_end'], L['pylon_end']
     def relink(at, prop):
         chain = [struct.unpack_from('>i', ld, at)[0] - 1] + new

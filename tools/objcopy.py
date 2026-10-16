@@ -436,7 +436,7 @@ class Copier:
         # factory writes Dom into holds him. So every SeqVar_Dom of the package is merged into that one (the others are
         # not created; references to them go to it): the opening's move order then reaches the Dom it spawned
         dom_vars = [i for i in exports if self.s.class_name(self.s.exports[i]['class']) == 'SeqVar_Dom']
-        canonical = self.factory_output_var(dom_vars) if len(dom_vars) > 1 else None
+        canonical = self.factory_output_var(dom_vars) if len(dom_vars) > 1 and not SQUAD_SLOTS else None
         aliases = [i for i in dom_vars if canonical is not None and i != canonical]
         as_player = self.player_vars(exports) if not os.environ.get('OBJCOPY_NO_RENAME') else set()
         for i in exports:
@@ -586,6 +586,7 @@ class Copier:
 LINK_ARRAYS = (('InputLinks', None), ('OutputLinks', 'Links'), ('VariableLinks', 'LinkedVariables'),
                ('EventLinks', 'LinkedEvents'))
 LINK_ALIAS = {('SeqAct_AIMoveToActor', 'finished'): 'reached goal', ('SeqAct_AIMoveToActor', 'destination'): 'move to',
+              ('SeqAct_WarCheckPoint', 'set active checkpoint'): 'save',
               ('SeqEvent_LevelLoaded', 'out'): 'loaded and visible',
               ('SeqEvent_LevelBeginning', 'out'): 'beginning of level'}
 
@@ -816,7 +817,51 @@ STREAMING = {'SeqAct_LevelStreaming': ('LevelName',), 'SeqAct_LevelVisibility': 
              'SeqAct_MultiLevelStreaming': ('Levels',), 'SeqAct_WaitForLevelsVisible': ('LevelNames',)}
 
 
+# A chapter of its own (tools/levelpkg.py) keeps the source's streaming: every source package is converted into a
+# package of its own named STREAMING_PREFIX + its name, so a level name of a built package is renamed (in each
+# action's LevelName, Levels[].LevelName, LevelNames) and the others are dropped from the action (a level not built:
+# Gears 1's next chapter in PrepareMapChange). STREAMING_BUILT: the source package names built (lower case).
+STREAMING_PREFIX = None
+STREAMING_BUILT = set()
+
+
+def rename_streaming(up, made):
+    s, w = up.c.s, up.w
+    n = 0
+    def rename(name_bytes):
+        old = up.wname(*struct.unpack('>ii', name_bytes))
+        return struct.pack('>ii', *w.name(STREAMING_PREFIX + old)) if old.lower() in STREAMING_BUILT else None
+    for i, ref in made.items():
+        cn = s.class_name(s.exports[i]['class'])
+        if cn not in STREAMING: continue
+        recs, end = parse828(w.current(ref - 1), 4, up.wname)
+        for r in recs:
+            if r[0] not in STREAMING[cn]: continue
+            if r[1] == 'NameProperty':
+                r[4] = rename(r[4]) or struct.pack('>ii', *w.name('None'))
+            elif r[0] == 'LevelNames':                 # array of names
+                cnt = struct.unpack_from('>i', r[4], 0)[0]
+                names = [rename(r[4][4 + 8 * k:12 + 8 * k]) for k in range(cnt)]
+                names = [x for x in names if x]
+                r[4] = struct.pack('>i', len(names)) + b''.join(names)
+            else:                                      # Levels: array of {LevelName, ...} structs
+                els = up.elements(r[4], up.wname)
+                keep = []
+                for e in els:
+                    ln = next((x for x in e if x[0] == 'LevelName'), None)
+                    if ln is None: continue
+                    nb = rename(ln[4])
+                    if nb is None: continue
+                    ln[4] = nb; keep.append(e)
+                r[4] = struct.pack('>i', len(keep)) + b''.join(up.enc(e) for e in keep)
+        d = w.current(ref - 1)
+        w.replace(ref - 1, d[:4] + up.enc(recs) + d[end:])
+        n += 1
+    return n
+
+
 def neutralize_streaming(up, made):
+    if STREAMING_PREFIX is not None: return rename_streaming(up, made)
     s, w = up.c.s, up.w
     n = 0
     for i, ref in made.items():
@@ -898,7 +943,7 @@ def restore_view_after_cutscenes(up, made):
 # Location + the conversion offset), then listed in Level.Actors. Classes needing data Gears 3 reads differently are
 # converted instead: a TriggerVolume (a brush Model + cached physics data) becomes a Trigger whose collision cylinder
 # covers the brush's bounds (touch events behave the same; the shape is approximate).
-ACTOR_CLASSES = set() if os.environ.get("OBJCOPY_NO_ACTORS") else {"Trigger", "TriggerVolume", "InterpActor", "Trigger_DoorInteraction", "Trigger_ButtonInteraction", "Note", "SkeletalMeshActor", "AmbientSoundSimple", "AmbientSoundNonLoop", "AmbientSound", "PathNode", "CameraActor"}
+ACTOR_CLASSES = set() if os.environ.get("OBJCOPY_NO_ACTORS") else {"Trigger", "TriggerVolume", "InterpActor", "Trigger_DoorInteraction", "Trigger_ButtonInteraction", "Note", "SkeletalMeshActor", "AmbientSoundSimple", "AmbientSoundNonLoop", "AmbientSound", "PathNode", "CameraActor", "PlayerStart"}
 # Gears 1's lights: their light is baked into the converted geometry (tools/lighting.py), but Gears 3 lights
 # characters (light environments) and cutscene actors from light actors: copied, lighting dynamic objects only
 LIGHT_CLASSES = {"PointLight", "SpotLight", "PointLightToggleable", "SpotLightToggleable", "PointLightMovable", "SpotLightMovable"}
@@ -916,6 +961,12 @@ COMPONENT_TAIL = {'StaticMeshComponent': bytes(4),
 def movers(src):
     """the level's InterpActors (doors, lifts...): copied whether or not Kismet refers to them"""
     return [i for i, e in enumerate(src.exports) if src.class_name(e['class']) == 'InterpActor'
+            and src.path(i).count('.') == 2 and src.path(i).startswith('TheWorld.PersistentLevel')]
+
+
+def player_starts(src):
+    """the level's PlayerStarts (a chapter of its own: the source persistent level's start is the chapter's)"""
+    return [i for i, e in enumerate(src.exports) if src.class_name(e['class']) == 'PlayerStart'
             and src.path(i).count('.') == 2 and src.path(i).startswith('TheWorld.PersistentLevel')]
 
 
@@ -1299,6 +1350,145 @@ if os.environ.get('OBJCOPY_CHARACTER_VARS'):          # (experiment: with SeqVar
     for _v in CHARACTER_VARS:
         CLASS_RENAME[_v] = 'SeqVar_Character'
         FIXUPS[_v] = character_var
+
+
+# ---- checkpoints ----
+# Gears 1's SeqAct_WarCheckPoint ("Set Active Checkpoint") has no outputs: what follows a checkpoint hangs on the
+# SeqEvt_CheckpointActivated of the same checkpoint actor (its Originator), which fires when the checkpoint is
+# activated, saved as well as loaded. Gears 3's SeqAct_Checkpoint ("Save") fires "Out" after saving, and
+# SeqEvent_CheckpointLoaded (the event's Gears 3 class) only on a load. So each event's targets are linked from the
+# "Out" of the checkpoint actions that activate its checkpoint as well (else, on a fresh start, the prison's
+# initialPlayerStuff never teleported the player to the cell: the player stayed at the stub map's start, the origin).
+def checkpoint_events(up, made):
+    import materialconv
+    c, s, w = up.c, up.c.s, up.w
+    def g1_props(i):
+        try: return {r[0]: r for r in materialconv.raw_props(s, s.export_data(i), 4)[0]}
+        except Exception: return {}
+    def var_values(i, link):
+        out = set()
+        a = g1_props(i)
+        if 'VariableLinks' not in a: return out
+        n = struct.unpack_from('>i', a['VariableLinks'][4], 0)[0]; o = 4
+        for _ in range(n):
+            el, o = materialconv.raw_props(s, a['VariableLinks'][4], o)
+            e = {x[0]: x for x in el}
+            if 'LinkedVariables' not in e: continue
+            m = struct.unpack_from('>i', e['LinkedVariables'][4], 0)[0]
+            for v in struct.unpack_from(f'>{m}i', e['LinkedVariables'][4], 4):
+                if v > 0:
+                    va = g1_props(v - 1)
+                    if 'ObjValue' in va: out.add(struct.unpack('>i', va['ObjValue'][4])[0])
+        return out
+    actions = [(i, ref) for i, ref in made.items() if s.class_name(s.exports[i]['class']) == 'SeqAct_WarCheckPoint']
+    events = [(i, ref) for i, ref in made.items() if s.class_name(s.exports[i]['class']) == 'SeqEvt_CheckpointActivated']
+    if not actions or not events: return 0
+    n = 0
+    for ei, eref in events:
+        ea = g1_props(ei)
+        origin = struct.unpack('>i', ea['Originator'][4])[0] if 'Originator' in ea else 0
+        mine = [(ai, aref) for ai, aref in actions if origin and origin in var_values(ai, 'Checkpoint')]
+        if not mine: mine = [(ai, aref) for ai, aref in actions if s.exports[ai]['outer'] == s.exports[ei]['outer']]
+        # the event's converted output links
+        erecs, _ = parse828(w.current(eref - 1), 4, up.wname)
+        links, k = b'', 0
+        for r_ in erecs:
+            if r_[0] != 'OutputLinks': continue
+            for e in up.elements(r_[4], up.wname):
+                lr = next((x for x in e if x[0] == 'Links'), None)
+                if lr is not None: links += lr[4][4:]; k += struct.unpack_from('>i', lr[4], 0)[0]
+        if not k: continue
+        for ai, aref in mine:
+            recs, end = parse828(w.current(aref - 1), 4, up.wname)
+            for r_ in recs:
+                if r_[0] != 'OutputLinks': continue
+                els = up.elements(r_[4], up.wname)
+                for e in els:
+                    if next((str_value(x[4]) for x in e if x[0] == 'LinkDesc'), '').lower() != 'out': continue
+                    lr = next((x for x in e if x[0] == 'Links'), None)
+                    if lr is None: e.append(['Links', 'ArrayProperty', 0, b'', struct.pack('>i', k) + links])
+                    else: lr[4] = struct.pack('>i', struct.unpack_from('>i', lr[4], 0)[0] + k) + lr[4][4:] + links
+                    n += 1
+                r_[4] = struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)
+            d = w.current(aref - 1)
+            w.replace(aref - 1, d[:4] + up.enc(recs) + d[end:])
+    return n
+
+
+# ---- the squad: Gears 3's player slots ----
+# Gears 3's campaign squad is four player slots (GearGameSP_Base.PlayerSlots), each a human or an AI: its Kismet
+# reaches a squad member with GearSeqVar_Player {PlayerIdx} (slot N's pawn; Gears 3's levels name them "Marcus",
+# "Dom", "P3", "P4" through SeqVar_Named), and spawns an AI squad member with an AI factory whose "Player Slot" is
+# the slot (SP_Nightmare_P's Squads: Dom's factory, Player Slot 2, Last Spawned -> "Dom"); a co-op partner takes that
+# slot instead. Gears 1's co-op squad is Marcus and Dom: its SeqVar_Dom (a lookup: the Dom pawn, in any package)
+# becomes GearSeqVar_Player slot 2, and a factory spawning Dom gets Player Slot 2. Unlike merging every Dom variable
+# into the one a factory fills (OBJCOPY_NO_SQUAD_SLOTS=1, the old way), this works across packages: Dom is spawned in
+# one sublevel and scripted in others.
+SQUAD_VARS = {'SeqVar_Dom': ('Dom', 2)}                 # Gears 1 variable class -> (name, player slot)
+SQUAD_PAWNS = {'Pawn_COGDom': 2}                        # a factory spawning this pawn class fills that slot
+
+
+def squad_var(c, props):
+    name, slot = SQUAD_VARS[c.s.class_name(c.s.exports[c.current_src]['class'])]
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in ('ObjValue', 'PlayerIdx', 'bAllPlayers', 'VarName')]
+    recs += [['bAllPlayers', 'BoolProperty', 0, b'', b'\x00'], ['PlayerIdx', 'IntProperty', 0, b'', struct.pack('>i', slot)],
+             ['VarName', 'NameProperty', 0, b'', struct.pack('>ii', *c.w.name(name))]]
+    return encode(c.w, recs)
+
+
+SQUAD_SLOTS = not os.environ.get('OBJCOPY_NO_SQUAD_SLOTS') and not os.environ.get('OBJCOPY_NO_RENAME')
+if SQUAD_SLOTS:
+    for _v in SQUAD_VARS:
+        CLASS_RENAME[_v] = 'GearSeqVar_Player'
+        FIXUPS[_v] = squad_var
+
+
+def squad_factories(up, made):
+    """every copied AI factory spawning a squad member (SQUAD_PAWNS) gets that player slot: a new SeqVar_Int on its
+    "Player Slot" variable link; returns the count"""
+    if not SQUAD_SLOTS: return 0
+    c, s, w = up.c, up.c.s, up.w
+    n = 0
+    for i, ref in made.items():
+        if s.class_name(s.exports[i]['class']) != 'SeqAct_AIFactory': continue
+        d = s.export_data(i)
+        slot = None
+        for k in range(0, len(d) - 3):
+            v = struct.unpack_from('>i', d, k)[0]
+            if -len(s.imports) <= v < 0 and s.imports[-v - 1]['class'] == 'Class' and s.imports[-v - 1]['name'] in SQUAD_PAWNS:
+                slot = SQUAD_PAWNS[s.imports[-v - 1]['name']]; break
+        if slot is None: continue
+        seq = struct.unpack_from('>i', w.exports[ref - 1], 8)[0]
+        var_cls = c.class_ref('SeqVar_Int')
+        if seq <= 0 or not var_cls: continue
+        parent = ['ParentSequence', 'ObjectProperty', 0, b'', struct.pack('>i', seq)]
+        var = w.add_export(var_cls, seq, c.unique_name('G1SquadSlot', 0), b'', flags=0x0007000100000000)
+        w.replace(var - 1, struct.pack('>i', -1) + up.enc([['IntValue', 'IntProperty', 0, b'', struct.pack('>i', slot)], parent]))
+        recs, end = parse828(w.current(ref - 1), 4, up.wname)
+        linked = False
+        for r in recs:
+            if r[0] != 'VariableLinks': continue
+            els = up.elements(r[4], up.wname)
+            for e in els:
+                if next((str_value(x[4]) for x in e if x[0] == 'LinkDesc'), '').lower() != 'player slot': continue
+                lv = next((x for x in e if x[0] == 'LinkedVariables'), None)
+                if lv is None: e.append(['LinkedVariables', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, var)])
+                else: lv[4] = struct.pack('>ii', 1, var)
+                linked = True
+            r[4] = struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)
+        if not linked: continue
+        dd = w.current(ref - 1)
+        w.replace(ref - 1, dd[:4] + up.enc(recs) + dd[end:])
+        sd = w.current(seq - 1)
+        srecs, send = parse828(sd, 4, up.wname)
+        for r in srecs:
+            if r[0] == 'SequenceObjects':
+                r[4] = struct.pack('>i', struct.unpack_from('>i', r[4], 0)[0] + 1) + r[4][4:] + struct.pack('>i', var)
+        w.replace(seq - 1, sd[:4] + up.enc(srecs) + sd[send:])
+        n += 1
+    return n
 
 
 # ---- collision changes ----

@@ -1,6 +1,6 @@
 // GOW3_LOG_PROPS (development): every 2 s, log chosen properties and the current UnrealScript state of every live
 // instance of chosen classes, through UE3 reflection. Format: "Class:Prop,Prop;Class2:Prop" (subclasses included);
-// each value is shown as int/float (bools as 0/1); "Prop#" shows an array's count, "Prop+N" the dword N bytes in. The state: a State object referenced from the object's
+// each value is shown as int/float (bools as 0/1; "Prop@" an object reference by name); "Prop#" shows an array's count, "Prop+N" the dword N bytes in. The state: a State object referenced from the object's
 // StateFrame (UObject +20).
 // GOW3_WATCH_PROP=Class:Prop arms a write watchpoint (watch.cpp) on that property of the first live instance: each
 // hit names the guest function writing it.
@@ -87,14 +87,19 @@ void Start()
                 for (uint32_t o : ue3::FindInstancesOf(cls))
                 {
                     const uint32_t oc = ue3::ClassOf(o);
-                    std::string line = fmt::format("props: {} ({}) in {} state {}", ue3::ObjectName(o), ue3::ObjectName(oc),
-                                                   ue3::ObjectName(ue3::Read32(o + 40)), StateOf(o));
+                    // the package: the outermost outer (which level's copy: names repeat across levels)
+                    uint32_t top = o;
+                    for (int k = 0; k < 16 && ue3::Read32(top + 40); k++) top = ue3::Read32(top + 40);
+                    std::string line = fmt::format("props: {} ({}) in {} [{}] state {}", ue3::ObjectName(o), ue3::ObjectName(oc),
+                                                   ue3::ObjectName(ue3::Read32(o + 40)), ue3::ObjectName(top), StateOf(o));
                     for (auto& p0 : w.props)
                     {
                         // "Name#": a dynamic array's element count (the int after its data pointer)
                         // "Name+N": the dword N bytes into the property (a struct's later field: Rotation+4 = yaw)
+                        // "Name@": an object reference, shown by name (outer.name: which package's copy it is)
                         const bool count = !p0.empty() && p0.back() == '#';
-                        std::string p = count ? p0.substr(0, p0.size() - 1) : p0;
+                        const bool ref = !p0.empty() && p0.back() == '@';
+                        std::string p = (count || ref) ? p0.substr(0, p0.size() - 1) : p0;
                         int extra = 0;
                         if (const size_t plus = p.find('+'); plus != std::string::npos) { extra = atoi(p.c_str() + plus + 1); p = p.substr(0, plus); }
                         int off = ue3::PropertyOffset(oc, p.c_str());
@@ -102,6 +107,11 @@ void Start()
                         if (count && off >= 0) { line += fmt::format(" {}={}", p0, int32_t(ue3::Read32(o + off + 4))); continue; }
                         if (off < 0) { line += " " + p + "=?"; continue; }
                         const uint32_t raw = ue3::Read32(o + off);
+                        if (ref)
+                        {
+                            line += fmt::format(" {}={}", p, raw ? ue3::ObjectName(ue3::Read32(raw + 40)) + "." + ue3::ObjectName(raw) : "None");
+                            continue;
+                        }
                         if (const uint32_t mask = ue3::BoolMask(oc, p.c_str())) line += fmt::format(" {}={}", p, (raw & mask) ? 1 : 0);
                         else line += fmt::format(" {}={}/{:.3f}", p, int32_t(raw), ue3::ReadFloat(o + off));
                     }

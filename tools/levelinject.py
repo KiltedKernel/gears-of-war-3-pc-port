@@ -56,7 +56,8 @@ def props_at(p, d, starts=(4, 8, 32, 12, 16, 20, 24, 28, 36, 40)):
     for o in starts:
         try:
             pr, end = p.properties(d, o)
-            if pr and all(n in p.names for n, *_ in pr): return o, pr, end
+            # an empty list only at a single, known offset (else any None-looking word would match)
+            if (pr or len(starts) == 1) and all(n in p.names for n, *_ in pr): return o, pr, end
         except Exception:
             pass
     raise ValueError('no property list found')
@@ -177,8 +178,22 @@ def main():
                     "BSP's floors (a start inside the new floor kills the pawn at spawn)")
     ap.add_argument('--materials', default=None, help='a Gears 3 MaterialInstanceConstant (path substring) to clone '
                     'per source material, with its Diffuse_01/Normal_01/Specular_01 set to the converted textures')
+    ap.add_argument('--kit', default=None, help="a chapter of its own: the Gears 3 package (the chapter's persistent level, "
+                    "loaded first) holding the material instance templates (--materials, the skeletal one): converted "
+                    "materials are child instances of them, through imports (tools/levelpkg.py)")
+    ap.add_argument('--content', default=None, help="a chapter of its own: the Gears 3 packages (comma-separated) whose "
+                    "GearGameContent classes are loaded with it (AI pawn classes; default: by the target's map name)")
+    ap.add_argument('--streaming-prefix', default=None, help="a chapter of its own: level names in streaming actions get "
+                    "this prefix (the converted packages' names) when in --streaming-built, else are dropped")
+    ap.add_argument('--streaming-built', default='', help='with --streaming-prefix: the source package names built')
+    ap.add_argument('--player-starts', action='store_true', help="with --kismet: the sources' PlayerStarts copied too (a "
+                    "chapter's persistent level: the campaign starts there)")
     args = ap.parse_args()
     offset = np.array([float(x) for x in args.offset.split(',')])
+    if args.streaming_prefix is not None:
+        import objcopy
+        objcopy.STREAMING_PREFIX = args.streaming_prefix
+        objcopy.STREAMING_BUILT = {x.strip().lower() for x in args.streaming_built.split(',') if x.strip()}
 
     # one or more source packages (a Gears 1 level and its streamed sublevels share world coordinates): actors,
     # meshes and materials are keyed by (source index, export index)
@@ -247,21 +262,30 @@ def main():
     p3 = upk.Package(args.target)
     upk.E = '>'
     w = upkwrite.Rewriter(p3)
+    p3.names = w.names                                 # names the conversion adds read back too (one shared list)
     cls = lambda i: p3.class_name(p3.exports[i]['class'])
     # template component: no lightmap (4-byte native tail), with Scale3D and VisibilityId properties
-    tcomp = None
+    tcomp = fallback = None
     for i, e in enumerate(p3.exports):
         if cls(i) != 'StaticMeshComponent' or not p3.path(i).startswith('TheWorld'): continue
         d = p3.export_data(i)
         try: o, pr, end = props_at(p3, d, (8,))
         except ValueError: continue                    # class defaults and templates are laid out differently
         names = [n for n, *_ in pr]
-        if 'Scale3D' not in names or 'StaticMesh' not in names: continue
+        if 'StaticMesh' not in names: continue
+        if 'Scale3D' not in names:                     # (scale 1 is not written: given one below)
+            if fallback is None and not args.template and p3.path(i).count('.') == 3 and 'VisibilityId' in names: fallback = i
+            continue
         mesh = {n: v for n, t, k, v in pr}['StaticMesh']
         if args.template:                              # its lightmap is dropped below
             if mesh > 0 and args.template.lower() in p3.path(mesh - 1).lower(): tcomp = i; break
         elif d[end:] == bytes(4):
             tcomp = i; break
+        elif fallback is None:
+            fallback = i
+    # a target whose components all have light maps (a lean section template): the first one (each new component
+    # gets its own light map tail in place of the template's)
+    if tcomp is None: tcomp = fallback
     if tcomp is None: raise SystemExit('no template component without lightmap (with Scale3D) in the target')
     td = p3.export_data(tcomp); to, tpr, tend = props_at(p3, td, (8,))
     if not args.no_collision:                          # pawns collide: BlockNonZeroExtent back to its default (true)
@@ -275,6 +299,9 @@ def main():
     # template's IrrelevantLights (GUIDs of the lights that do not affect the original) do not apply here
     for prop in ('Materials', 'IrrelevantLights'):
         td = remove_property(p3, td, to, prop); to, tpr, tend = props_at(p3, td, (8,))
+    if 'Scale3D' not in [n for n, *_ in tpr]:          # every new component's scale is written into this tag
+        td = bytes(set_property(p3, w, bytearray(td), to, 'Scale3D', struct.pack('>fff', 1, 1, 1), 'StructProperty', 'Vector'))
+        to, tpr, tend = props_at(p3, td, (8,))
     tmesh = {n: v for n, t, k, v in tpr}['StaticMesh'] - 1
     coll = next(i for i in range(len(p3.exports)) if cls(i) == 'StaticMeshCollectionActor')
     print('template component', p3.path(tcomp), 'mesh', p3.path(tmesh), 'collection', p3.path(coll))
@@ -284,18 +311,36 @@ def main():
 
     # materials (Gears 1): textures converted once, one material instance per source material
     mic_of, mic_refs = {}, {}                          # (source, material ref) -> converted MIC / its texture refs
+    # a chapter of its own (--kit): the material templates are the kit's (the chapter's persistent level); the
+    # converted materials are child instances of them, imported (materialconv.child_mic), and the converted textures
+    # take a texture of this package with the same compression and LOD group as their property template
+    pk = upk.Package(args.kit) if args.kit else None
+    upk.E = '>'
+    kit_imports = {}
     if args.materials and src.version == 374:
-        tmic = next(i for i in range(len(p3.exports)) if cls(i) == 'MaterialInstanceConstant' and args.materials.lower() in p3.path(i).lower())
-        md = p3.export_data(tmic); mo, mpr, mend = props_at(p3, md)
+        tp = pk or p3                                  # the package holding the template instance
+        tmic = next(i for i in range(len(tp.exports)) if tp.class_name(tp.exports[i]['class']) == 'MaterialInstanceConstant' and args.materials.lower() in tp.path(i).lower())
+        md = tp.export_data(tmic); mo, mpr, mend = props_at(tp, md)
         slots = {}
-        v, size = tag_value_offset(p3, md, mo, 'TextureParameterValues')
+        v, size = tag_value_offset(tp, md, mo, 'TextureParameterValues')
         n_el = struct.unpack_from('>i', md, v)[0]; e_ = v + 4
         for _ in range(n_el):
-            recs, e_ = materialconv.raw_props(p3, md, e_)
+            recs, e_ = materialconv.raw_props(tp, md, e_)
             r = {x[0]: x[4] for x in recs}
-            slots[p3.fname(*struct.unpack('>ii', r['ParameterName']))] = struct.unpack('>i', r['ParameterValue'])[0] - 1
+            slots[tp.fname(*struct.unpack('>ii', r['ParameterName']))] = struct.unpack('>i', r['ParameterValue'])[0] - 1
         tex_template = {'diffuse': slots.get('Diffuse_01'), 'normal': slots.get('Normal_01'), 'specular': slots.get('Specular_01')}
-        mflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tmic]['entry'] + 24)[0]
+        mflags_ = struct.unpack_from('>Q', tp.data, tp.exports[tmic]['entry'] + 24)[0]
+        if pk is not None:
+            local_tex = [i for i in range(len(p3.exports)) if cls(i) == 'Texture2D' and not p3.exports[i]['name'].startswith('Default__')]
+            settings3 = {i: materialconv.texture_settings(p3, i) for i in local_tex}
+            for slot, ti in list(tex_template.items()):
+                if ti is None or ti < 0: continue
+                want = materialconv.texture_settings(pk, ti)
+                tex_template[slot] = next((i for i in local_tex if settings3[i] == want), local_tex[0] if local_tex else None)
+            mic_cls = next((p3.exports[i]['class'] for i in range(len(p3.exports)) if cls(i) == 'MaterialInstanceConstant'), None)
+            kit_parent = materialconv.import_object(w, p3, pk, tmic, kit_imports)
+            print(f'kit: material template {pk.path(tmic)} (imported), texture templates '
+                  f"{', '.join(f'{k} {p3.path(v)}' for k, v in tex_template.items() if v is not None)}")
         tex_ref = {}
         mats = set()                                   # (source index, material export index)
         for (si, mi), sk in skel_meshes.items():
@@ -336,14 +381,18 @@ def main():
                     tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1], 0), data, flags=tflags_, fixups=fix)
                 refs[{'diffuse': 'Diffuse_01', 'normal': 'Normal_01', 'specular': 'Specular_01'}[slot]] = tex_ref[tkey]
-            data = materialconv.mic_828(w, p3, tmic, refs)
-            mic_of[(si, gm + 1)] = by_name[name] = w.add_export(p3.exports[tmic]['class'], 0, ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_)
+            if pk is not None:
+                data = materialconv.child_mic(w, p3, pk, tmic, kit_parent, refs)
+                mic_of[(si, gm + 1)] = by_name[name] = w.add_export(mic_cls, 0, ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_)
+            else:
+                data = materialconv.mic_828(w, p3, tmic, refs)
+                mic_of[(si, gm + 1)] = by_name[name] = w.add_export(p3.exports[tmic]['class'], 0, ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_)
             mic_refs[(si, gm + 1)] = mic_refs[name] = refs
         for k, v in import_mats.items():
             if v in mic_of: mic_of[k] = mic_of[v]
             if v in unlit_mats: unlit_mats.add(k)
         if import_mats: print(f'{len(import_mats)} imported materials, {sum(1 for k in import_mats if k in mic_of)} converted')
-        print(f'{len(mic_of)} materials, {len(tex_ref)} textures converted (template {p3.path(tmic)})')
+        print(f'{len(mic_of)} materials, {len(tex_ref)} textures converted (template {tp.path(tmic)})')
     # converted meshes have no BodySetup (simple collision): line and box checks must use the triangles (the kDOP
     # tree), or a simple-collision check finds nothing (UseSimpleLineCollision / UseSimpleBoxCollision off)
     def per_poly_collision(data):
@@ -376,22 +425,31 @@ def main():
         # material): the converted textures in a clone of a skeletal-capable MIC of the target (Diffuse / Normal /
         # Specular parameters; OverallEmissive 0: its emissive texture would glow)
         skel_tmic = None
-        for i_ in range(len(p3.exports)):
-            if cls(i_) != 'SkeletalMesh' or p3.exports[i_]['name'].startswith('Default__'): continue
-            for r_ in skelmesh.read_828(p3, i_)['materials']:
-                if r_ > 0 and skel_tmic is None and cls(r_ - 1) == 'MaterialInstanceConstant'                         and {'Diffuse', 'Normal', 'Specular'} <= set(materialconv.mic_texture_params(p3, r_ - 1)):
+        sp_ = pk or p3                                 # the kit's skeletal material templates in a chapter of its own
+        scls = lambda i: sp_.class_name(sp_.exports[i]['class'])
+        for i_ in range(len(sp_.exports)):
+            if scls(i_) != 'SkeletalMesh' or sp_.exports[i_]['name'].startswith('Default__'): continue
+            try: mats__ = skelmesh.read_828(sp_, i_)['materials']
+            except Exception: continue
+            for r_ in mats__:
+                if r_ > 0 and skel_tmic is None and scls(r_ - 1) == 'MaterialInstanceConstant'                         and {'Diffuse', 'Normal', 'Specular'} <= set(materialconv.mic_texture_params(sp_, r_ - 1)):
                     skel_tmic = r_ - 1
+        skel_parent = materialconv.import_object(w, p3, pk, skel_tmic, kit_imports) if pk is not None and skel_tmic is not None else None
         skel_cache = {}
         def skel_mic(si_, x_):
             key = srcs[si_].path(x_ - 1)
             if skel_tmic is None or key not in mic_refs: return mic_of.get((si_, x_), tmat)
             if key not in skel_cache:
                 refs_ = {{'Diffuse_01': 'Diffuse', 'Normal_01': 'Normal', 'Specular_01': 'Specular'}[k]: v for k, v in mic_refs[key].items()}
-                data_ = materialconv.mic_828(w, p3, skel_tmic, refs_, {'OverallEmissive': 0.0})
-                fl_ = struct.unpack_from('>Q', p3.data, p3.exports[skel_tmic]['entry'] + 24)[0]
-                skel_cache[key] = w.add_export(p3.exports[skel_tmic]['class'], 0, ('Trilogy_Skel_' + key.split('.')[-1], 0), data_, flags=fl_)
+                fl_ = struct.unpack_from('>Q', sp_.data, sp_.exports[skel_tmic]['entry'] + 24)[0]
+                if pk is not None:
+                    data_ = materialconv.child_mic(w, p3, pk, skel_tmic, skel_parent, refs_, {'OverallEmissive': 0.0})
+                    skel_cache[key] = w.add_export(mic_cls, 0, ('Trilogy_Skel_' + key.split('.')[-1], 0), data_, flags=fl_)
+                else:
+                    data_ = materialconv.mic_828(w, p3, skel_tmic, refs_, {'OverallEmissive': 0.0})
+                    skel_cache[key] = w.add_export(p3.exports[skel_tmic]['class'], 0, ('Trilogy_Skel_' + key.split('.')[-1], 0), data_, flags=fl_)
             return skel_cache[key]
-        print('skeletal material template:', p3.path(skel_tmic) if skel_tmic is not None else None)
+        print('skeletal material template:', sp_.path(skel_tmic) if skel_tmic is not None else None, '(kit)' if pk is not None else '')
         skflags = struct.unpack_from('>Q', p3.data, p3.exports[tsk]['entry'] + 24)[0]
         for (si, mi), sk in skel_meshes.items():
             path = srcs[si].path(mi)
@@ -592,7 +650,7 @@ def main():
             w.replace(ti, bytes(d))
         lvl = next(i for i in range(len(p3.exports)) if cls(i) == 'Level' and p3.path(i) == 'TheWorld.PersistentLevel')
         ld = bytearray(p3.export_data(lvl))
-        L = cover.level_lists(p3, bytes(ld))
+        L = cover.level_lists(p3, bytes(ld), w)
         link_refs, pairs_at, pairs = L['refs'], L['pairs_at'], L['pairs']
         old_pos = {g[0]: B[k] for k, g in enumerate(g3)}
         flat = [(r, j, q) for r, ti in enumerate(link_refs) for j, q in enumerate(new_slots.get(ti, []))]
@@ -682,7 +740,7 @@ def main():
     # Kismet (and the actors it refers to) last: the steps above rewrite the Level from its original data, which
     # dropped the new actors from Level.Actors
     if args.kismet and src.version == 374:
-        kismet(srcs, [x for x in args.source.split(',') if x], p3, w, cls, args.offset, new_mesh, cover_map)
+        kismet(srcs, [x for x in args.source.split(',') if x], p3, w, cls, args.offset, new_mesh, cover_map, args.content, args.g3cooked, args.player_starts)
     img = w.build()
     out = os.path.join(args.mods, 'GearGame', 'CookedXbox360')
     os.makedirs(out, exist_ok=True)
@@ -697,11 +755,11 @@ def main():
           f'{(len(qd) - qend) // 64} matrices; {len(q.exports)} exports')
 
 
-def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_map=None):
+def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_map=None, content_names=None, g3cooked=None, with_starts=False):
     """every source's Main_Sequence (and all under it) into the target, a subsequence of the target's Main_Sequence"""
     import objcopy, collections
     g1dir = os.path.dirname(os.path.abspath(names[0]))
-    g3dir = os.path.dirname(os.path.abspath(p3.filename))
+    g3dir = g3cooked or os.path.dirname(os.path.abspath(p3.filename))   # Gears 3's script and content packages
     g1pkgs = [upk.Package(os.path.join(g1dir, f)) for f in ('Core.xxx', 'Engine.xxx', 'GameFramework.xxx', 'WarfareGame.xxx') if os.path.isfile(os.path.join(g1dir, f))]
     types = objcopy.property_types(g1pkgs)
     script1 = objcopy.Script3(g1pkgs)                  # (Gears 1's enums, read the same way)
@@ -709,7 +767,13 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
     # package (a Horde/multiplayer slot: GEARGAMEHORDE_SF)
     available = set()
     tname = os.path.splitext(os.path.basename(p3.filename))[0]
-    if tname.upper().startswith('SP_'):                # a campaign map: the content of all its packages (SP_<Map>_*)
+    if content_names:                                  # a chapter of its own: the packages it loads (levelpkg)
+        content = []
+        for n_ in content_names.split(','):
+            n_ = n_.strip()
+            f_ = n_ if os.path.isfile(n_) else os.path.join(g3dir, n_ if n_.lower().endswith('.xxx') else n_ + '.xxx')
+            content.append(upk.Package(f_, tables_only=True))
+    elif tname.upper().startswith('SP_'):              # a campaign map: the content of all its packages (SP_<Map>_*)
         prefix = '_'.join(tname.split('_')[:2]).upper() + '_'
         content = [upk.Package(os.path.join(g3dir, f), tables_only=True) for f in os.listdir(g3dir)
                    if f.upper().startswith(prefix) and f.lower().endswith('.xxx') and 'LOC_' not in f.upper()]
@@ -745,7 +809,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
         # the actors this Kismet refers to (triggers...): before it, so its references resolve to them
         new_actors = []
         lights_ = [] if os.environ.get('LEVELINJECT_NO_LIGHTS') else objcopy.lights(sp)   # (the level's lights, for characters)
-        wanted = objcopy.kismet_actors(sp, todo, objcopy.movers(sp) + objcopy.skeletal_actors(sp) + objcopy.sound_actors(sp) + lights_)
+        starts_ = objcopy.player_starts(sp) if with_starts else []
+        wanted = objcopy.kismet_actors(sp, todo, objcopy.movers(sp) + objcopy.skeletal_actors(sp) + objcopy.sound_actors(sp) + lights_ + starts_)
         copied = []
         for ai in wanted:
             cn = sp.class_name(sp.exports[ai]['class'])
@@ -761,6 +826,11 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
         for ai in objcopy.collision_enabled_by_script(sp) & set(made_a):    # off until the script turns it on
             if made_a[ai]: objcopy.collision_off(c, made_a[ai]); stats['actors: collision off until scripted'] += 1
         objcopy.add_to_level(p3, w, level3, new_actors)
+        # navigation points among them (player starts, AI spawn points) join the level's navigation point list
+        nav_new = [made_a[ai] - 1 for ai in copied if made_a.get(ai) and sp.class_name(sp.exports[ai]['class']) in ('PlayerStart', 'PathNode')]
+        if nav_new:
+            import cover
+            stats['navigation points listed'] += cover.append_nav_points(p3, w, nav_new)
         tag = os.path.splitext(os.path.basename(fname))[0]
         made = c.copy(todo, {level1: level3 + 1}, rename={main1: f'G1_{tag}'}) if todo else {}
         stats['objects'] += len(made); stats['dropped (no Gears 3 class)'] += len(todo) - len(made)
@@ -769,6 +839,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
             for k, v in up.run(made).items(): stats[k] += v
             stats['streaming actions emptied'] += objcopy.neutralize_streaming(up, made)
             stats['cutscenes: view restored after'] += objcopy.restore_view_after_cutscenes(up, made)
+            stats['squad factories (player slot)'] += objcopy.squad_factories(up, made)
+            stats['checkpoint events also on save'] += objcopy.checkpoint_events(up, made)
         for i in todo:
             if i not in made: stats['missing: ' + sp.class_name(sp.exports[i]['class'])] += 1
         for k, v in c.unconvertible.items(): stats['unconvertible: ' + k] += v
@@ -794,7 +866,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
     if unconv: print('kismet: dropped, data not convertible:', ', '.join(f'{k} {v}' for k, v in unconv))
     top_missing = sorted(((k, v) for k, v in stats.items() if k.startswith('missing')), key=lambda kv: -kv[1])[:8]
     print(f"kismet: links rebuilt from Gears 3's classes on {stats['ops upgraded']} ops, {stats['links kept from Gears 1']} Gears 1 "
-          f"links without a Gears 3 counterpart kept; {stats['streaming actions emptied']} level streaming/visibility actions emptied")
+          f"links without a Gears 3 counterpart kept; {stats['streaming actions emptied']} level streaming/visibility actions "
+          f"{'renamed' if objcopy.STREAMING_PREFIX is not None else 'emptied'}; {stats['squad factories (player slot)']} squad factories")
     print(f"kismet: {len(added)} sequences, {stats['objects']} objects copied, {stats['dropped (no Gears 3 class)']} without a "
           f"Gears 3 class: {', '.join(f'{k[9:]} {v}' for k, v in top_missing)}")
 

@@ -216,3 +216,87 @@ def mic_texture_params(p, i):
         recs, e = raw_props(p, d, e)
         out += [p.fname(*struct.unpack('>ii', r[4])) for r in recs if r[0] == 'ParameterName']
     return out
+
+
+# ---- a chapter of its own: materials as child instances of a kit's (tools/levelpkg.py) ----
+
+def import_object(w, p3, pk, index, cache):
+    """an import ref in the package being written (w, read as p3) of export `index` of package pk (the kit): the
+    chain of its outers as Package imports, then the object (its class from pk's import of it). At load the game
+    resolves it to the copy the kit (loaded first) carries: cooked objects keep their original paths."""
+    chain = []
+    i = index
+    while i >= 0:
+        chain.append(i)
+        i = pk.exports[i]['outer'] - 1
+    outer = 0
+    for k in reversed(chain):
+        e = pk.exports[k]
+        cref = e['class']
+        if cref == 0: cls, cpkg = 'Class', 'Core'
+        elif cref < 0:
+            im = pk.imports[-cref - 1]
+            cls = im['name']
+            o = im['outer']
+            cpkg = pk.imports[-o - 1]['name'] if o < 0 else 'Engine'
+        else: cls, cpkg = pk.exports[cref - 1]['name'], 'Engine'
+        key = (cpkg, cls, outer, e['name'])
+        if key not in cache:
+            existing = next((-n - 1 for n, im in enumerate(p3.imports) if im['class'] == cls and im['outer'] == outer
+                             and im['name'] == e['name']), None)
+            if existing is None:
+                ni, nn = struct.unpack_from('>ii', pk.data, e['entry'] + 12)      # the export's raw FName
+                existing = w.add_import(cpkg, cls, outer, pk.names[ni], nn)
+            cache[key] = existing
+        outer = cache[key]
+    return outer
+
+
+def child_mic(w, p3, pk, kit_mic, parent_ref, textures, scalars=None):
+    """serial data for a new MaterialInstanceConstant whose Parent is kit_mic (an export of the kit pk, imported as
+    parent_ref): its texture parameters set to textures ({'Diffuse_01': ref, ...}, refs in w), scalars where the kit
+    instance has them. Written from properties only: no static permutation of its own, so the game uses the
+    parent's (compiled into the kit's shader cache); each parameter keeps the kit's ExpressionGUID."""
+    d = pk.export_data(kit_mic)
+    o, pr, end = levelinject.props_at(pk, d)
+    def elements(prop):
+        v, size = levelinject.tag_value_offset(pk, d, o, prop)
+        if v is None: return []
+        out, e = [], v + 4
+        for _ in range(struct.unpack_from('>i', d, v)[0]):
+            recs, e = raw_props(pk, d, e)
+            out.append(recs)
+        return out
+    def rebuild(recs, value_for):
+        """an element re-made with w's names; ParameterValue from value_for(name) (None: the element is left out)"""
+        pname = next((pk.fname(*struct.unpack('>ii', r[4])) for r in recs if r[0] == 'ParameterName'), '')
+        value = value_for(pname)
+        if value is None: return None
+        out = []
+        for name, typ, index, extra, val in recs:
+            if extra: extra = struct.pack('>ii', *w.name(pk.fname(*struct.unpack('>ii', extra))))
+            if name == 'ParameterName': val = struct.pack('>ii', *w.name(pname))
+            elif name == 'ParameterValue': val = value
+            out.append([name, typ, index, extra, val])
+        return encode_props(w, out)
+    props = [['Parent', 'ObjectProperty', 0, b'', struct.pack('>i', parent_ref)]]
+    tex = [x for x in (rebuild(e, lambda n: struct.pack('>i', textures[n]) if n in textures else None)
+                       for e in elements('TextureParameterValues')) if x is not None]
+    if tex: props.append(['TextureParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(tex)) + b''.join(tex)])
+    if scalars:
+        sc = [x for x in (rebuild(e, lambda n: struct.pack('>f', scalars[n]) if n in scalars else None)
+                          for e in elements('ScalarParameterValues')) if x is not None]
+        if sc: props.append(['ScalarParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(sc)) + b''.join(sc)])
+    return d[:o] + encode_props(w, props)
+
+
+def texture_settings(p, i):
+    """(CompressionSettings, LODGroup) of a Gears 3 Texture2D export, by name"""
+    d = p.export_data(i)
+    try: recs, _ = raw_props(p, d, 4)
+    except Exception: return None, None
+    a = {r[0]: r for r in recs}
+    def enum(n):
+        r = a.get(n)
+        return p.fname(*struct.unpack('>ii', r[4])) if r is not None and len(r[4]) == 8 else None
+    return enum('CompressionSettings'), enum('LODGroup')

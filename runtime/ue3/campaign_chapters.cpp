@@ -98,11 +98,13 @@ namespace
     {
         ReadConfig();
         if (g_chapters.empty()) return;
-        while (!ue3::Init()) std::this_thread::sleep_for(std::chrono::seconds(2));
-        for (int tries = 0; tries < 300 && !g_types; tries++)
+        // polled closely: a chapter URL on the command line (GOW3_COMMAND_LINE) reads the table seconds after
+        // GearGame.xxx has loaded, and a table filled later sends that boot nowhere
+        while (!ue3::Init()) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        for (int tries = 0; tries < 6000 && !g_types; tries++)
         {
             g_types = ue3::FindObject("Default__GearTypes");
-            if (!g_types) std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (!g_types) std::this_thread::sleep_for(std::chrono::milliseconds(50));
         }
         if (!g_types) LOGN_WARNING("campaign chapters: Default__GearTypes not found");
     }

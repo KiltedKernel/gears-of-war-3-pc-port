@@ -34,6 +34,7 @@ class Rewriter:
         for k, e in enumerate(pkg.exports):
             end = pkg.exports[k + 1]['entry'] if k + 1 < len(pkg.exports) else pkg.depends_offset
             self.exports.append(bytearray(d[e['entry']:end]))
+        self.guid = None                                      # 16 bytes: a new package GUID (a clone under another name)
         self.appended = {}                                    # export index -> data (the last replacement; insertion order)
         self.fixups = {}                                      # export index -> [(field offset, data offset)]
 
@@ -43,9 +44,10 @@ class Rewriter:
             self.names.append(s); self.name_flags.append(bytes.fromhex('0007001000000000')); self.name_bytes.append(None)
         return self.names.index(s), number
 
-    def add_import(self, class_package, class_name, outer, object_name):
+    def add_import(self, class_package, class_name, outer, object_name, number=0):
+        """a new import (object_name with its FName number: Foo_3 is Foo, number 4); returns its ref"""
         cp, cn, on = self.name(class_package), self.name(class_name), self.name(object_name)
-        self.imports.append(struct.pack('>7i', cp[0], 0, cn[0], 0, outer, on[0], on[1]))
+        self.imports.append(struct.pack('>7i', cp[0], 0, cn[0], 0, outer, on[0], number))
         return -len(self.imports)
 
     def add_export(self, cls, outer, name, data, flags=0x000F0004, archetype=0, super_=0, fixups=()):
@@ -95,6 +97,7 @@ class Rewriter:
         guid_off = len(img)
         put(so, len(self.names), name_off, len(self.exports), exp_off, len(self.imports), imp_off, dep_off)
         put(so + 28, guid_off, 0, 0, 0)                       # ImportExportGuidsOffset, counts, ThumbnailTableOffset
+        if self.guid is not None: img[so + 44:so + 60] = self.guid   # the package GUID (then the generations)
         # the newest generation records the export and name counts
         go = so + 28 + 16 + 16
         gens = struct.unpack_from('>i', img, go)[0]

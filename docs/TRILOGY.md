@@ -164,10 +164,31 @@ To start a new chapter's recipe:
 
 ## Roadmap
 
-1. **The prison, end to end**: every section converts (done), navmesh for every region, the first enemies (the Drone
-   carrier: done), the scripted fights, Gears 1's chapter end (to Gears 3's chapter end screen).
-2. **Act 1, then the rest of Gears 1**: one recipe per chapter, chapters 32 and up in order.
-3. **Gears of War 2**: the same tools on version 575 packages; Baird and Gus as squad slots 3 and 4.
-4. **In the launcher**: a Trilogy page that finds the Gears 1 / 2 discs and builds the chapters.
-5. **Closer to the originals**: the classic Drone (Horde's cooked class, loaded by the runtime), Gears 1's own
-   character models on Gears 3's characters, FaceFX, translucent materials, music.
+The deliverables, in order (each comes only after the one before it is complete):
+
+**A. The trilogy mod**: Gears of War 1 and 2's campaigns playable start to finish in Gears 3's engine and sandbox, in
+single player and co-op. It keeps those games' encounters and sandbox: no weapons or enemies Gears 1 or 2 did not
+have there. Where Gears 3 has a higher-quality version of a Gears 1 / 2 asset, that version replaces the original:
+above all the characters (Gears 1 and 2's Marcus become Gears 3's classic Marcus, likewise Dom, Cole, Baird and the
+rest), in play and in cutscenes.
+1. **The prison, end to end**: every section converts (done), navmesh for every region (four regions), the first
+   enemies (the Drone carrier: done), the scripted fights, Gears 1's chapter end (done: chapter complete, then the
+   main menu until a next chapter exists).
+2. **Characters from Gears 3**: the squad already plays as Gears 3 pawns (Marcus slot 1, Dom slot 2); cutscenes
+   still use Gears 1's skeletal meshes. Next: Gears 3's classic skins (its "G2" / classic character content) on the
+   squad pawns, and Gears 3 meshes in place of Gears 1's in Matinees (the skeletons differ: animations retargeted or
+   the cutscene's characters played by Gears 3 pawns).
+3. **Act 1, then the rest of Gears 1**: one recipe per chapter, chapters 32 and up in order, each leading to the next.
+4. **Gears of War 2**: the converter on version 575 packages; Baird and Gus as squad slots 3 and 4.
+5. **In the launcher**: a Trilogy page that finds the Gears 1 / 2 discs and builds the chapters.
+6. **Closer to the originals**: the classic Drone (Horde's cooked class, loaded by the runtime), FaceFX, translucent
+   materials, music banks.
+
+**B. The remix trilogy mod** (after A is complete): the same levels with encounters reworked for Gears 3's sandbox:
+its weapons, enemies and set pieces (the Silverback...) where Gears 1 and 2 had none. A second mod beside A, built
+from the same recipes plus encounter edits (new factories, carriers for Gears 3's enemies).
+
+**C. A modding framework** (after the trilogy): everything learned here turned into libraries and tools that make
+modding the port far more accessible: campaign levels (the chapter-of-its-own pipeline, kits, carriers, navmesh
+regions, Kismet mapping and tracing), characters, encounters, weapons, menus, and the other mod types they make
+possible.

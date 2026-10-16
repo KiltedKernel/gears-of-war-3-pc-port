@@ -94,7 +94,7 @@ def plan(nodes, graph, points):
     near = lambda q: min(nodes, key=lambda n: sum((x - y) ** 2 for x, y in zip(nodes[n], q)))
     out = []
     stops = [near(q) for q in points]
-    for a, b in zip(stops, stops[1:]):
+    for k, (a, b) in enumerate(zip(stops, stops[1:])):
         dist, prev, todo = {a: 0}, {}, [(0, a)]
         while todo:
             d, n = heapq.heappop(todo)
@@ -108,6 +108,9 @@ def plan(nodes, graph, points):
         leg = [b]
         while leg[-1] != a: leg.append(prev[leg[-1]])
         out += [nodes[n] for n in reversed(leg)][1 if out else 0:]
+        # the requested point itself (a trigger to touch: its nearest node can lie past the door it opens)
+        q = points[k + 1]
+        out.append(tuple(q))
     return out
 
 
@@ -118,7 +121,7 @@ if len(sys.argv) > 2 and sys.argv[1] == '--plan':
     print(f'# {len(nodes)} navigation points, {sum(len(v) for v in graph.values())} reach specs', file=sys.stderr)
     last = None
     for q in plan(nodes, graph, pts):
-        if last is None or sum((x - y) ** 2 for x, y in zip(q, last)) > 300 ** 2:   # (one waypoint per 300 units)
+        if last is None or sum((x - y) ** 2 for x, y in zip(q, last)) > 300 ** 2 or q in pts:   # (a waypoint per 300 units; requested points always)
             print(f'{q[0]:.0f} {q[1]:.0f}'); last = q
     sys.exit(0)
 

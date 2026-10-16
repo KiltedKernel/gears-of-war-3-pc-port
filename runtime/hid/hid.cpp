@@ -308,7 +308,11 @@ namespace
             for (int attempt = 0; attempt < 4 && !reached; attempt++)
             {
                 reached = WalkStep(pts[k].first, pts[k].second, seconds);
-                if (!reached) Sleep(2000);
+                if (reached) break;
+                // stuck: use (X: a door's button, a pickup), then A (mantle over low cover), then wait (a door opening,
+                // a cinematic holding the player)
+                g_scriptPadButtons = 0x4000; Sleep(250); g_scriptPadButtons = 0; Sleep(400);
+                g_scriptPadButtons = 0x1000; Sleep(250); g_scriptPadButtons = 0; Sleep(1500);
             }
             LOGFN("input: route point {}/{} ({:.0f},{:.0f}) {}", k + 1, pts.size(), pts[k].first, pts[k].second, reached ? "reached" : "skipped");
         }

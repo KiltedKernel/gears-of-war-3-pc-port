@@ -11,6 +11,7 @@
 extern "C" {
 #include <mspack.h>
 #include <lzx.h>
+extern int lzxd_no_odd_pad;   // lzxd_xmem.c: libmspack's lzxd, an odd-sized uncompressed block's pad byte optional
 }
 
 namespace
@@ -201,7 +202,20 @@ int main(int argc, char** argv)
         std::vector<uint8_t> dst(uncomp);
         MemFile mi{ &src, 0, srcLen }, mo{ &dst, 0, uncomp };
         lzxd_stream* lzx = lzxd_init(&sys, (mspack_file*)&mi, (mspack_file*)&mo, 17, 0, 0x8000, uncomp, 0);
-        const int rc = lzx ? lzxd_decompress(lzx, uncomp) : -1;
+        int rc = lzx ? lzxd_decompress(lzx, uncomp) : -1;
+        if (rc != MSPACK_ERR_OK)
+        {
+            // an odd-sized LZX uncompressed block: the CAB form pads it to an even length, these streams (some blocks
+            // of Gears of War 2's and 3's packages) do not; decoded again without the pad byte
+            if (lzx) lzxd_free(lzx);
+            mi.pos = 0; mo.pos = 0; lzxd_no_odd_pad = 1;
+            lzx = lzxd_init(&sys, (mspack_file*)&mi, (mspack_file*)&mo, 17, 0, 0x8000, uncomp, 0);
+            rc = lzx ? lzxd_decompress(lzx, uncomp) : -1;
+            lzxd_no_odd_pad = 0;
+        }
+        if (rc != MSPACK_ERR_OK && lzx && getenv("XPACK_DEBUG"))   // where the bitstream stopped decoding
+            fprintf(stderr, "block %zu: lzx stopped in frame %u (output %lld of %u), block type %u, %u left in the LZX block, input %zu of %u\n",
+                    b, lzx->frame, (long long)lzx->offset, uncomp, lzx->block_type, lzx->block_remaining, mi.pos, srcLen);
         if (lzx) lzxd_free(lzx);
         if (rc != MSPACK_ERR_OK)
         {

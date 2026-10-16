@@ -1,7 +1,7 @@
 # (fresh; needs the Gears1_Chapter1 mod: python -P tools/trilogy.py build gears1_ch1) Gears 1's first chapter played
 # along Gears 1's own route (python -P tools/levelroute.py on its scripting packages): Select Chapter (as
 # g1_chapter1.txt), out of the cell over the door trigger (Trigger_0), after Dom to the "Choose path" trigger
-# (Trigger_3), the left path (the left trigger: UIScene_PathChoice), then after Dom through the prison. Run with
+# (Trigger_3), the left path (the left trigger: UIScene_PathChoice), then Gears 1's easy route through the prison (waypoints planned over Gears 1's own path network). Run with
 # GOW3_KISMET_TRACE=GOW1_ and GOW3_LOG_POS=1 to follow it in build\gow3.log; about 12 minutes
 45 pad 0010 250
 52 pad 1000 250
@@ -27,4 +27,6 @@
 268 trig L 300
 274 trig L 300
 282 trig L 300
-290 follow COGDom 420 150
+# Gears 1's easy route to the prison's end, planned over its path network:
+# python -P tools/levelroute.py --plan "<the route's triggers>" <the prison's packages>
+290 route -988,1150;-1549,924;-1668,491;-1011,469;-947,168;-1225,90;-1531,106;-1901,110;-2304,-72;-2890,-53;-3156,110;-3525,116;-3831,118;-4172,167;-4759,-98;-4372,210;-4464,717;-4372,210;-4759,-98;-4973,120;-5050,560;-5096,1029;-5048,1331;-5009,1693;-4829,1971;-4704,2370;-4276,2169;-3834,2266;-3327,2266;-3423,2578;-3327,2951;-3464,3510;-3329,3852;-3330,4215;-3205,4612;-3311,4963;-3409,5280;-3318,5828;-3328,6144;-3061,6445;-2945,6731;-3330,6737;-2945,6731;-3061,6445;-2945,6731;-3330,6737;-3648,6751;-4128,6800;-4444,6794;-4720,6584;-4966,7005;-4867,7665;-4528,7816;-4525,8469;-4264,8776;-3577,8875;-3066,8866;-2304,8871;-2367,8563;-2212,8152;-1837,8092;-1307,7913;-968,7796;-325,7811;-272,8188;-83,8529;166,8697;846,8741;1194,8777;1618,8742;1930,8974;3056,8992 25

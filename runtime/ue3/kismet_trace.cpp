@@ -70,8 +70,10 @@ void Start()
                 auto [l, fresh] = last.emplace(o, count);
                 if (fresh) { if (count == 0) continue; }      // first seen: report what already ran
                 else if (l->second == count) continue;
-                const uint32_t before = fresh ? 0 : l->second;
+                // (a count that went down: the op's level was reloaded, its counts back at 0)
+                const uint32_t before = fresh || count < l->second ? 0 : l->second;
                 l->second = count;
+                if (count == before) continue;
                 if (logged++ < 20000)
                     LOGFN("kismet: [{}] {} ({}) x{}", PackageOf(o), PathOf(o), ue3::ObjectName(cls), count - before);
             }

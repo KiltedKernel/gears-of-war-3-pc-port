@@ -48,7 +48,8 @@ namespace
     // touching the real keyboard/mouse or needing window focus. Lines: "<seconds> key <vk hex> <hold ms>",
     // "<seconds> mouse <dx> <dy> [ms]" (spread over ms, default 200), "<seconds> capture", "<seconds> walkto <x> <y>
     // [s]" (the player walks to a map position, WalkTo), "<seconds> face <x> <y>" (the camera turns toward it),
-    // "<seconds> follow <pawn class part> [s] [distance]" (the player walks after that pawn, Follow).
+    // "<seconds> follow <pawn class part> [s] [distance]" (the player walks after that pawn, Follow),
+    // "<seconds> route x,y;x,y;... [s per point]" (the points in order, Route).
     // '#' starts a comment.
     bool g_scripted = false;
     std::atomic<bool> g_scriptKeys[256];
@@ -254,21 +255,25 @@ namespace
     // "walkto x y [seconds]": steer the local player to (x, y) with the left stick, relative to the camera (the
     // controller's yaw: Gears moves relative to the camera). Stops within 100 units, when
     // stuck for 3 s, or after the time (default 20 s); logs where it ended. Positions: GOW3_LOG_POS / GOW3_LOG_ACTORS.
-    void WalkTo(double tx, double ty, double seconds)
+    bool WalkStep(double tx, double ty, double seconds);
+    void WalkTo(double tx, double ty, double seconds) { WalkStep(tx, ty, seconds); }
+    bool WalkStep(double tx, double ty, double seconds)
     {
         static const uint32_t actor = ue3::FindClass("Actor");
         const int loc = actor ? ue3::PropertyOffset(actor, "Location") : -1, rot = actor ? ue3::PropertyOffset(actor, "Rotation") : -1;
         uint32_t pawn = LocalPawn();
-        if (!pawn || loc < 0) { LOGFN("input: walkto: no player pawn"); return; }
+        if (!pawn || loc < 0) { LOGFN("input: walkto: no player pawn"); return false; }
         const uint64_t t0 = GetTickCount64();
         double bestDist = 1e9; uint64_t bestAt = t0;
+        bool arrived = false;
         double x = 0, y = 0;
         for (;;)
         {
             if (GetTickCount64() % 1000 < 50) if (uint32_t p = LocalPawn()) pawn = p;   // a new pawn after a respawn
             x = ue3::ReadFloat(pawn + loc); y = ue3::ReadFloat(pawn + loc + 4);
             const double dx = tx - x, dy = ty - y, dist = std::sqrt(dx * dx + dy * dy);
-            if (dist < 100 || double(GetTickCount64() - t0) / 1000.0 > seconds) break;
+            if (dist < 100) { arrived = true; break; }
+            if (double(GetTickCount64() - t0) / 1000.0 > seconds) break;
             if (dist < bestDist - 20) { bestDist = dist; bestAt = GetTickCount64(); }
             if (GetTickCount64() - bestAt > 3000) { LOGFN("input: walkto: stuck"); break; }
             const double yaw = double(int32_t(ue3::Read32(g_localController + rot + 4)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
@@ -279,6 +284,35 @@ namespace
         }
         g_scriptLX = 0; g_scriptLY = 0;
         LOGFN("input: walkto {:.0f},{:.0f}: ended at {:.0f},{:.0f} after {:.1f} s", tx, ty, x, y, double(GetTickCount64() - t0) / 1000.0);
+        return arrived;
+    }
+
+    // "route x,y;x,y;... [seconds per point]": walk the points in order (a converted level's route, planned over its
+    // source's path network: tools/levelroute.py --plan). A point the player cannot reach (stuck: a wall, or held
+    // still by a cinematic or a door) is tried 3 more times, 2 s apart, then skipped; logs each point
+    bool WalkStep(double tx, double ty, double seconds);
+    void Route(std::string points, double seconds)
+    {
+        if (seconds <= 0) seconds = 20;
+        std::vector<std::pair<double, double>> pts;
+        std::stringstream ss(points); std::string item;
+        while (std::getline(ss, item, ';'))
+        {
+            const size_t c = item.find(',');
+            if (c != std::string::npos) pts.emplace_back(atof(item.c_str()), atof(item.c_str() + c + 1));
+        }
+        LOGFN("input: route of {} points", pts.size());
+        for (size_t k = 0; k < pts.size(); k++)
+        {
+            bool reached = false;
+            for (int attempt = 0; attempt < 4 && !reached; attempt++)
+            {
+                reached = WalkStep(pts[k].first, pts[k].second, seconds);
+                if (!reached) Sleep(2000);
+            }
+            LOGFN("input: route point {}/{} ({:.0f},{:.0f}) {}", k + 1, pts.size(), pts[k].first, pts[k].second, reached ? "reached" : "skipped");
+        }
+        LOGFN("input: route done");
     }
 
     // "follow <pawn class part> [seconds] [distance]": walk toward a pawn whose class name contains the text (COGDom: the
@@ -370,6 +404,7 @@ namespace
             else if (e.kind == "walkto") { in >> e.a >> e.b >> e.c; if (!e.c) e.c = 20; }
             else if (e.kind == "face") { in >> e.a >> e.b; }
             else if (e.kind == "follow") { in >> e.text >> e.a >> e.b; if (!e.a) e.a = 60; }
+            else if (e.kind == "route") { in >> e.text >> e.a; }
             evs.push_back(e);
         }
         std::sort(evs.begin(), evs.end(), [](const Ev& x, const Ev& y) { return x.t < y.t; });
@@ -427,6 +462,7 @@ namespace
             else if (e.kind == "walkto") std::thread(WalkTo, e.a, e.b, e.c).detach();
             else if (e.kind == "face") std::thread(Face, e.a, e.b).detach();
             else if (e.kind == "follow") std::thread(Follow, e.text, e.a, e.b).detach();
+            else if (e.kind == "route") std::thread(Route, e.text, e.a).detach();
         }
     }
 

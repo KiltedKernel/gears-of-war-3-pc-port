@@ -593,6 +593,9 @@ LINK_ARRAYS = (('InputLinks', None), ('OutputLinks', 'Links'), ('VariableLinks',
 LINK_ALIAS = {('SeqAct_AIMoveToActor', 'finished'): 'reached goal', ('SeqAct_AIMoveToActor', 'destination'): 'move to',
               ('SeqAct_WarCheckPoint', 'set active checkpoint'): 'save',
               ('SeqAct_AddObjective', 'in'): 'add/update objective', ('SeqAct_CompleteObjective', 'in'): 'completed objective',
+              ('SeqAct_TutorialManual', 'start'): 'add tutorial', ('SeqAct_TutorialManual', 'completed'): 'complete tutorial',
+              ('SeqAct_ToggleTutorialMode', 'enable'): 'system on', ('SeqAct_ToggleTutorialMode', 'disable'): 'system off',
+              ('SeqAct_ToggleTutorialMode', 'toggle'): 'system on',
               ('SeqEvent_LevelLoaded', 'out'): 'loaded and visible',
               ('SeqEvent_LevelBeginning', 'out'): 'beginning of level'}
 
@@ -1425,6 +1428,49 @@ def set_chapter(number, last):
     if last:
         CLASS_RENAME['SeqAct_CommitMapChange'] = 'SeqAct_EndGame'
         FIXUPS['SeqAct_CommitMapChange'] = end_game
+
+
+# ---- tutorials ----
+# Gears 1's prison is its training level: SeqAct_TutorialManual {TutorialType: ETutorialType} (Start, Completed) and
+# SeqAct_ToggleTutorialMode (Enable, Disable, Toggle). Gears 3's SeqAct_ManageTutorials {Tutorial_Type:
+# EGearTutorialType, bStartTutorialWhenAdded} does both through its inputs (Add / Complete Tutorial, System On / Off:
+# LINK_ALIAS); a Gears 1 type maps to the Gears 3 tutorial teaching the same thing (none: left as Gears 3's default).
+TUTORIAL_TYPES = {
+    'ETT_Move': 'GEARTUT_Movement', 'ETT_Aim': 'GEARTUT_AimFromCover', 'ETT_Fire': 'GEARTUT_Fire',
+    'ETT_Target': 'GEARTUT_Target', 'ETT_Use': 'GEARTUT_Use1', 'ETT_ChangeWeapon': 'GEARTUT_ChangeWeapon',
+    'ETT_Reload': 'GEARTUT_Reload', 'ETT_ActiveReload1': 'GEARTUT_ActiveReloadBegin', 'ETT_ActiveReload2': 'GEARTUT_ActiveReload',
+    'ETT_Melee': 'GEARTUT_ChainsawMelee', 'ETT_EnterCover': 'GEARTUT_Cover', 'ETT_ExitCover': 'GEARTUT_Cover',
+    'ETT_Evade': 'GEARTUT_Evade', 'ETT_EvadeFromCover': 'GEARTUT_Evade', 'ETT_SwatTurn': 'GEARTUT_SwatTurn',
+    'ETT_RoadieRun': 'GEARTUT_RoadieRun', 'ETT_Mantle': 'GEARTUT_Mantle1', 'ETT_CoverSlip': 'GEARTUT_CoverSlip',
+    'ETT_ObjectiveList': 'GEARTUT_Objectives', 'ETT_Grenades': 'GEARTUT_Grenades1',
+    'ETT_PointOfInterest': 'GEARTUT_PointOfInterest', 'ETT_Revive': 'GEARTUT_Revive', 'ETT_TorqueBow': 'GEARTUT_WeapBow',
+    'ETT_HammerOfDawn': 'GEARTUT_WeapHOD',
+}
+
+
+def tutorial_manual(c, props):
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    out = [r for r in recs if r[0] not in ('TutorialType', 'Tutorial_Type', 'Scene', 'DialogDuration', 'bStartTutorialWhenAdded')]
+    d = c.s.export_data(c.current_src)
+    import materialconv
+    try: g1 = {r[0]: r for r in materialconv.raw_props(c.s, d, 4)[0]}
+    except Exception: g1 = {}
+    en1 = c.g1.enums.get('TutorialType') if c.g1 else None
+    en3 = c.g3.enums.get('Tutorial_Type') if c.g3 else None
+    if en1 and en3:
+        idx = g1['TutorialType'][4][0] if 'TutorialType' in g1 else 0
+        name = TUTORIAL_TYPES.get(en1[1][idx] if idx < len(en1[1]) else '')
+        if name in en3[1]:
+            out.append(['Tutorial_Type', 'ByteProperty', 0, struct.pack('>ii', *c.w.name(en3[0])), struct.pack('>ii', *c.w.name(name))])
+    out.append(['bStartTutorialWhenAdded', 'BoolProperty', 0, b'', b'\x01'])
+    return encode(c.w, out)
+
+
+if not os.environ.get('OBJCOPY_NO_RENAME'):
+    CLASS_RENAME['SeqAct_TutorialManual'] = 'SeqAct_ManageTutorials'
+    CLASS_RENAME['SeqAct_ToggleTutorialMode'] = 'SeqAct_ManageTutorials'
+    FIXUPS['SeqAct_TutorialManual'] = tutorial_manual
 
 
 # ---- checkpoints ----

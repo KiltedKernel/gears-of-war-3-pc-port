@@ -109,6 +109,16 @@ def generate_navmesh(folder, nav, out, required=True):
     return meshes
 
 
+def seed_options(nav, offset):
+    """levelinject's pylon options for a navmesh region's seeds (nav['_seeds'], else pylon_at / pylons_at), moved by
+    offset (the multiplayer slot's)"""
+    seeds = nav.get('_seeds') or [tuple(float(v) for v in q.split(',')) for q in [nav['pylon_at']] + [x for x in nav.get('pylons_at', '').split(';') if x.strip()]]
+    at = lambda q: ','.join(f'{c + o:.0f}' for c, o in zip(q, offset))
+    out = [f'--pylon-at={at(seeds[0])}', '--pylon-radius', nav.get('pylon_radius', '6000')]
+    if len(seeds) > 1: out.append('--pylons-at=' + ';'.join(at(q) for q in seeds[1:]))
+    return out
+
+
 def slot_navmesh(folder, nav, g1cooked, g3cooked, out, rename_to=None):
     """the level's geometry converted into a multiplayer map's slot (nav: slot, sources, options, offset), the
     navmesh generated there and moved back by -offset into out; rename_to: the target's pylons {name: location},
@@ -118,7 +128,17 @@ def slot_navmesh(folder, nav, g1cooked, g3cooked, out, rename_to=None):
     if os.path.exists(work): shutil.rmtree(work)
     write_manifest(work, 'navmesh slot (temporary)', '0', '', 'everyone')
     sources = [os.path.join(g1cooked, s.strip() + '.xxx') for s in nav['sources'].split(',') if s.strip()]
-    levelinject(work, os.path.join(g3cooked, nav['slot'] + '.xxx'), sources, nav['options'].split(), g3cooked)
+    # the recipe's slot options without pylon placements (the region's seeds, moved by the slot's offset, are added)
+    opts, skip = [], False
+    for t in nav['options'].split():
+        if 'pylon_at' not in nav: opts.append(t); continue   # (an older recipe: its own pylon options)
+        if skip: skip = False; continue
+        if t.startswith('--pylon-at=') or t.startswith('--pylons-at='): continue
+        if t in ('--pylon-radius',): skip = True; continue
+        opts.append(t)
+    if 'pylon_at' in nav:
+        opts += seed_options(nav, tuple(float(v) for v in nav.get('offset', '0,0,0').split(',')))
+    levelinject(work, os.path.join(g3cooked, nav['slot'] + '.xxx'), sources, opts, g3cooked)
     raw = out + '.slot'
     slot_pylons = pylon_locations(os.path.join(work, 'GearGame', 'CookedXbox360', nav['slot'] + '.xxx'))
     meshes = generate_navmesh(work, dict(nav, level=nav['slot'].lower()), raw, required=rename_to is None)
@@ -137,6 +157,33 @@ def slot_navmesh(folder, nav, g1cooked, g3cooked, out, rename_to=None):
     shutil.rmtree(work)
     return True
     print('  navmesh: ' + ', '.join(f'{k} {len(m["polys"])} polygons' for k, m in meshes.items()), flush=True)
+
+
+def floor_seeds(seeds, packages):
+    """pylon seeds moved to 30 units above the floor under them: Gears 3's navmesh builder starts at a pylon with a
+    short downward trace (about 17 to 47 units below it), so a seed at a Gears 1 cover or path point's height (often
+    50-60 units up) misses the floor. The floor: the highest upward-facing Gears 1 BSP polygon under the seed's
+    x, y below it (+50); a seed with none is kept as it is"""
+    import numpy as np, upk, bspconv
+    polys = []
+    for path in packages:
+        try:
+            p = upk.Package(path)
+            wm = bspconv.world_model(p)
+            polys += [(pts, n) for _, pts, uv, n, l in bspconv.polygons(bspconv.read_model_374(p, wm), p, None) if n[2] > 0.7]
+        except Exception:
+            continue
+    out = []
+    for x, y, z in seeds:
+        best = None
+        for pts, n in polys:
+            if not (pts[:, 0].min() <= x <= pts[:, 0].max() and pts[:, 1].min() <= y <= pts[:, 1].max()): continue
+            # the plane's height at (x, y)
+            if abs(n[2]) < 1e-6: continue
+            h = pts[0, 2] - (n[0] * (x - pts[0, 0]) + n[1] * (y - pts[0, 1])) / n[2]
+            if h <= z + 50 and (best is None or h > best): best = h
+        out.append((x, y, best + 30 if best is not None else z))
+    return out
 
 
 def pylon_names(package):
@@ -209,6 +256,13 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     # the sections
     navs = {sec.split(None, 1)[1]: dict(c[sec]) for sec in c.sections() if sec.startswith('navmesh ')}
     nav_for = {nav['section']: name for name, nav in navs.items()}
+    # each region's pylon seeds (pylon_at, then pylons_at), set 30 units above the Gears 1 floor under them; the slot
+    # conversion takes the same seeds + its offset
+    for name, nav in navs.items():
+        raw = [tuple(float(v) for v in q.split(',')) for q in [nav['pylon_at']] + [x for x in nav.get('pylons_at', '').split(';') if x.strip()]]
+        nav['_seeds'] = floor_seeds(raw, [src(x.strip()) for x in nav['sources'].split(',') if x.strip()])
+        moved = [f'{a[2]:.0f}->{b[2]:.0f}' for a, b in zip(raw, nav['_seeds']) if abs(a[2] - b[2]) > 1]
+        if moved: print(f'  navmesh {name}: seed heights set over the floor ({", ".join(moved)})', flush=True)
     for s in sections:
         opts = c[f'section {s}'] if c.has_section(f'section {s}') else {}
         options = opts.get('options', ch.get('options', '--bsp --replace --cover --kismet')).split()
@@ -216,9 +270,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         target = os.path.join(work, prefix + s + '.xxx')
         levelpkg.clone(os.path.join(g3cooked, ch['section_template'] + '.xxx'), target, keep=keep)
         if s in nav_for:                               # its pylon where the region's navmesh is generated from
-            nav = navs[nav_for[s]]
-            options += [f'--pylon-at={nav["pylon_at"]}', '--pylon-radius', nav.get('pylon_radius', '6000')]
-            if nav.get('pylons_at'): options += [f'--pylons-at={nav["pylons_at"]}']
+            options += seed_options(navs[nav_for[s]], (0, 0, 0))
         levelinject(folder, target, [src(s)] + [src(x.strip()) for x in opts.get('extra_sources', '').split(',') if x.strip()],
                     ['--kit', kit] + materials + options + common, g3cooked)
     # navmesh: per region, generated in a multiplayer map's slot (the geometry converted again there, 20000 up),

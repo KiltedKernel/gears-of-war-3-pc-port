@@ -85,6 +85,22 @@ already (textures, meshes).
 | triggers, trigger volumes | Trigger (a volume as a cylinder over its bounds) | |
 | movers, doors (InterpActor), Matinee | InterpActor, SeqAct_Interp with Gears 1's tracks | the view returns to the player after a cutscene |
 
+### Gears of War 2 (version 575)
+
+What is known for Gears 2's levels (its first chapter, the hospital: `SP_Hospital_P` and 26 more):
+- Every package decodes (tools/xpack: Xbox LZX streams leave an odd-sized uncompressed block unpadded; with the
+  CAB form's pad byte, some blocks failed).
+- A chapter starts from an intro map (`SP_HospitalIntro_P`) whose PrepareMapChange loads the chapter's persistent
+  level with its first sublevels (the tutorial's among them); the chapter's streaming is in its scripting sublevels
+  (`_S`), not the persistent level. A recipe's `persistent` is then the chapter's `_P`, and the intro's Kismet joins
+  it (or the intro becomes the persistent level).
+- Properties are between Gears 1's and Gears 3's: booleans 4 bytes (Gears 3: 1 byte, from 673), enums as a byte
+  (Gears 3: a name, from 633), no import/export GUID table in the summary. levelinject converts Gears 1 (374) today;
+  its material, mesh and Kismet steps check for 374 and need their 575 reading (textures and static meshes read
+  already).
+- The squad: Gears 2's Dom, Baird, Gus, Tai are Gears 3 slots 2-4 (Baird and Gus are cooked into Gears 3 levels:
+  carriers; Tai is not in Gears 3).
+
 Not converted yet, by kind: objectives and tutorials (pass-throughs), SeqAct_AIShootAtTarget, SeqAct_CauseDamage,
 SeqAct_AICombatSpectrum, Kryll, FaceFX, translucent materials, level streaming volumes (their levels stream by
 Kismet).

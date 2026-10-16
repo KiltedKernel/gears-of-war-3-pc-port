@@ -1944,3 +1944,49 @@ opening cutscene plays, Dom (GearPawn_COGDom) spawns into slot 2 outside the cel
 Next: the sections' navmesh (Dom does not move yet), the rest of the prison (S03-S07, World, Cine_End), recipes.
 The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt with these changes (Marcus at
 (-309, 1140), Dom at (-564, 1149)).
+
+## 2026-10-15: Gears 1's whole first chapter as a recipe; carriers; navmesh regions; routes; xpack's last LZX gap
+
+- **trilogy.py chapters.** A recipe with a [chapter] section (tools/recipes/gears1_ch1.ini) builds a chapter of its
+  own: the persistent level (the kit), one section per Gears 1 package, carriers, navmesh regions, the chapter's
+  config. All 24 packages of Gears 1's prison convert (432 MB, 111 s without navmesh). From the build report, what
+  does not convert yet: 8 Drone factories (no Drone class loaded: carriers below), AIShootAtTarget,
+  AICombatSpectrum, tutorials (pass-throughs), one 3-stream XMA wave, music track banks.
+- **Carriers.** A Gears 3 level carrying a character's cooked class, blanked of all its actors and Kismet, streamed
+  in always-loaded (levelpkg.set_streaming: LevelStreamingAlwaysLoaded) and listed in levelinject --content:
+  SP_Airfield_02_S (2.4 MB) carries GearPawn_LocustDroneSavage only. Pawn_GeistLocust maps to the classic
+  GearPawn_LocustDrone when loaded (Horde), else the Savage Drone. The factories convert; it loads with the chapter.
+- **Checkpoints, damage, objectives, chapter end.** SeqAct_CauseDamage -> SeqAct_ModifyHealth (DamageAmount ->
+  Amount, a damage type GearDamageType when Gears 1's has none); SeqAct_AddObjective / CompleteObjective ->
+  SeqAct_ManageObjectives through its "Add/Update Objective" / "Completed Objective" inputs; the chapter end: Gears 3's
+  SP_Ravens_P does PrepareMapChange (the next chapter's map) -> SeqAct_ChapterComplete {ChapterCompleted = chapter +
+  1: GearGameSP_Base.ProcessEndOfChapter, ClientCompleteChapter(ChapterCompleted - 1)} -> CommitMapChange. Gears 1's
+  ChapterComplete has no properties: it gets the chapter number + 1 (levelinject --chapter-number); its
+  PrepareMapChange names are renamed like streaming; with no next chapter built the commit becomes SeqAct_EndGame
+  (bShouldSkipCredits), back to the main menu.
+- **Navmesh regions.** [navmesh <name>] per region: its geometry converted into MP_GridlockG3 20000 units up, Gears 3's
+  builder run in the game, the dump moved down and written into a section's pylons, slot pylons matched to section
+  pylons by location (clone names differ: the slot's Pylon_1 is the section's Pylon_6). --reuse-navmesh keeps earlier
+  regions. A region that finds no ground is reported, not fatal. Results: cell block 3 pylons (523 + 349 + 176
+  polygons, 161 cover slots), yard 2 (74 + 188), S05 2 (1249 + 114, 3 cross-pylon edges). Open: three cell-block
+  seeds and all of S06's find no ground (S06's floor is BSP at z 96 under the seed, converted: chunk 3's triangles
+  are there in the mesh, the collection matrix adds the offset, yet the builder's downward traces from 20339 to 20035
+  hit nothing; to look at in game). Seeds work best at the height of Gears 1's own path and cover points.
+- **Routes.** tools/levelroute.py lists a level's touch triggers, AI move destinations, teleports and checkpoints per
+  package, and --plan walks Gears 1's own path network: navigation points (any actor with a NavGuid) and ReachSpecs
+  (Start a reference; End an ActorReference, tagged in Gears 1 as {Nav, Guid}: within a package Nav, across packages
+  the NavGuid). The prison: 1461 points, 7372 reach specs; the easy route from the path choice to S06 plans as 72
+  waypoints. The input script's "route x,y;..." walks them in order (retrying a stuck point, then skipping it);
+  "follow <class>" walks after a pawn. (A route pasted from Windows output carried \r before each ';', which the
+  script reader took for whitespace: one point.)
+- **Playtest so far** (tests/g1_chapter1_play.txt): the opening, Marcus out of the cell over its trigger, the "Choose
+  path" trigger: Dom's lines, Gears 3's path choice scene (UIScene_PathChoice: the left / right trigger or mouse
+  button), choiceMade, Dom to his cover by the corridor (-1217, 1226). Gears 1's "dom" sequence then waits for the
+  player at each trigger ahead.
+- **xpack.** The last LZX failures (GearGame.xxx blocks 340-347, GEARGAMESIEGE_SF, SP_Fort_Wave_Stranded01, Gears 2's
+  SP_Hospital_03): the failing block of SP_Hospital_03 starts with an LZX uncompressed block of 6277 bytes (odd);
+  libmspack's lzxd skips a pad byte after an odd uncompressed block (the CAB form), Xbox XMemCompress streams have
+  none: one byte off, the rest of the block decodes as garbage. xpack decodes a failed block again without the pad
+  (tools/xpack/lzxd_xmem.c): all four decode, GearGame.xxx in full (660 blocks).
+- **Gears 2** (docs/TRILOGY.md): the hospital's 27 packages decode; its chapter starts from an intro map's
+  PrepareMapChange; its streaming lives in the _S sublevels.

@@ -46,8 +46,11 @@ own scripts stream them in and out by name, as they did on the Xbox 360.
   sublevel converted into it: meshes, BSP, light maps, materials (child instances of the kit's, imported), lights,
   cover, movers, sounds, Kismet.
 - Clones are **blanked**: the template's actors are left out of its level (they never spawn, tick, draw or collide)
-  but the ones the conversion reuses (mesh collections, cover links, pylons), its Kismet is emptied, and it gets its
-  own package GUID (`tools/levelpkg.py`).
+  but the ones the conversion reuses (mesh collections, cover links, pylons), and out of its navigation point list
+  (NavListStart / nextNavigationPoint): the world chains every level's list, and a template actor left in it is
+  reached by `foreach AllNavigationPoints` though it was never initialised (the template's weapon lockers crashed a
+  checkpoint restart: GearPickupFactory.CoopPlayerNumberChange read their WorldInfo, None). Its Kismet is emptied, and
+  it gets its own package GUID (`tools/levelpkg.py`).
 - **Carriers.** A character can spawn only if a loaded package carries its cooked class. Gears 3's campaign has Dom
   in `GEARGAMESP_SF` (always loaded) and Marcus in `GearGame.xxx`; other characters are cooked into the levels that
   use them. A carrier is such a level, blanked of everything, streamed in with the chapter for its characters:
@@ -67,10 +70,10 @@ already (textures, meshes).
 |---|---|---|
 | static meshes (StaticMeshActor) | components of the section's StaticMeshCollectionActor, new StaticMesh exports with a kDOP tree (per-polygon collision) | `levelinject`, `meshconv`, `kdop` |
 | BSP | static mesh chunks with the BSP's light maps | `bspconv` |
-| light maps, lights | vertex light maps baked from Gears 1's light maps and point lights; its dynamic lights copied (for characters) | `lighting`; the cutscene lights are too bright on characters (to calibrate) |
+| light maps, lights | vertex light maps baked from Gears 1's light maps and point lights; its lights copied for characters: composited into their light environments (CompositeDynamic; a copied SkeletalMeshActor gets Gears 3's light environment) | a Gears 1 section has 100-370 lights where a Gears 3 one has about ten: as Dynamic lights (a pass each on every dynamic primitive) the render thread held the game at 28 fps past the path choice |
 | materials | child MaterialInstanceConstants of the kit's template (texture parameters only) | translucent materials (light shafts, fog sheets) are left out for now |
 | textures | Texture2D exports, NeverStream | |
-| skeletal meshes, animations | SkeletalMesh (a skinned material template), AnimSet / AnimSequence | FaceFX not yet |
+| skeletal meshes, animations | SkeletalMesh, its materials child instances of a recipe's `skin_material` (a skinned Gears 3 shader in GEARGAMESP_SF; its other texture parameters black); a Gears 1 material instance's textures by its parameters; AnimSet / AnimSequence (Gears 1's Fixed48 rotation tracks start with a 24-byte bounds header that Gears 3's lack: dropped) | open: with a character skin shader the converted meshes draw flat white, with the weapon shader (now) the armour's detail shows in wrong colours, whatever the lights; the textures decode right offline (to inspect on the GPU side). FaceFX not yet |
 | sounds | XMA1 to XMA2 (lossless), SoundCues and their nodes | 3-stream XMA (surround) not yet |
 | music | SeqAct_SetMusicTrack to SeqAct_PlayMusicTrack | music track banks and cross-fades not yet |
 | cover (CoverLink) | the section's CoverLinks (and clones) with Gears 3's slot format | |
@@ -87,7 +90,7 @@ already (textures, meshes).
 | SeqAct_WarCheckPoint + SeqEvt_CheckpointActivated | SeqAct_Checkpoint ("Save"), its "Out" linked to the event's targets; the event as SeqEvent_CheckpointLoaded | Gears 1's event fires on save and load, Gears 3's on load |
 | player start | PlayerStart in the persistent level, in its navigation list | |
 | triggers, trigger volumes | Trigger (a volume as a cylinder over its bounds) | |
-| movers, doors (InterpActor), Matinee | InterpActor, SeqAct_Interp with Gears 1's tracks | the view returns to the player after a cutscene |
+| movers, doors (InterpActor), Matinee | InterpActor, SeqAct_Interp with Gears 1's tracks | the view returns to the player after a cutscene; a Matinee holding its shot over a path choice (its Pause event on its own Pause input) is played on from the choice's outputs, as Gears 3's levels do |
 
 ### Gears of War 2 (version 575)
 
@@ -128,6 +131,7 @@ persistent = SP_Prison_P          ; the Gears 1 persistent level
 sections = SP_Prison_S01, ...     ; every other package of the level
 kit = SP_Nightmare_02_S
 materials = MI_GR_Cliffwall_Tilable_01
+skin_material = GEARGAMESP_SF: ALL_WeaponShaders.SinglePlayer.COG_WeaponShader_HOD_SP   ; skeletal meshes' parent
 section_template = SP_Char_Tower_1a_S
 look = SP_Nightmare_P             ; the post-process Gears 1's values go on top of
 content = GEARGAMESP_SF
@@ -169,6 +173,12 @@ To start a new chapter's recipe:
   read. The prison's ceiling collapse ended early because its CompareBool read a named variable of another level
   (Gears 3 does not resolve those: converted to imports now). A player who stops moving may be in cover: the route
   walker's A press at a wall takes cover (screenshots show it).
+- Performance: the log's `video:` line (every 10 s) gives the frame rate, the longest frame and the frames over 50 ms
+  (a stutter averages away in the frame rate); `GOW3_PROFILE=1` logs each busy thread's hottest functions every
+  10 s (a game thread waiting while the render thread is busy: too many draws or lights).
+- `tests/g1_checkpoint_restart.txt`: the chapter, then Restart from Checkpoint twice from the pause menu.
+- On keyboard and mouse the path choice (UIScene_PathChoice, read through the triggers) takes left click or Left for
+  the left path, right click or Right for the right one (it is not a menu: a click there was an A press before).
 
 ## Roadmap
 

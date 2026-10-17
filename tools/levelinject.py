@@ -181,6 +181,10 @@ def main():
     ap.add_argument('--kit', default=None, help="a chapter of its own: the Gears 3 package (the chapter's persistent level, "
                     "loaded first) holding the material instance templates (--materials, the skeletal one): converted "
                     "materials are child instances of them, through imports (tools/levelpkg.py)")
+    ap.add_argument('--skin-material', default=None, help="<Gears 3 package>:<MIC path>: the skinned material whose "
+                    "child instances the converted skeletal meshes' materials become (its Diffuse / Normal / Specular "
+                    "set, its other texture parameters neutral); the package must be loaded where the level is (e.g. "
+                    "GEARGAMESP_SF in the campaign: COG_Dom_Summer.Materials.M_COG_Dom_Summer_Game)")
     ap.add_argument('--content', default=None, help="a chapter of its own: the Gears 3 packages (comma-separated) whose "
                     "GearGameContent classes are loaded with it (AI pawn classes; default: by the target's map name)")
     ap.add_argument('--streaming-prefix', default=None, help="a chapter of its own: level names in streaming actions get "
@@ -467,14 +471,44 @@ def main():
                 if r_ > 0 and skel_tmic is None and scls(r_ - 1) == 'MaterialInstanceConstant'                         and {'Diffuse', 'Normal', 'Specular'} <= set(materialconv.mic_texture_params(sp_, r_ - 1)):
                     skel_tmic = r_ - 1
         skel_parent = materialconv.import_object(w, p3, pk, skel_tmic, kit_imports) if pk is not None and skel_tmic is not None else None
+        skin_fill = {}                                 # --skin-material: texture parameter -> neutral texture import
+        skin_roles = {'Diffuse': 'Diffuse', 'Normal': 'Normal', 'Specular': 'Specular'}
+        if args.skin_material:
+            # Gears 3's own skinned character shader (its static permutation compiled for skeletal meshes; the kit has
+            # no skeletal mesh with a Diffuse / Normal / Specular instance: the cutscene's characters drew the default
+            # material, flat white). Its other textures (masks, emissive, gore) black: else the template character's
+            # would show through on the converted mesh's UVs
+            f_, mpath = args.skin_material.rsplit(':', 1)
+            sp_ = upk.Package(f_)
+            skel_tmic = next(i for i in range(len(sp_.exports)) if sp_.path(i).endswith(mpath.strip())
+                             and sp_.class_name(sp_.exports[i]['class']) == 'MaterialInstanceConstant')
+            scls = lambda i: sp_.class_name(sp_.exports[i]['class'])
+            skin_imports = {}
+            skel_parent = materialconv.import_object(w, p3, sp_, skel_tmic, skin_imports)
+            def neutral(name):
+                ref = next((-k - 1 for k, im in enumerate(sp_.imports) if im['class'] == 'Texture2D' and im['name'] == name), None)
+                return materialconv.copy_import(w, p3, sp_, ref, skin_imports) if ref is not None else None
+            black, flat = neutral('AllBlack'), neutral('DefaultNormal')
+            # the template's parameter for each converted slot, by name (a character shader's Diffuse / Normal /
+            # Specular, a weapon shader's Weap_Diffuse / Weap_Norm / Weap_Spec)
+            params = materialconv.mic_texture_params(sp_, skel_tmic)
+            for role, part in (('Diffuse', 'diffuse'), ('Normal', 'norm'), ('Specular', 'spec')):
+                skin_roles[role] = next((n for n in params if part in n.lower()), role)
+            for name in params:
+                skin_fill[name] = flat if name == skin_roles['Normal'] else black
+            print(f'skin material: {sp_.path(skel_tmic)} ({len(skin_fill)} texture parameters)')
         skel_cache = {}
         def skel_mic(si_, x_):
             key = srcs[si_].path(x_ - 1)
             if skel_tmic is None or key not in mic_refs: return mic_of.get((si_, x_), tmat)
             if key not in skel_cache:
-                refs_ = {{'Diffuse_01': 'Diffuse', 'Normal_01': 'Normal', 'Specular_01': 'Specular'}[k]: v for k, v in mic_refs[key].items()}
+                refs_ = {skin_roles[{'Diffuse_01': 'Diffuse', 'Normal_01': 'Normal', 'Specular_01': 'Specular'}[k]]: v for k, v in mic_refs[key].items()}
                 fl_ = struct.unpack_from('>Q', sp_.data, sp_.exports[skel_tmic]['entry'] + 24)[0]
-                if pk is not None:
+                if skin_fill:
+                    refs_ = {**{k: v for k, v in skin_fill.items() if v is not None}, **refs_}
+                    data_ = materialconv.child_mic(w, p3, sp_, skel_tmic, skel_parent, refs_)
+                    skel_cache[key] = w.add_export(mic_cls, 0, ('Trilogy_Skel_' + key.split('.')[-1], 0), data_, flags=fl_)
+                elif pk is not None:
                     data_ = materialconv.child_mic(w, p3, pk, skel_tmic, skel_parent, refs_, {'OverallEmissive': 0.0})
                     skel_cache[key] = w.add_export(mic_cls, 0, ('Trilogy_Skel_' + key.split('.')[-1], 0), data_, flags=fl_)
                 else:
@@ -872,6 +906,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
             for k, v in up.run(made).items(): stats[k] += v
             stats['streaming actions emptied'] += objcopy.neutralize_streaming(up, made)
             stats['cutscenes: view restored after'] += objcopy.restore_view_after_cutscenes(up, made)
+            stats['held shots resumed after a path choice'] += objcopy.resume_held_matinees(up, made)
+            stats['light environments for skeletal mesh actors'] += objcopy.light_environments(up, made)
             stats['squad factories (player slot)'] += objcopy.squad_factories(up, made)
             stats['checkpoint events also on save'] += objcopy.checkpoint_events(up, made)
             stats['named variables of the persistent level'] += objcopy.drop_remote_from_sequences(up, made)

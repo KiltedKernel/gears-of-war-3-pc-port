@@ -112,14 +112,27 @@ void VdSwap(be<uint32_t>* bufferPtr, be<uint32_t>* fetchPtr, uint32_t unk2, uint
     bufferPtr[n++] = *height;
     while (n < 64) bufferPtr[n++] = 0x80000000u;                              // type 2 NOPs
 
-    // frame rate, every 10 s
-    static uint64_t frames = 0, windowStart = GetTickCount64(), windowFrames = 0;
+    // frame rate, every 10 s, with the hitches (the longest frame, frames over 50 ms): a stutter averages away
+    static uint64_t frames = 0, windowStart = GetTickCount64(), windowFrames = 0, hitches = 0;
+    static double longest = 0;
+    static LARGE_INTEGER freq{}, last{};
+    LARGE_INTEGER qpc;
+    QueryPerformanceCounter(&qpc);
+    if (!freq.QuadPart) QueryPerformanceFrequency(&freq);
+    if (last.QuadPart)
+    {
+        const double ms = double(qpc.QuadPart - last.QuadPart) * 1000.0 / double(freq.QuadPart);
+        longest = (std::max)(longest, ms);
+        hitches += ms > 50.0;
+    }
+    last = qpc;
     frames++; windowFrames++;
     const uint64_t now = GetTickCount64();
     if (now - windowStart >= 10000)
     {
-        LOGFN("video: {:.1f} fps ({} frames)", windowFrames * 1000.0 / double(now - windowStart), frames);
-        windowStart = now; windowFrames = 0;
+        LOGFN("video: {:.1f} fps ({} frames; longest {:.0f} ms, {} over 50 ms)", windowFrames * 1000.0 / double(now - windowStart),
+              frames, longest, hitches);
+        windowStart = now; windowFrames = 0; hitches = 0; longest = 0;
     }
 
     static int logged = 0;

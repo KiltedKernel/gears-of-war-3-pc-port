@@ -271,6 +271,9 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
               '--chapter-number', ch['number']] + ([] if nxt_built else ['--last-chapter'])
     if ch.get('pawn_classes'): common += ['--pawn-classes', ','.join(x.strip() for x in ch['pawn_classes'].split(','))]
     materials = ['--materials', ch['materials']] if ch.get('materials') else []
+    if ch.get('skin_material'):                       # (package: MIC path) the skeletal meshes' material parent
+        pkg_, mic_ = (x.strip() for x in ch['skin_material'].split(':', 1))
+        common += ['--skin-material', os.path.join(g3cooked, pkg_ + '.xxx') + ':' + mic_]
     # the persistent level: the kit
     kit_target = os.path.join(work, prefix + persistent + '.xxx')
     kept, removed = levelpkg.clone(os.path.join(g3cooked, ch['kit'] + '.xxx'), kit_target)

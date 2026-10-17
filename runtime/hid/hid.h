@@ -20,6 +20,8 @@ namespace hid
     // menus (runtime/ui/gfx_menu.cpp): while a menu has focus the mouse is not captured and the cursor shows;
     // the menu code reads it in UI space (1280x720) and presses virtual controller buttons for hover and clicks
     void SetMenuMode(bool on);
+    // a path choice on screen (UIScene_PathChoice: read through the triggers): left click / Left = the left trigger
+    void SetPathChoice(bool on);
     bool MenuMode();
     struct MenuMouse { float x, y; bool inside, left, right; int wheel; };
     MenuMouse PollMenuMouse();                       // wheel: notches since the previous poll

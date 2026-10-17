@@ -54,6 +54,7 @@ def blank(p, w, keep=KEEP_SECTION):
     removed = sum(1 for r, o_ in zip(refs, out) if r and not o_)
     # the array keeps its length: an emptied slot is None, as a destroyed actor's (Actors[0] stays the WorldInfo)
     w.replace(li, bytes(d[:co + 4]) + b''.join(struct.pack('>i', r) for r in out) + bytes(d[co + 4 + 4 * len(refs):]))
+    unlink_navigation(p, w, li, {r for r in out if r})
     m = next((i for i in range(len(p.exports)) if p.path(i) == 'TheWorld.PersistentLevel.Main_Sequence'), None)
     if m is not None:
         sd = bytearray(w.current(m))
@@ -62,6 +63,35 @@ def blank(p, w, keep=KEEP_SECTION):
             sd = levelinject.set_property(p, w, sd, o, 'SequenceObjects', struct.pack('>i', 0), 'ArrayProperty')
             w.replace(m, bytes(sd))
     return kept, removed
+
+
+def unlink_navigation(p, w, li, kept):
+    """the level's navigation point list (NavListStart/End, nextNavigationPoint) without the actors left out of
+    Level.Actors: the world's list is every level's chained, and a script's `foreach AllNavigationPoints` reached an
+    actor that was never initialised (the template's weapon lockers: GearPickupFactory.CoopPlayerNumberChange, on a
+    checkpoint restart, read its WorldInfo, None: a crash). Returns the count dropped."""
+    import cover
+    ld = bytearray(w.current(li))
+    at = cover.level_lists(p, bytes(ld), w)['nav_end'] - 4      # NavListStart, then NavListEnd
+    chain, r, seen = [], struct.unpack_from('>i', ld, at)[0], set()
+    while 0 < r <= len(p.exports) and r not in seen:
+        seen.add(r); chain.append(r)
+        d = w.current(r - 1)
+        o, pr, end = levelinject.props_at(p, bytes(d), (26,))
+        v, size = levelinject.tag_value_offset(p, bytes(d), o, 'nextNavigationPoint')
+        r = struct.unpack_from('>i', d, v)[0] if v is not None else 0
+    keep = [r for r in chain if r in kept]
+    if len(keep) == len(chain): return 0
+    for a_, b_ in zip(keep, keep[1:] + [0]):
+        d = bytearray(w.current(a_ - 1))
+        o, pr, end = levelinject.props_at(p, bytes(d), (26,))
+        v, size = levelinject.tag_value_offset(p, bytes(d), o, 'nextNavigationPoint')
+        if v is not None: struct.pack_into('>i', d, v, b_)
+        elif b_: d = levelinject.set_property(p, w, d, o, 'nextNavigationPoint', struct.pack('>i', b_), 'ObjectProperty')
+        w.replace(a_ - 1, bytes(d))
+    struct.pack_into('>ii', ld, at, keep[0] if keep else 0, keep[-1] if keep else 0)
+    w.replace(li, bytes(ld))
+    return len(chain) - len(keep)
 
 
 def world_info(p):

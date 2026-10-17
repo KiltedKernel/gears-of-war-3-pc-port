@@ -1,0 +1,36 @@
+# (fresh; needs the Gears1_Chapter1 mod) Reload Last Checkpoint in Gears 1's prison, past the path choice (where a
+# player's reload crashed): g1_chapter1_play.txt's route, then Start -> Reload Last Checkpoint (the pause menu's second
+# option; greyed, and skipped by the d-pad, before the first checkpoint) -> A (and A for a confirmation), twice. A
+# Gears 3 template level's weapon lockers once stayed in the converted sections' navigation lists, uninitialised: the
+# reload crashed in GearPickupFactory.CoopPlayerNumberChange (docs/TRILOGY.md). Check build\gow3.log for CRASH
+45 pad 0010 250
+52 pad 1000 250
+60 pad 1000 250
+64 pad 1000 250
+68 pad 0002 150
+70 pad 1000 250
+74 pad 0008 150
+76 pad 0008 150
+78 pad 0008 150
+80 pad 0008 150
+82 pad 0008 150
+86 pad 1000 250
+90 pad 1000 250
+94 pad 1000 250
+98 pad 1000 250
+102 pad 1000 250
+106 pad 1000 250
+200 capture
+201 walkto 138 1042 15
+220 follow COGDom 25 120
+250 walkto -429 1150 15
+255 choose L
+290 route -988,1150;-1549,924;-1668,491;-1432,476;-1011,469;-976,460 25
+660 pad 0010 250
+663 pad 0002 150
+665 pad 1000 250
+667 pad 1000 250
+740 pad 0010 250
+743 pad 0002 150
+745 pad 1000 250
+747 pad 1000 250

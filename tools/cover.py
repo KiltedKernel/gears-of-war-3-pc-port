@@ -233,6 +233,7 @@ def add_links(p, w, count, template=None):
             else:
                 struct.pack_into('>i', d, v, b_ + 1)
             w.replace(a_, bytes(d))
+        if chain[0] < 0: struct.pack_into('>i', ld, at - 4, new[0] + 1)   # an empty list: it starts here
         struct.pack_into('>i', ld, at, new[-1] + 1)
     relink(cover_end_at, 'NextCoverLink'); relink(nav_end_at, 'nextNavigationPoint')
     n_refs = len(refs)
@@ -323,6 +324,7 @@ def append_nav_points(p, w, new):
         if v is None: d = levelinject.set_property(p, w, d, o, 'nextNavigationPoint', struct.pack('>i', b_ + 1), 'ObjectProperty')
         else: struct.pack_into('>i', d, v, b_ + 1)
         w.replace(a_, bytes(d))
+    if old_end == 0: struct.pack_into('>i', ld, at - 4, new[0] + 1)      # an empty list (levelpkg.blank): it starts here
     struct.pack_into('>i', ld, at, new[-1] + 1)
     w.replace(lvl, bytes(ld))
     return len(new)

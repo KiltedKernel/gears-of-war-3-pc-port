@@ -19,9 +19,12 @@
 #include <kernel/memory.h>
 #include <kernel/mods.h>
 #include <os/logger.h>
+#include <atomic>
 #include <chrono>
+#include <mutex>
 #include <set>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -101,18 +104,47 @@ namespace
     // the package's own objects (Outer +40 = the package: its ObjectReferencers, which reference everything the
     // package carries, so rooting them keeps it all) into the root set. (Not by linker: a cooked build detaches a
     // seekfree package's linker once it has loaded, every object's _Linker is null then.)
-    void Root(Request& r)
+    // The search walks the whole object table (about 200 ms): on the game thread every 2 s it was a stutter for the
+    // first minute (the opening cutscene, for a player who starts a chapter at once). So it runs on a thread of its
+    // own and the game thread only sets the flags it found (the engine writes ObjectFlags on the game thread too).
+    std::mutex g_scanMutex;
+    std::vector<std::pair<size_t, uint32_t>> g_scanFound;   // (request, object)
+    std::atomic<bool> g_scanBusy{ false }, g_scanDone{ false };
+
+    void StartScan()
     {
-        const size_t before = r.rooted.size();
-        for (uint32_t o : ue3::AllObjects())
+        if (g_scanBusy.exchange(true)) return;
+        std::vector<std::pair<size_t, uint32_t>> packages;
+        for (size_t k = 0; k < g_requests.size(); k++)
+            if (g_requests[k].package && !g_requests[k].done) packages.push_back({ k, g_requests[k].package });
+        std::thread([packages] {
+            std::vector<std::pair<size_t, uint32_t>> found;
+            for (uint32_t o : ue3::AllObjects())
+            {
+                const uint32_t outer = ue3::Read32(o + kOuterOffset);
+                for (auto [k, p] : packages) if (outer == p) found.push_back({ k, o });
+            }
+            { std::lock_guard lock(g_scanMutex); g_scanFound = std::move(found); }
+            g_scanDone = true;
+        }).detach();
+    }
+
+    void ApplyScan()
+    {
+        if (!g_scanDone.exchange(false)) return;
+        std::vector<std::pair<size_t, uint32_t>> found;
+        { std::lock_guard lock(g_scanMutex); found.swap(g_scanFound); }
+        for (auto [k, o] : found)
         {
-            if (ue3::Read32(o + kOuterOffset) != r.package || r.rooted.count(o)) continue;
+            Request& r = g_requests[k];
+            if (r.rooted.count(o) || ue3::Read32(o + kOuterOffset) != r.package) continue;
             uint32_t* flags = (uint32_t*)g_memory.Translate(o + kFlagsLow);
             *flags = ByteSwap(ByteSwap(*flags) | kRootSet);
             r.rooted.insert(o);
-            LOGFN("content packages: {}: keeping {} ({})", r.name, ue3::ObjectName(o), ue3::ObjectName(ue3::ClassOf(o)));
+            LOGFN("content packages: {}: keeping {} ({}); {} objects kept loaded", r.name, ue3::ObjectName(o),
+                  ue3::ObjectName(ue3::ClassOf(o)), r.rooted.size());
         }
-        if (r.rooted.size() != before) LOGFN("content packages: {}: {} objects kept loaded", r.name, r.rooted.size());
+        g_scanBusy = false;
     }
 }
 
@@ -121,6 +153,7 @@ void OnGameThread()
 {
     if (g_disabled || GetCurrentThreadId() != g_mainThreadId) return;
     if (!g_init) { Init(); if (g_requests.empty()) { g_disabled = true; return; } }
+    ApplyScan();
     if (++g_frame % 30 || !ue3::Ready()) return;
     if (!g_engineUp) { g_engineUp = ue3::FindObject("Default__GearTypes") != 0; if (!g_engineUp) return; }
     bool pending = false;
@@ -140,9 +173,9 @@ void OnGameThread()
             else if (p) LOGFN("content packages: {}: an object of that name, class {}", r.name, ue3::ObjectName(ue3::ClassOf(p)));
             continue;
         }
-        if (g_frame % 120 == 0 && FlagsLayoutOk()) Root(r);
-        if (std::chrono::steady_clock::now() - r.seen > std::chrono::seconds(60)) r.done = true;
+        if (g_frame % 120 == 0 && FlagsLayoutOk()) StartScan();
+        if (std::chrono::steady_clock::now() - r.seen > std::chrono::seconds(60) && !g_scanBusy) r.done = true;
     }
-    if (!pending) g_disabled = true;
+    if (!pending && !g_scanBusy) g_disabled = true;
 }
 }

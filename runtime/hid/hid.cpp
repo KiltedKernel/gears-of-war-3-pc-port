@@ -49,7 +49,8 @@ namespace
     // "<seconds> mouse <dx> <dy> [ms]" (spread over ms, default 200), "<seconds> capture", "<seconds> walkto <x> <y>
     // [s]" (the player walks to a map position, WalkTo), "<seconds> face <x> <y>" (the camera turns toward it),
     // "<seconds> follow <pawn class part> [s] [distance]" (the player walks after that pawn, Follow),
-    // "<seconds> route x,y;x,y;... [s per point]" (the points in order, Route).
+    // "<seconds> route x,y;x,y;... [s per point]" (the points in order, Route), "<seconds> choose L|R [s]" (a path
+    // choice's trigger once one is on screen).
     // '#' starts a comment.
     bool g_scripted = false;
     std::atomic<bool> g_scriptKeys[256];
@@ -61,6 +62,7 @@ namespace
     std::atomic<int> g_scriptCursorX{ -1 }, g_scriptCursorY{ -1 }, g_scriptWheel{ 0 };
     std::atomic<bool> g_scriptLeft{ false }, g_scriptRight{ false };
     std::atomic<bool> g_menuMode{ false };
+    std::atomic<bool> g_pathChoice{ false };   // hid::SetPathChoice
     std::atomic<int> g_wheel{ 0 };                    // raw wheel notches (real mouse)
     std::atomic<int64_t> g_anyMouse{ 0 };              // any raw mouse event while focused (device tracking)
     std::atomic<uint16_t> g_injected{ 0 };
@@ -410,6 +412,7 @@ namespace
             else if (e.kind == "click") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 120; }
             else if (e.kind == "wheel") { in >> e.a; }
             else if (e.kind == "trig") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 200; }
+            else if (e.kind == "choose") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 900; }
             else if (e.kind == "walkto") { in >> e.a >> e.b >> e.c; if (!e.c) e.c = 20; }
             else if (e.kind == "face") { in >> e.a >> e.b; }
             else if (e.kind == "follow") { in >> e.text >> e.a >> e.b; if (!e.a) e.a = 60; }
@@ -458,6 +461,21 @@ namespace
                 }).detach();
             }
             else if (e.kind == "wheel") g_scriptWheel += int(e.a);
+            else if (e.kind == "choose")
+            {
+                // "t choose L|R [s]": once a path choice is on screen (within s seconds) its trigger, until it closes
+                std::thread([right = e.a != 0, wait = e.b] {
+                    const uint64_t until = GetTickCount64() + uint64_t(wait) * 1000;
+                    while (!g_pathChoice && GetTickCount64() < until) Sleep(100);
+                    if (!g_pathChoice) { LOGFN("input: choose: no path choice within {} s", wait); return; }
+                    for (int k = 0; k < 10 && g_pathChoice; k++)
+                    {
+                        Sleep(1500);
+                        (right ? g_scriptRT : g_scriptLT) = 255; Sleep(300); (right ? g_scriptRT : g_scriptLT) = 0;
+                    }
+                    LOGFN("input: choose {}: {}", right ? "R" : "L", g_pathChoice ? "the choice stayed open" : "chosen");
+                }).detach();
+            }
             else if (e.kind == "trig")
             {
                 std::thread([right = e.a != 0, hold = e.b] {
@@ -519,7 +537,14 @@ namespace
         g.sThumbLY = Axis(Down('S'), Down('W'));
         g.sThumbRX = look.x;
         g.sThumbRY = look.y;
-        if (g_captured)
+        if (g_pathChoice)
+        {
+            // Gears 3's path choice reads the triggers (left path: LT): on keyboard and mouse the button on that side
+            // (in play the same buttons are aim and fire, the other way round), or the arrow key
+            if (Down(VK_LBUTTON) || Down(VK_LEFT)) g.bLeftTrigger = 255;
+            if (Down(VK_RBUTTON) || Down(VK_RIGHT)) g.bRightTrigger = 255;
+        }
+        else if (g_captured)
         {
             if (Down(VK_LBUTTON)) g.bRightTrigger = 255;
             if (Down(VK_RBUTTON)) g.bLeftTrigger = 255;
@@ -716,6 +741,7 @@ void hid::TakeMouseDelta(float& dx, float& dy)
 hid::Device hid::ActiveDevice() { return g_device; }
 
 void hid::SetMenuMode(bool on) { g_menuMode = on; }
+void hid::SetPathChoice(bool on) { g_pathChoice = on; }
 bool hid::MenuMode() { return g_menuMode; }
 
 void hid::InjectButtons(uint16_t buttons, int milliseconds)

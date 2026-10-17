@@ -942,6 +942,88 @@ def neutralize_streaming(up, made):
     return n
 
 
+# ---- light environments for cutscene characters ----
+# Gears 3 lights a character through its DynamicLightEnvironmentComponent: the lights around it composited into it
+# (Default__SkeletalMeshActor.MyLightEnvironment, which its SkeletalMeshComponent0 uses). A copied Gears 1
+# SkeletalMeshActor carries Gears 1's component list, without one (composite lights could not reach it). Each
+# copied SkeletalMeshActor gets the light environment of Gears 3's class (LightEnvironment, Components, and its mesh
+# component's LightEnvironment).
+def light_environments(up, made):
+    c, s, w = up.c, up.c.s, up.w
+    dle = c.class_ref('DynamicLightEnvironmentComponent')
+    if not dle: return 0
+    pk = c.find_import('Core', 'Package', 0, 'Engine')
+    d_imp = c.find_import('Engine', 'SkeletalMeshActor', pk, 'Default__SkeletalMeshActor')
+    tmpl = c.find_import('Engine', 'DynamicLightEnvironmentComponent', d_imp, 'MyLightEnvironment')
+    n = 0
+    for i, ref in made.items():
+        if s.class_name(s.exports[i]['class']) != 'SkeletalMeshActor': continue
+        comp = w.add_export(dle, ref, c.unique_name('G1LightEnvironment', 0), b'', flags=0x0007000100000000, archetype=tmpl)
+        w.replace(comp - 1, c.prelude_828('component', dle) + encode(w, []))
+        d = w.current(ref - 1)
+        recs, end = parse828(d, 26, up.wname)
+        mesh = next((struct.unpack('>i', r[4])[0] for r in recs if r[0] == 'SkeletalMeshComponent'), 0)
+        for r in recs:
+            if r[0] == 'Components':
+                k = struct.unpack_from('>i', r[4], 0)[0]
+                r[4] = struct.pack('>i', k + 1) + r[4][4:] + struct.pack('>i', comp)
+        if not any(r[0] == 'Components' for r in recs):
+            recs.append(['Components', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, comp)])
+        recs = [r for r in recs if r[0] != 'LightEnvironment'] + [['LightEnvironment', 'ObjectProperty', 0, b'', struct.pack('>i', comp)]]
+        w.replace(ref - 1, d[:26] + encode(w, recs) + d[end:])
+        if mesh > 0:
+            md = w.current(mesh - 1)
+            mrecs, mend = parse828(md, 8, up.wname)
+            mrecs = [r for r in mrecs if r[0] != 'LightEnvironment'] + [['LightEnvironment', 'ObjectProperty', 0, b'', struct.pack('>i', comp)]]
+            w.replace(mesh - 1, md[:8] + encode(w, mrecs) + md[mend:])
+        n += 1
+    return n
+
+
+# ---- a held shot over a path choice ----
+# A path choice holds the camera on a Matinee shot: the Matinee's own "Pause" event track stops it (its output linked to
+# its Pause input) while the choice is on screen. Gears 3 resumes it after the choice (SP_Stadium_01_S: the choice's
+# sequence output -> the Matinee's sequence, Play: a paused Matinee plays on to its end) and the view comes back on
+# "Completed". Gears 1's prison never resumed it, and on Gears 3 the view stayed on the held shot for the rest of the
+# level. Every Matinee holding itself so in the sequence of a SeqAct_DisplayPathChoice is played on from each of the
+# choice's outputs.
+def resume_held_matinees(up, made):
+    c, s, w = up.c, up.c.s, up.w
+    def outputs(ref):
+        recs, end = parse828(w.current(ref - 1), 4, up.wname)
+        return recs, end, next((up.elements(r[4], up.wname) for r in recs if r[0] == 'OutputLinks'), [])
+    def targets(e):
+        lr = next((x for x in e if x[0] == 'Links'), None)
+        out = []
+        for l in (up.elements(lr[4], up.wname) if lr is not None else []):
+            a = {x[0]: x[4] for x in l}
+            out.append((struct.unpack('>i', a['LinkedOp'])[0] if 'LinkedOp' in a else 0,
+                        struct.unpack('>i', a['InputLinkIdx'])[0] if 'InputLinkIdx' in a else 0))
+        return out
+    n = 0
+    for i, ref in made.items():
+        if s.class_name(s.exports[i]['class']) != 'SeqAct_DisplayPathChoice': continue
+        seq = s.exports[i]['outer']
+        held = [r for j, r in made.items() if s.exports[j]['outer'] == seq and s.class_name(s.exports[j]['class']) == 'SeqAct_Interp'
+                and any((r, 3) in targets(e) for e in outputs(r)[2])]
+        if not held: continue
+        recs, end, _ = outputs(ref)
+        for r_ in recs:
+            if r_[0] != 'OutputLinks': continue
+            els = up.elements(r_[4], up.wname)
+            for e in els:
+                add = b''.join(up.enc([['LinkedOp', 'ObjectProperty', 0, b'', struct.pack('>i', h)],
+                                       ['InputLinkIdx', 'IntProperty', 0, b'', struct.pack('>i', 0)]]) for h in held)
+                lr = next((x for x in e if x[0] == 'Links'), None)
+                if lr is None: e.append(['Links', 'ArrayProperty', 0, b'', struct.pack('>i', len(held)) + add])
+                else: lr[4] = struct.pack('>i', struct.unpack_from('>i', lr[4], 0)[0] + len(held)) + lr[4][4:] + add
+            r_[4] = struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)
+        d = w.current(ref - 1)
+        w.replace(ref - 1, d[:4] + up.enc(recs) + d[end:])
+        n += len(held)
+    return n
+
+
 # ---- the view after a cutscene ----
 # A Matinee's director track restores the player's view when the Matinee ends (InterpTrackInstDirector.OldViewTarget).
 # In the converted opening it stayed null and the view stayed on the cutscene's last camera, with the player in
@@ -1247,6 +1329,7 @@ def anim_sequence_tail(c, props, tail):
     out, new_offs = bytearray(), []
     def table(keys):
         if keys <= 1: return
+        while len(out) % 4: out.append(0x55)            # the frame table starts aligned (6-byte Fixed48 keys)
         for k in range(keys):
             f = round(k * (frames - 1) / (keys - 1))
             out.extend(struct.pack('>B', f) if frames < 256 else struct.pack('>H', f))
@@ -1255,9 +1338,16 @@ def anim_sequence_tail(c, props, tail):
         to, tn, ro, rn = offs[4 * t:4 * t + 4]
         new_offs += [len(out), tn]
         out.extend(bs[to:to + 12 * tn]); table(tn)
+        new_offs += [len(out), rn]
+        if fmt == 'ACF_Fixed48NoW' and rn > 1:
+            # Gears 1's Fixed48 track starts with a 24-byte header (the track's bounds: 3 minimums, 3 ranges), then
+            # the keys as Gears 3 reads them (each u16: (u - 32767) / 32767; every key of the prison's opening lies
+            # in its header's bounds). Gears 3's track has no header: copied with it, every key was read 24 bytes
+            # early and the last four were lost (the cutscene's Wretches stretched and broke, animations jerked)
+            out.extend(bs[ro + 24:ro + 24 + 6 * rn]); table(rn)
+            continue
         size = ROT_KEY_SIZE[fmt] * rn + (24 if fmt == 'ACF_IntervalFixed32NoW' and rn > 1 else 0)
         if rn == 1: size = 12                           # a single rotation key is always Float96NoW
-        new_offs += [len(out), rn]
         out.extend(bs[ro:ro + size]); table(rn)
     recs = [x for x in recs if x[0] not in ('CompressedTrackOffsets', 'KeyEncodingFormat', 'TranslationCompressionFormat')]
     recs.append(['CompressedTrackOffsets', 'ArrayProperty', 0, b'', struct.pack(f'>i{len(new_offs)}i', len(new_offs), *new_offs)])
@@ -1895,13 +1985,17 @@ def lights(src):
 
 
 def light_component(c, props):
-    """a copied light lights dynamic objects only (characters, movers, cutscene actors): the converted geometry
-    already has this light baked in (LightingChannels: Dynamic, CompositeDynamic; not BSP / Static), and casts no
-    shadows (hundreds of Gears 1 lights in a level)"""
+    """a copied light lights characters only, through their light environments (LightingChannels: CompositeDynamic;
+    not BSP / Static: the converted geometry already has this light baked in; not Dynamic: a dynamic light is a pass
+    of its own on every dynamic primitive it reaches, and a Gears 1 section has hundreds of lights where Gears 3's
+    have about ten: past the path choice the render thread drew 28 frames a second), and casts no shadows.
+    A cutscene's characters are lit through the light environments light_environments gives them.
+    OBJCOPY_LIGHTS_DYNAMIC=1: every light Dynamic too."""
     wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
     recs, _ = parse828(props, 0, wname)
     drop = {'LightingChannels', 'CastShadows', 'CastDynamicShadows', 'CastStaticShadows', 'bHasLightEverBeenBuiltIntoLightMap'}
-    ch = encode(c.w, [[k, 'BoolProperty', 0, b'', b'\x01'] for k in ('bInitialized', 'Dynamic', 'CompositeDynamic')])
+    channels = ('bInitialized', 'Dynamic', 'CompositeDynamic') if os.environ.get('OBJCOPY_LIGHTS_DYNAMIC') else ('bInitialized', 'CompositeDynamic')
+    ch = encode(c.w, [[k, 'BoolProperty', 0, b'', b'\x01'] for k in channels])
     if os.environ.get('OBJCOPY_LIGHTS_MINIMAL'):       # (debugging the load crash: only the light's look)
         recs = [r for r in recs if r[0] in ('Radius', 'Brightness', 'LightColor', 'FalloffExponent', 'InnerConeAngle', 'OuterConeAngle')]
     recs = [r for r in recs if r[0] not in drop] + [

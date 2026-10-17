@@ -61,7 +61,9 @@ namespace
     bool IsMenuScene(const std::string& name)
     {
         // (UIScene_Alert counts as a menu only while it takes input: a dialog is up)
-        static const char* notMenus[] = { "UIScene_Background", "UIScene_HUD", "UIScene_CalloutsContent" };
+        // (UIScene_PathChoice reads the triggers, not menu presses: a click there was an A, and nothing chose; hid's
+        // path choice mode instead)
+        static const char* notMenus[] = { "UIScene_Background", "UIScene_HUD", "UIScene_CalloutsContent", "UIScene_PathChoice" };
         for (const char* n : notMenus)
             if (name.rfind(n, 0) == 0) return false;
         return true;
@@ -99,7 +101,7 @@ namespace
         {
             if (tick % 20 == 0) movies = ue3::FindInstancesOf(base);   // every 2 s: new scenes
             std::string open;
-            bool menu = false;
+            bool menu = false, pathChoice = false;
             std::vector<Target> targets;
             for (uint32_t m : movies)
             {
@@ -108,6 +110,7 @@ namespace
                 const std::string name = ue3::ObjectName(m);
                 const bool input = (flags & f.input) != 0;
                 open += fmt::format(" {}{}{}", name, input ? "+in" : "", (flags & f.capture) ? "+cap" : "");
+                if (input && name.rfind("UIScene_PathChoice", 0) == 0) pathChoice = true;
                 if (!input || !IsMenuScene(name)) continue;
                 menu = true;
                 const uint32_t movie = pMovie >= 0 ? ue3::Read32(m + uint32_t(pMovie)) : 0;
@@ -124,6 +127,12 @@ namespace
                 g_targets = std::move(targets);
             }
             if (debug && open != last) { LOGFN("gfx_menu: open:{}", open.empty() ? " (none)" : open); last = open; }
+            static bool wasChoice = false;
+            if (pathChoice != wasChoice)
+            {
+                hid::SetPathChoice(pathChoice); wasChoice = pathChoice;
+                LOGFN("gfx_menu: path choice {}", pathChoice ? "on (left click / Left: left path, right click / Right: right path)" : "off");
+            }
             if (menu != wasMenu)
             {
                 hid::SetMenuMode(menu); wasMenu = menu;

@@ -79,6 +79,7 @@ def add_pylons(p, w, positions, radius, template=None):
             if v is None: dd = levelinject.set_property(p, w, dd, o, prop, struct.pack('>i', b_ + 1), 'ObjectProperty')
             else: struct.pack_into('>i', dd, v, b_ + 1)
             w.replace(a_, bytes(dd))
+        if chain[0] < 0: struct.pack_into('>i', ld, at - 4, new[0] + 1)   # an empty list: it starts here
         struct.pack_into('>i', ld, at, new[-1] + 1)
     relink(nav_end_at, 'nextNavigationPoint'); relink(pylon_end_at, 'NextPylon')
     w.replace(lvl, bytes(ld))

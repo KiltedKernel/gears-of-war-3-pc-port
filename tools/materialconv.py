@@ -52,6 +52,8 @@ def fname_bytes(w, s):
 
 def g1_textures(p, mat):
     """{'diffuse'|'normal'|'specular': texture export index (0-based)} for Gears 1 material export index mat"""
+    if mat >= 0 and p.class_name(p.exports[mat]['class']) == 'MaterialInstanceConstant':
+        return g1_instance_textures(p, mat)
     if mat < 0 or p.class_name(p.exports[mat]['class']) != 'Material': return {}
     o, pr, end = levelinject.props_at(p, p.export_data(mat))
     a = {n: v for n, t, k, v in pr}
@@ -80,6 +82,37 @@ def g1_textures(p, mat):
             nm = p.path(r - 1).lower()
             for slot, keys in (('diffuse', ('_tex', 'diffuse', '_d')), ('normal', ('normal', '_n')), ('specular', ('spec', '_s'))):
                 if slot not in out and any(k in nm.split('.')[-1] for k in keys): out[slot] = r - 1
+    return out
+
+
+def g1_instance_textures(p, mic, depth=0):
+    """g1_textures for a Gears 1 MaterialInstanceConstant: its texture parameters by name (Gears 1's character
+    shaders: COG_Dom_Shader on Dom's gameplay mesh), then its parent's for the slots it leaves (before, its mesh drew
+    with the template's material)"""
+    out = {}
+    try:
+        recs, _ = raw_props(p, p.export_data(mic), 4)
+    except Exception:
+        return out
+    a = {r[0]: r for r in recs}
+    if 'TextureParameterValues' in a:
+        v = a['TextureParameterValues'][4]
+        o = 4
+        for _ in range(struct.unpack_from('>i', v, 0)[0]):
+            el, o = raw_props(p, v, o)
+            e = {x[0]: x[4] for x in el}
+            if 'ParameterName' not in e or 'ParameterValue' not in e: continue
+            name = p.fname(*struct.unpack('>ii', e['ParameterName'][:8])).lower()
+            ref = struct.unpack('>i', e['ParameterValue'][:4])[0]
+            if ref <= 0 or p.class_name(p.exports[ref - 1]['class']) != 'Texture2D': continue
+            slot = 'normal' if 'norm' in name else 'specular' if 'spec' in name else \
+                   'diffuse' if any(k in name for k in ('diffuse', 'tex', 'color', 'base')) else None
+            if slot and slot not in out: out[slot] = ref - 1
+    parent = struct.unpack('>i', a['Parent'][4][:4])[0] if 'Parent' in a else 0
+    if parent > 0 and depth < 8 and len(out) < 3:
+        cls = p.class_name(p.exports[parent - 1]['class'])
+        up = g1_instance_textures(p, parent - 1, depth + 1) if cls == 'MaterialInstanceConstant' else g1_textures(p, parent - 1)
+        for k, x in up.items(): out.setdefault(k, x)
     return out
 
 
@@ -247,6 +280,29 @@ def import_object(w, p3, pk, index, cache):
             if existing is None:
                 ni, nn = struct.unpack_from('>ii', pk.data, e['entry'] + 12)      # the export's raw FName
                 existing = w.add_import(cpkg, cls, outer, pk.names[ni], nn)
+            cache[key] = existing
+        outer = cache[key]
+    return outer
+
+
+def copy_import(w, p3, pk, ref, cache):
+    """an import ref in the package being written (w, read as p3) of the object that import `ref` (negative) of
+    package pk names: its chain of outers copied (the engine's own content, e.g. ALL_SoldierShaders.AllBlack)"""
+    chain = []
+    while ref < 0:
+        chain.append(ref)
+        ref = pk.imports[-ref - 1]['outer']
+    outer = 0
+    for r in reversed(chain):
+        im = pk.imports[-r - 1]
+        key = (im['class_package'], im['class'], outer, im['name'])
+        if key not in cache:
+            existing = next((-n - 1 for n, x in enumerate(p3.imports) if x['class'] == im['class'] and x['outer'] == outer
+                             and x['name'] == im['name']), None)
+            if existing is None:
+                base, num = (im['name'].rsplit('_', 1) if '_' in im['name'] and im['name'].rsplit('_', 1)[1].isdigit()
+                             and not im['name'].rsplit('_', 1)[1].startswith('0') else (im['name'], None))
+                existing = w.add_import(im['class_package'], im['class'], outer, base, int(num) + 1 if num is not None else 0)
             cache[key] = existing
         outer = cache[key]
     return outer

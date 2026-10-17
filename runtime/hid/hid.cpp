@@ -18,6 +18,7 @@
 #include <user/settings.h>
 #include <os/logger.h>
 #include <ue3/reflection.h>
+#include <kernel/memory.h>
 #include <Xinput.h>
 #include <atomic>
 #include <cmath>
@@ -254,6 +255,23 @@ namespace
         return 0;
     }
 
+    // "teleport x y z" (testing): the local player's pawn put there (its Location written: a test reaches a place
+    // the route walker cannot, e.g. the top of a staircase)
+    void Teleport(double x, double y, double z)
+    {
+        static const uint32_t actor = ue3::FindClass("Actor");
+        const int loc = actor ? ue3::PropertyOffset(actor, "Location") : -1;
+        const uint32_t pawn = LocalPawn();
+        if (!pawn || loc < 0) { LOGFN("input: teleport: no player pawn"); return; }
+        const float v[3] = { float(x), float(y), float(z) };
+        for (int k = 0; k < 3; k++)
+        {
+            uint32_t u; memcpy(&u, &v[k], 4);
+            *(uint32_t*)g_memory.Translate(pawn + uint32_t(loc) + 4 * k) = ByteSwap(u);
+        }
+        LOGFN("input: teleport to {:.0f},{:.0f},{:.0f}", x, y, z);
+    }
+
     // "walkto x y [seconds]": steer the local player to (x, y) with the left stick, relative to the camera (the
     // controller's yaw: Gears moves relative to the camera). Stops within 100 units, when
     // stuck for 3 s, or after the time (default 20 s); logs where it ended. Positions: GOW3_LOG_POS / GOW3_LOG_ACTORS.
@@ -414,6 +432,7 @@ namespace
             else if (e.kind == "trig") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 200; }
             else if (e.kind == "choose") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 900; }
             else if (e.kind == "walkto") { in >> e.a >> e.b >> e.c; if (!e.c) e.c = 20; }
+            else if (e.kind == "teleport") { in >> e.a >> e.b >> e.c; }
             else if (e.kind == "face") { in >> e.a >> e.b; }
             else if (e.kind == "follow") { in >> e.text >> e.a >> e.b; if (!e.a) e.a = 60; }
             else if (e.kind == "route") { in >> e.text >> e.a; }
@@ -487,6 +506,7 @@ namespace
                 std::thread([b = uint16_t(e.a), hold = e.b] { g_scriptPadButtons = b; Sleep(DWORD(hold)); g_scriptPadButtons = 0; }).detach();
             }
             else if (e.kind == "walkto") std::thread(WalkTo, e.a, e.b, e.c).detach();
+            else if (e.kind == "teleport") Teleport(e.a, e.b, e.c);
             else if (e.kind == "face") std::thread(Face, e.a, e.b).detach();
             else if (e.kind == "follow") std::thread(Follow, e.text, e.a, e.b).detach();
             else if (e.kind == "route") std::thread(Route, e.text, e.a).detach();

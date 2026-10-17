@@ -154,6 +154,10 @@ def main():
     ap.add_argument('--radius', type=float, default=0)
     ap.add_argument('--template', default=None, help='a component whose StaticMesh path contains this (its materials)')
     ap.add_argument('--no-lighting', action='store_true', help='no light maps (unlit)')
+    ap.add_argument('--shared-textures', default=None, help="a chapter's texture package: converted textures are imports of "
+                    "it, recorded in --texture-manifest for trilogy.py to write")
+    ap.add_argument('--texture-manifest', default=None)
+    ap.add_argument('--merge', action='store_true', help='mesh actors joined into one mesh per 4096-unit cell and collision class (fewer draws)')
     ap.add_argument('--no-point-lights', action='store_true', help="do not bake the source level's dynamic point lights")
     ap.add_argument('--no-collision', action='store_true', help="keep the template's collision flags")
     ap.add_argument('--bsp', action='store_true', help="also the level's BSP (Gears 1), as static mesh chunks")
@@ -242,15 +246,37 @@ def main():
         c = np.array([float(x) for x in args.center.split(',')])
         actors = [a for a in actors if np.linalg.norm(a[2] - c) <= args.radius]
     if args.max: actors = actors[:args.max]
+    # a component's own materials (Gears 1 StaticMeshComponent.Materials: per element, 0 = the mesh's) override the
+    # mesh's: a sixth of the prison's components have them (the sky dome's sky, decal overlays, tinted walls); they
+    # drew with their meshes' materials before
+    overrides = {}                                     # (source, component) -> [material ref per element]
+    for a in actors:
+        si, ci = a[0], a[5]
+        try:
+            co_, cpr_, _ = props_at(srcs[si], srcs[si].export_data(ci), (8, 4, 12))
+            raw = {n_: v_ for n_, t_, k_, v_ in cpr_}.get('Materials')
+            if raw:
+                ov = list(struct.unpack_from(f'>{struct.unpack_from(">i", raw, 0)[0]}i', raw, 4))
+                if any(ov): overrides[(si, ci)] = ov
+        except Exception:
+            pass
+    mesh_elements = {}
+    def element_materials(si, mi, ci):
+        if (si, mi) not in mesh_elements: mesh_elements[(si, mi)] = staticmesh.read(srcs[si], mi)['lods'][0]['elements']
+        els = mesh_elements[(si, mi)]
+        ov = overrides.get((si, ci), [])
+        return [ov[k] if k < len(ov) and ov[k] else el['material'] for k, el in enumerate(els)]
     # meshes drawn only see-through (light shafts, fog sheets): left out until translucent materials convert
     see_through = {}
+    def key_of(a): return a[:2] + tuple(overrides.get((a[0], a[5]), ()))
     for a in actors:
-        if a[:2] not in see_through:
-            try: see_through[a[:2]] = materialconv.g1_see_through(srcs[a[0]], staticmesh.read(srcs[a[0]], a[1])['lods'][0]['elements'])
-            except Exception: see_through[a[:2]] = False
+        if key_of(a) not in see_through:
+            try: see_through[key_of(a)] = materialconv.g1_see_through(srcs[a[0]], [{'material': x} for x in element_materials(a[0], a[1], a[5])])
+            except Exception: see_through[key_of(a)] = False
     n_before = len(actors)
-    actors = [a for a in actors if not see_through[a[:2]]]
-    print(f'{n_before - len(actors)} see-through mesh actors left out ({sum(see_through.values())} meshes)')
+    actors = [a for a in actors if not see_through[key_of(a)]]
+    print(f'{n_before - len(actors)} see-through mesh actors left out ({sum(see_through.values())} meshes); '
+          f'{len(overrides)} components with their own materials')
     bsp_chunks, polys = [], []                         # chunks: (source index, materials, mesh)
     if args.bsp:
         for si, sp in enumerate(srcs):
@@ -353,6 +379,26 @@ def main():
     pk = upk.Package(args.kit) if args.kit else None
     upk.E = '>'
     kit_imports = {}
+    # --shared-textures <package> --texture-manifest <json>: a chapter's converted textures live once, in a package of
+    # their own that is always loaded (each section converting its own copies, 213 of the prison's 330 MB of
+    # textures were duplicates); a section imports them, and the manifest records what that package must hold
+    manifest = None
+    if args.shared_textures:
+        import json
+        manifest = json.load(open(args.texture_manifest)) if os.path.isfile(args.texture_manifest) else {'names': {}, 'entries': {}}
+    shared_pkg, kit_tex_template = [], {}
+    def shared_texture(sp, ti, tt, tkey, slot):
+        name = manifest['names'].get(tkey)
+        if name is None:
+            base = name = 'TrilogyT_' + tkey.split('.')[-1]
+            k = 2
+            while name in manifest['entries']: name = f'{base}_v{k}'; k += 1
+            manifest['names'][tkey] = name
+            kt = kit_tex_template.get(slot)            # (the persistent level is a clone of the kit)
+            template = pk.path(kt) if pk is not None and kt is not None and kt >= 0 else p3.path(tt)
+            manifest['entries'][name] = {'source': os.path.abspath(sp.filename), 'index': ti, 'template': template}
+        if not shared_pkg: shared_pkg.append(w.add_import('Core', 'Package', 0, args.shared_textures))
+        return w.add_import('Engine', 'Texture2D', shared_pkg[0], name)
     if args.materials and src.version == 374:
         tp = pk or p3                                  # the package holding the template instance
         tmic = next(i for i in range(len(tp.exports)) if tp.class_name(tp.exports[i]['class']) == 'MaterialInstanceConstant' and args.materials.lower() in tp.path(i).lower())
@@ -366,6 +412,7 @@ def main():
             slots[tp.fname(*struct.unpack('>ii', r['ParameterName']))] = struct.unpack('>i', r['ParameterValue'])[0] - 1
         tex_template = {'diffuse': slots.get('Diffuse_01'), 'normal': slots.get('Normal_01'), 'specular': slots.get('Specular_01')}
         mflags_ = struct.unpack_from('>Q', tp.data, tp.exports[tmic]['entry'] + 24)[0]
+        kit_tex_template.update(tex_template)          # (the kit's own: the shared textures' templates)
         if pk is not None:
             local_tex = [i for i in range(len(p3.exports)) if cls(i) == 'Texture2D' and not p3.exports[i]['name'].startswith('Default__')]
             settings3 = {i: materialconv.texture_settings(p3, i) for i in local_tex}
@@ -382,16 +429,17 @@ def main():
         for (si, mi), sk in skel_meshes.items():
             mats.update((si, x - 1) for x in sk['materials'] if x > 0)
         import_mats = {}                               # (source, import ref) -> (source, export ref) of the material
-        for si, mi in mesh_keys:
-            for el in staticmesh.read(srcs[si], mi)['lods'][0]['elements']:
-                if el['material'] > 0: mats.add((si, el['material'] - 1))
-                elif el['material'] < 0 and (si, el['material']) not in import_mats:
-                    # a material imported from Gears 1's content (the cutscene's Hammerbursts: Locust_Hammerburst_Mat)
-                    cls_ = srcs[si].imports[-el['material'] - 1].get('class')
-                    found = g1_import(srcs, si, el['material'], cls_) if cls_ in ('Material', 'MaterialInstanceConstant') else None
-                    if found:
-                        srcs[found[0]].aux = True
-                        import_mats[(si, el['material'])] = (found[0], found[1] + 1); mats.add(found)
+        refs_used = [(si, el['material']) for si, mi in mesh_keys for el in staticmesh.read(srcs[si], mi)['lods'][0]['elements']]
+        refs_used += [(si, r) for (si, ci), ov in overrides.items() for r in ov if r]
+        for si, ref in refs_used:
+            if ref > 0: mats.add((si, ref - 1))
+            elif ref < 0 and (si, ref) not in import_mats:
+                # a material imported from Gears 1's content (the cutscene's Hammerbursts: Locust_Hammerburst_Mat)
+                cls_ = srcs[si].imports[-ref - 1].get('class')
+                found = g1_import(srcs, si, ref, cls_) if cls_ in ('Material', 'MaterialInstanceConstant') else None
+                if found:
+                    srcs[found[0]].aux = True
+                    import_mats[(si, ref)] = (found[0], found[1] + 1); mats.add(found)
         for si, bm, _ in bsp_chunks:
             mats.update((si, x - 1) for x in bm if x > 0)
         by_name = {}                                   # the same asset in several sublevels: converted once
@@ -411,6 +459,9 @@ def main():
                 tt = tex_template.get(slot)
                 if tt is None or tt < 0: continue
                 tkey = sp.path(ti)
+                if tkey not in tex_ref and args.shared_textures:
+                    # in the chapter's shared texture package (written once all sections are converted): an import
+                    tex_ref[tkey] = shared_texture(sp, ti, tt, tkey, slot)
                 if tkey not in tex_ref:
                     upk.E = '>'
                     data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti))
@@ -443,6 +494,7 @@ def main():
         sp = srcs[si]
         m = parsed[(si, mi)] = staticmesh.read(sp, mi)
         path = sp.path(mi)
+        if args.merge and (si, mi) not in set(mover_meshes): continue     # (only merged: no mesh of its own)
         if path in mesh_by_name:                       # the same mesh in another sublevel package
             new_mesh[(si, mi)] = mesh_by_name[path]; continue
         upk.E = '>'
@@ -558,11 +610,52 @@ def main():
         Nw /= np.linalg.norm(Nw, axis=1, keepdims=True) + 1e-9
         return (P * scale) @ R + loc, Nw
     refs, mats, lit, all_samples = [], [], 0, []
-    n_unlit = 0
+    n_unlit = n_noncolliding = 0
+    # --merge: the level's mesh actors joined into one mesh per 4096-unit cell and collision class (each a component
+    # of its own: thousands of components were thousands of draws, the render thread held the frame rate down where
+    # the view took in much of a section). Vertex light maps join with them (light per vertex).
+    mover_keys = set(mover_meshes)
+    buckets = {}                                       # key -> {'P','TX','TZ','UV','L','idx': {mic: [indices]}, 'n'}
+    MERGE_CELL, MERGE_MAX = 4096.0, 60000
+    def merge_add(si, mi, loc, rot, scale, mics, samples, flags_key):
+        m_ = parsed[mi]; lod = m_['lods'][0]
+        pos, tx, tz, uvh, nv = meshconv.source_vertices(m_)
+        P = (np.frombuffer(pos.tobytes(), '>f4').reshape(nv, 3).astype(np.float64) * scale) @ rotation_matrix(*rot) + loc
+        R = rotation_matrix(*rot)
+        def turn(t, inverse):
+            v = t[:, [3, 2, 1]].astype(np.float64) / 127.5 - 1
+            v = ((v / np.where(scale == 0, 1, scale)) if inverse else (v * scale)) @ R
+            v /= np.linalg.norm(v, axis=1, keepdims=True) + 1e-9
+            q = np.clip(np.round((v + 1) * 127.5), 0, 255).astype(np.uint8)
+            return np.stack([t[:, 0], q[:, 2], q[:, 1], q[:, 0]], 1)
+        TX, TZ = turn(tx, False), turn(tz, True)
+        mirrored = np.prod(scale) < 0
+        if mirrored: TZ[:, 0] = np.where(TZ[:, 0] > 127, 0, 255)
+        centre = P.mean(0)
+        # (and by brightness: a vertex light map is 8 bits per vertex scaled to its brightest, so a dim piece in a
+        # chunk with a bright one went black, and the bright one white)
+        peak = float(np.nanmax(samples)) if samples is not None and np.isfinite(samples).any() else -1.0
+        band = int(np.floor(np.log2(max(peak, 1e-3)))) if peak >= 0 else 99
+        key = (tuple(np.floor(centre / MERGE_CELL).astype(int)), flags_key, band)
+        part = 0
+        while key + (part,) in buckets and buckets[key + (part,)]['n'] + nv > MERGE_MAX: part += 1
+        b = buckets.setdefault(key + (part,), {'P': [], 'TX': [], 'TZ': [], 'UV': [], 'L': [], 'idx': {}, 'n': 0, 'flags': flags_key})
+        base = b['n']
+        if samples is not None: samples = np.nan_to_num(samples, nan=0.05)
+        b['P'].append(P); b['TX'].append(TX); b['TZ'].append(TZ); b['UV'].append(uvh[:, 0, :]); b['L'].append(samples if samples is not None else nv)
+        idx = struct.unpack(f'>{lod["indices"][1]}H', lod['indices'][2])
+        for k_, e_ in enumerate(lod['elements']):
+            out_ = b['idx'].setdefault(mics[k_] if k_ < len(mics) else None, [])
+            f_ = e_['first_index']
+            for j in range(e_['triangles']):
+                a_, b_, c_ = idx[f_ + 3 * j], idx[f_ + 3 * j + 1], idx[f_ + 3 * j + 2]
+                out_ += [base + a_, base + c_, base + b_] if mirrored else [base + a_, base + b_, base + c_]
+        b['n'] += nv
     for n, (si, mi_, loc, rot, scale, ci) in enumerate(actors):
         sp, mi = srcs[si], (si, mi_)
         tail = bytes(4)                                # no light map
         samples = None
+        els = element_materials(si, mi_, ci)
         if not args.no_lighting and sp.version == 374:
             cd_ = sp.export_data(ci)
             try:
@@ -572,8 +665,7 @@ def main():
                 samples = None
             nv = len(staticmesh.positions(parsed[mi]['lods'][0]))
             if samples is not None and len(samples) != nv: samples = None
-            els = parsed[mi]['lods'][0]['elements']
-            if els and all((si, el['material']) in unlit_mats for el in els):
+            if els and all((si, x) in unlit_mats for x in els):
                 samples = np.full((nv, 3, 3), UNLIT_LIGHT, np.float32); n_unlit += 1
             elif point_lights is not None:
                 Pw, Nw = world_vertices(parsed[mi], loc, rot, scale)
@@ -583,18 +675,72 @@ def main():
             if samples is not None:
                 tail = lighting.gears3_vertex_lightmap(samples, len(w.exports) + 1, light_guids)   # owner: this new component
                 lit += 1
-        d = bytearray(td[:tend]) + tail
-        struct.pack_into('>i', d, sm_off, new_mesh[mi])
+        d = bytearray(td[:tend])
+        struct.pack_into('>i', d, sm_off, new_mesh.get(mi, 0))
         struct.pack_into('>3f', d, sc_off, *scale)
         if vis_off: struct.pack_into('>i', d, vis_off, -1)
+        # Gears 1's own collision flags: most of its meshes did not block pawns (rubble, railings, stair steps: its
+        # BlockingVolumes did), and blocking with every mesh's triangles the player caught on rubble and was pushed
+        # back at the top of the prison's stairs
+        if not args.no_collision and sp.version == 374:
+            try:
+                cflags = {n_: v_ for n_, t_, k_, v_ in props_at(sp, sp.export_data(ci), (8, 4, 12))[1]}
+            except ValueError:
+                cflags = {}
+            for prop in ('CollideActors', 'BlockActors', 'BlockNonZeroExtent', 'BlockZeroExtent', 'BlockRigidBody'):
+                if cflags.get(prop) is False: d = set_property(p3, w, d, to, prop, b'\x00', 'BoolProperty')
+            if cflags.get('CollideActors') is False: n_noncolliding += 1
+        if args.merge and mi not in mover_keys:
+            # merged into its cell's chunk (below): its triangles in world space, its light, its collision class
+            flags_key = tuple(cflags.get(k_) is False for k_ in ('CollideActors', 'BlockActors', 'BlockNonZeroExtent', 'BlockZeroExtent', 'BlockRigidBody')) \
+                if not args.no_collision and sp.version == 374 else ()
+            merge_add(si, mi, loc, rot, scale, [mic_of.get((si, x)) for x in els], samples, flags_key)
+            if samples is not None and not (els and all((si, x) in unlit_mats for x in els)):
+                all_samples.append(samples.mean(0))
+            continue
+        if (si, ci) in overrides:                      # the component's own materials (None: the mesh's)
+            ov = [mic_of.get((si, r), 0) if r else 0 for r in overrides[(si, ci)]]
+            d = set_property(p3, w, d, to, 'Materials', struct.pack(f'>i{len(ov)}i', len(ov), *ov), 'ArrayProperty')
+        d = d + tail
         refs.append(w.add_export(p3.exports[tcomp]['class'], coll + 1, ('TrilogySMC', n + 1), d, flags=tflags, archetype=tarch))
         m = np.eye(4); m[:3, :3] = rotation_matrix(*rot); m[3, :3] = loc + offset
         mats.append(struct.pack('>16f', *m.flatten()))
-        if samples is not None and not (parsed[mi]['lods'][0]['elements'] and all((si, el['material']) in unlit_mats for el in parsed[mi]['lods'][0]['elements'])):
+        if samples is not None and not (els and all((si, x) in unlit_mats for x in els)):
             all_samples.append(samples.mean(0))
     # BSP chunks: a mesh and a component each, in world space (+ offset); lit from the BSP's light maps (sampled at
     # each vertex's lightmap UV), the actors' average lighting where a node had no light map
     ambient = np.mean(all_samples, 0) if all_samples else np.full((3, 3), 0.25)
+    # the merged chunks (--merge)
+    for k, (key, b) in enumerate(sorted(buckets.items(), key=lambda kv: str(kv[0]))):
+        P = np.concatenate(b['P']); n_ = len(P)
+        verts = np.concatenate([np.concatenate(b['TX']), np.concatenate(b['TZ']),
+                                np.frombuffer(np.concatenate(b['UV']).astype('>f2').tobytes(), np.uint8).reshape(n_, 4)], 1)
+        idx, elements, mics = [], [], []
+        for mic, tri in b['idx'].items():
+            elements.append({'first_index': len(idx), 'triangles': len(tri) // 3, 'min_vertex': 0, 'max_vertex': n_ - 1})
+            idx += tri; mics.append(mic)
+        lo, hi = P.min(0), P.max(0)
+        centre, ext = (lo + hi) / 2, (hi - lo) / 2
+        mesh = {'version': 828, 'props': {}, 'bounds': (*centre, *ext, float(np.linalg.norm(ext))),
+                'lods': [{'positions': (12, n_, (12, n_, P.astype('>f4').tobytes())),
+                          'vertices': (1, 12, n_, 0, (12, n_, verts.tobytes())),
+                          'indices': (2, len(idx), struct.pack(f'>{len(idx)}H', *idx)),
+                          'wireframe': (2, 0, b''), 'elements': elements}]}
+        upk.E = '>'
+        data = per_poly_collision(meshconv.to_828(p3, tmesh, mesh, mics))
+        mref = w.add_export(p3.exports[tmesh]['class'], 0, ('Trilogy_Merged', k + 1), data, flags=mflags)
+        light = np.concatenate([x if not isinstance(x, int) else np.repeat(ambient[None], x, 0) for x in b['L']]).astype(np.float32)
+        tail = bytes(4) if args.no_lighting else lighting.gears3_vertex_lightmap(light, len(w.exports) + 1, light_guids)
+        d = bytearray(td[:tend])
+        struct.pack_into('>i', d, sm_off, mref)
+        struct.pack_into('>3f', d, sc_off, 1.0, 1.0, 1.0)
+        if vis_off: struct.pack_into('>i', d, vis_off, -1)
+        for prop, off_ in zip(('CollideActors', 'BlockActors', 'BlockNonZeroExtent', 'BlockZeroExtent', 'BlockRigidBody'), b['flags']):
+            if off_: d = set_property(p3, w, d, to, prop, b'\x00', 'BoolProperty')
+        refs.append(w.add_export(p3.exports[tcomp]['class'], coll + 1, ('TrilogyMerged', k + 1), bytes(d) + tail, flags=tflags, archetype=tarch))
+        m = np.eye(4); m[3, :3] = offset
+        mats.append(struct.pack('>16f', *m.flatten()))
+    if buckets: print(f'merged: {sum(len(b["P"]) for b in buckets.values())} mesh actors into {len(buckets)} chunks')
     for k, (si, bmats, bmesh) in enumerate(bsp_chunks):
         upk.E = '>'
         data = per_poly_collision(meshconv.to_828(p3, tmesh, bmesh, [mic_of.get((si, x)) for x in bmats]))
@@ -615,6 +761,26 @@ def main():
         refs.append(w.add_export(p3.exports[tcomp]['class'], coll + 1, ('TrilogyBSP', k + 1), d, flags=tflags, archetype=tarch))
         m = np.eye(4); m[3, :3] = offset
         mats.append(struct.pack('>16f', *m.flatten()))
+    # Gears 1's BlockingVolumes: hidden collision meshes for pawns (not for shots: BlockZeroExtent off), in world space
+    n_volumes = 0
+    if args.bsp and src.version == 374:
+        for si, sp in enumerate(srcs):
+            if getattr(sp, 'aux', False): continue
+            for vol in bspconv.blocking_volumes(sp):
+                upk.E = '>'
+                data = per_poly_collision(meshconv.to_828(p3, tmesh, vol['mesh'], [None]))
+                mref = w.add_export(p3.exports[tmesh]['class'], 0, ('Trilogy_Volume', n_volumes + 1), data, flags=mflags)
+                d = bytearray(td[:tend])
+                struct.pack_into('>i', d, sm_off, mref)
+                struct.pack_into('>3f', d, sc_off, 1.0, 1.0, 1.0)
+                if vis_off: struct.pack_into('>i', d, vis_off, -1)
+                for prop, value in (('HiddenGame', b'\x01'), ('CastShadow', b'\x00'), ('BlockZeroExtent', b'\x00')):
+                    d = set_property(p3, w, d, to, prop, value, 'BoolProperty')
+                refs.append(w.add_export(p3.exports[tcomp]['class'], coll + 1, ('TrilogyVolume', n_volumes + 1), bytes(d) + bytes(4), flags=tflags, archetype=tarch))
+                m = np.eye(4); m[3, :3] = offset
+                mats.append(struct.pack('>16f', *m.flatten()))
+                n_volumes += 1
+        print(f'{n_volumes} blocking volumes as hidden collision meshes')
     # spawn points: a start whose capsule (half height about 90) would be in a converted floor is lifted above it
     if args.fix_starts and bsp_chunks:
         floors = [(pts, n) for surf, pts, uv, n, light in polys if n[2] > 0.7]
@@ -808,6 +974,10 @@ def main():
     # dropped the new actors from Level.Actors
     if args.kismet and src.version == 374:
         kismet(srcs, [x for x in args.source.split(',') if x], p3, w, cls, args.offset, new_mesh, cover_map, args.content, args.g3cooked, args.player_starts)
+    if manifest is not None:
+        import json
+        json.dump(manifest, open(args.texture_manifest, 'w'), indent=0)
+        print(f"textures: {len(manifest['entries'])} in the shared package {args.shared_textures} so far")
     img = w.build()
     out = os.path.join(args.mods, 'GearGame', 'CookedXbox360')
     os.makedirs(out, exist_ok=True)
@@ -818,6 +988,7 @@ def main():
     qd = q.export_data(coll); qo, qpr, qend = props_at(q, qd)
     arr = {n: v for n, t, k, v in qpr}['StaticMeshComponents']
     print(f'{lit} of {len(actors)} components lit from the source level ({n_unlit} unlit: a constant light map)')
+    print(f'{n_noncolliding} components without collision (as in Gears 1)')
     print(f'{len(img)} bytes; collection: {struct.unpack_from(">i", arr, 0)[0]} components, '
           f'{(len(qd) - qend) // 64} matrices; {len(q.exports)} exports')
 

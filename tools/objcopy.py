@@ -1334,17 +1334,21 @@ def anim_sequence_tail(c, props, tail):
             f = round(k * (frames - 1) / (keys - 1))
             out.extend(struct.pack('>B', f) if frames < 256 else struct.pack('>H', f))
         while len(out) % 4: out.append(0x55)
+    starts = sorted(set(offs[0::2][:n // 2]) | {bs_len})       # every track's start: a track ends at the next
+    def track_size(o): return next((s for s in starts if s > o), bs_len) - o
     for t in range(n // 4):
         to, tn, ro, rn = offs[4 * t:4 * t + 4]
         new_offs += [len(out), tn]
         out.extend(bs[to:to + 12 * tn]); table(tn)
         new_offs += [len(out), rn]
-        if fmt == 'ACF_Fixed48NoW' and rn > 1:
-            # Gears 1's Fixed48 track starts with a 24-byte header (the track's bounds: 3 minimums, 3 ranges), then
-            # the keys as Gears 3 reads them (each u16: (u - 32767) / 32767; every key of the prison's opening lies
-            # in its header's bounds). Gears 3's track has no header: copied with it, every key was read 24 bytes
-            # early and the last four were lost (the cutscene's Wretches stretched and broke, animations jerked)
-            out.extend(bs[ro + 24:ro + 24 + 6 * rn]); table(rn)
+        if rn > 1 and fmt != 'ACF_IntervalFixed32NoW' and track_size(ro) >= ROT_KEY_SIZE[fmt] * rn + 24:
+            # Gears 1's rotation tracks of more than one key start with a 24-byte header (the track's bounds: 3
+            # minimums, 3 ranges), whatever their format (Fixed48: 6 bytes a key + 24; None: 16 + 24, the duffel
+            # bag's); then the keys as Gears 3 reads them (Fixed48: (u - 32767) / 32767, every key of the prison's
+            # opening in its header's bounds). Gears 3's tracks have none (IntervalFixed32's range header aside):
+            # copied with it, every key was read 24 bytes early and the last were lost (the cutscene's Wretches
+            # stretched and broke, the bag and the animations jerked)
+            out.extend(bs[ro + 24:ro + 24 + ROT_KEY_SIZE[fmt] * rn]); table(rn)
             continue
         size = ROT_KEY_SIZE[fmt] * rn + (24 if fmt == 'ACF_IntervalFixed32NoW' and rn > 1 else 0)
         if rn == 1: size = 12                           # a single rotation key is always Float96NoW

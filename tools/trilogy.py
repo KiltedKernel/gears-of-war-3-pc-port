@@ -57,6 +57,28 @@ def levelinject(folder, target, sources, options, g3cooked):
         f'converting {len(sources)} package(s) into {os.path.basename(target)}')
 
 
+def shared_textures_into(manifest, package):
+    """the chapter's shared textures (levelinject --shared-textures) added to a package (the persistent level's):
+    every texture the manifest lists, converted from its Gears 1 source with the template texture it names (the
+    persistent level is a clone of the kit: the template textures' paths are the sections' too, all clones of Gears 3
+    levels with the same texture templates found by settings... the template is looked up by path)"""
+    import json, upk, upkwrite, materialconv, texture2d, struct
+    m = json.load(open(manifest)) if os.path.isfile(manifest) else {'entries': {}}
+    p3 = upk.Package(package); w = upkwrite.Rewriter(p3); p3.names = w.names
+    by_path = {p3.path(i): i for i in range(len(p3.exports))}
+    sources = {}
+    for name, e in sorted(m['entries'].items()):
+        sp = sources.get(e['source']) or sources.setdefault(e['source'], upk.Package(e['source']))
+        tt = by_path[e['template']]
+        upk.E = '>'
+        data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, e['index']))
+        flags = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
+        w.add_export(p3.exports[tt]['class'], 0, (name, 0), data, flags=flags, fixups=fix)
+    data = w.build()
+    open(package, 'wb').write(data)
+    return len(m['entries'])
+
+
 def navinject(package, navm):
     run([sys.executable, '-P', os.path.join(HERE, 'navinject.py'), package, navm, package, 'all'],
         f'navmesh {os.path.basename(navm)} into {os.path.basename(package)}')
@@ -281,9 +303,21 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     levelinject(folder, kit_target, [src(persistent)], ['--kismet', '--player-starts', '--replace'] + materials + common
                 + ch.get('persistent_options', '').split(), g3cooked)
     kit = os.path.join(out_dir, prefix + persistent + '.xxx')
-    n, kill_z, npp = levelpkg.persistent(kit, src(persistent), [prefix + s for s in sections],
+    # always_loaded: sections Gears 1 streamed by LevelStreamingVolume only (not converted; Kismet streams the rest):
+    # the prison's sky dome and distant scenery (SP_Prison_World) never loaded, and the sky was black
+    always = [x.strip() for x in ch.get('always_loaded', '').split(',') if x.strip()]
+    # the chapter's textures, converted once and added to the persistent level's package once the sections are
+    # converted (the sections import them; the persistent level is loaded in full before any level streams: a package
+    # of their own, streamed in, was not always in when a section resolved its imports, and those textures were the
+    # template material's rock)
+    shared_tex = prefix + persistent if ch.get('shared_textures', 'true').lower() != 'false' else None
+    manifest = os.path.join(work, 'textures.json')
+    if os.path.isfile(manifest): os.remove(manifest)
+    tex_options = ['--shared-textures', shared_tex, '--texture-manifest', manifest] if shared_tex else []
+    n, kill_z, npp = levelpkg.persistent(kit, src(persistent), [prefix + s for s in sections if s not in always],
                                          os.path.join(g3cooked, ch.get('look', 'SP_Nightmare_P') + '.xxx'),
-                                         [os.path.splitext(os.path.basename(x))[0] for x in carriers])
+                                         [os.path.splitext(os.path.basename(x))[0] for x in carriers]
+                                         + [prefix + s for s in always])
     print(f'  {prefix}{persistent}: {n} streaming levels, {npp} post-process settings', flush=True)
     # the sections
     navs = {sec.split(None, 1)[1]: dict(c[sec]) for sec in c.sections() if sec.startswith('navmesh ')}
@@ -307,7 +341,12 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
             cls, at = (x.strip() for x in ch['player_pawn'].split('@'))     # Class @ Section: op: output
             options += ['--player-pawn', cls + ':' + at.split(':', 1)[1].strip()]
         levelinject(folder, target, [src(s)] + [src(x.strip()) for x in opts.get('extra_sources', '').split(',') if x.strip()],
-                    ['--kit', kit, '--named-vars', src(persistent)] + materials + options + common, g3cooked)
+                    ['--kit', kit, '--named-vars', src(persistent)] + materials + options + common + tex_options, g3cooked)
+    if shared_tex:
+        n_tex = shared_textures_into(manifest, os.path.join(out_dir, shared_tex + '.xxx'))
+        import modpack
+        modpack.update_toc(folder, g3cooked)
+        print(f'  {shared_tex}: {n_tex} textures, shared by the sections', flush=True)
     # navmesh: per region, generated in a multiplayer map's slot (the geometry converted again there, 20000 up),
     # moved back and written into the section's pylon(s)
     if not args.no_navmesh:

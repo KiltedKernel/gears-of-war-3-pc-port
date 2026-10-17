@@ -227,10 +227,12 @@ void gpu::Initialize()
             while (pos < times.size())
             {
                 const size_t comma = times.find(',', pos);
-                const int t = atoi(times.substr(pos, comma - pos).c_str());
+                // (fractions of a second for bursts: "150,150.1,150.2"; whole seconds keep their old names)
+                const double t = atof(times.substr(pos, comma - pos).c_str());
                 pos = comma == std::string::npos ? times.size() : comma + 1;
-                while (GetTickCount64() - start < uint64_t(t) * 1000) Sleep(50);
-                const std::string path = fmt::format("shots/shot_{:03}s.png", t);
+                while (GetTickCount64() - start < uint64_t(t * 1000)) Sleep(t == double(int(t)) ? 50 : 1);
+                const std::string path = t == double(int(t)) ? fmt::format("shots/shot_{:03}s.png", int(t))
+                                                             : fmt::format("shots/shot_{:07.2f}s.png", t);
                 LOGFN("screenshot {}: {}", path, portgpu::CaptureScreenshot(path.c_str()) ? "saved" : "failed");
             }
         }).detach();

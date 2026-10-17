@@ -68,12 +68,13 @@ already (textures, meshes).
 
 | Gears 1 | Gears 3 | notes |
 |---|---|---|
-| static meshes (StaticMeshActor) | components of the section's StaticMeshCollectionActor, new StaticMesh exports with a kDOP tree (per-polygon collision) | `levelinject`, `meshconv`, `kdop` |
+| static meshes (StaticMeshActor) | merged (`--merge`): one mesh per 4096-unit cell, collision class and brightness band, a component of the section's StaticMeshCollectionActor, with a kDOP tree (per-polygon collision) and the pieces' vertex light maps | a section's 600-1400 components were as many draws (the frame rate fell where the view took in a section); a component's own `Materials` override its mesh's (a sixth of the prison's); Gears 1's collision flags kept (most of its meshes did not block pawns) |
+| BlockingVolumes | hidden collision meshes from their convex elements (pawns only: not shots) | thin slabs (under 48 units) left out: as boxes their tops were steps a Gears 3 pawn cannot climb |
+| textures | Texture2D exports, NeverStream, converted once per chapter into the persistent level's package (the sections import them) | per section, 213 of 330 MB were duplicates; a package of their own, streamed in, was not always in when a section resolved its imports |
 | BSP | static mesh chunks with the BSP's light maps | `bspconv` |
 | light maps, lights | vertex light maps baked from Gears 1's light maps and point lights; its lights copied for characters: composited into their light environments (CompositeDynamic; a copied SkeletalMeshActor gets Gears 3's light environment) | a Gears 1 section has 100-370 lights where a Gears 3 one has about ten: as Dynamic lights (a pass each on every dynamic primitive) the render thread held the game at 28 fps past the path choice |
 | materials | child MaterialInstanceConstants of the kit's template (texture parameters only) | translucent materials (light shafts, fog sheets) are left out for now |
-| textures | Texture2D exports, NeverStream | |
-| skeletal meshes, animations | SkeletalMesh, its materials child instances of a recipe's `skin_material` (a skinned Gears 3 shader in GEARGAMESP_SF; its other texture parameters black); a Gears 1 material instance's textures by its parameters; AnimSet / AnimSequence (Gears 1's Fixed48 rotation tracks start with a 24-byte bounds header that Gears 3's lack: dropped) | open: with a character skin shader the converted meshes draw flat white, with the weapon shader (now) the armour's detail shows in wrong colours, whatever the lights; the textures decode right offline (to inspect on the GPU side). FaceFX not yet |
+| skeletal meshes, animations | SkeletalMesh, its materials child instances of a recipe's `skin_material` (a skinned Gears 3 shader in GEARGAMESP_SF; its other texture parameters black); a Gears 1 material instance's textures by its parameters; AnimSet / AnimSequence (Gears 1's rotation tracks of more than one key start with a 24-byte bounds header, in every format, that Gears 3's lack: dropped; the keys after it read as Gears 3's) | the converted characters' colours went wrong while the chapter's duplicated textures filled memory (purple noise on Gears 3's own models too); cutscene characters are lit dimly (light environments only). FaceFX not yet |
 | sounds | XMA1 to XMA2 (lossless), SoundCues and their nodes | 3-stream XMA (surround) not yet |
 | music | SeqAct_SetMusicTrack to SeqAct_PlayMusicTrack | music track banks and cross-fades not yet |
 | cover (CoverLink) | the section's CoverLinks (and clones) with Gears 3's slot format | |
@@ -131,6 +132,8 @@ persistent = SP_Prison_P          ; the Gears 1 persistent level
 sections = SP_Prison_S01, ...     ; every other package of the level
 kit = SP_Nightmare_02_S
 materials = MI_GR_Cliffwall_Tilable_01
+always_loaded = SP_Prison_World    ; sections Gears 1 streamed by LevelStreamingVolume only (the sky dome)
+shared_textures = true             ; (default) the chapter's textures once, in the persistent level's package
 skin_material = GEARGAMESP_SF: ALL_WeaponShaders.SinglePlayer.COG_WeaponShader_HOD_SP   ; skeletal meshes' parent
 section_template = SP_Char_Tower_1a_S
 look = SP_Nightmare_P             ; the post-process Gears 1's values go on top of
@@ -177,6 +180,9 @@ To start a new chapter's recipe:
   (a stutter averages away in the frame rate); `GOW3_PROFILE=1` logs each busy thread's hottest functions every
   10 s (a game thread waiting while the render thread is busy: too many draws or lights).
 - `tests/g1_checkpoint_restart.txt`: the chapter, then Restart from Checkpoint twice from the pause menu.
+- Input scripts: `teleport x y z` puts the player there (testing a place the route walker cannot reach); screenshot
+  times may be fractions (`GOW3_SCREENSHOTS=140,140.2,140.4`: bursts for animation).
+- `tests` run minimized at 60 fps; uncapped: `-Settings` an ini with `vsync = false`, `frame_rate = 240`.
 - On keyboard and mouse the path choice (UIScene_PathChoice, read through the triggers) takes left click or Left for
   the left path, right click or Right for the right one (it is not a menu: a click there was an A press before).
 

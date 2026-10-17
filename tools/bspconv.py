@@ -124,6 +124,70 @@ def chunk_meshes(m, polys, cell=4096.0, max_vertices=60000):
     return out
 
 
+def blocking_volumes(p):
+    """a Gears 1 level's BlockingVolumes as collision meshes ({'name', mesh dict like build_mesh's}): their brushes'
+    convex elements (BrushComponent.BrushAggGeom.ConvexElems: VertexData, FaceTriData), placed in the world
+    (Location, Rotation, DrawScale / DrawScale3D, PrePivot), both windings. Gears 1 moved pawns over BSP and these
+    volumes (ramps over stairs, walls round rubble), its meshes mostly not blocking pawns."""
+    import levelinject, materialconv
+    out = []
+    for i, e in enumerate(p.exports):
+        if p.class_name(e['class']) != 'BlockingVolume' or p.path(i).count('.') != 2: continue
+        try:
+            o, pr, end = levelinject.props_at(p, p.export_data(i))
+            a = {n: v for n, t, k, v in pr}
+            bc = a.get('BrushComponent', 0)
+            if bc <= 0: continue
+            recs, _ = materialconv.raw_props(p, p.export_data(bc - 1), 8)
+            agg = next((r[4] for r in recs if r[0] == 'BrushAggGeom'), None)
+            if agg is None: continue
+            sub, _ = materialconv.raw_props(p, agg, 0)
+            ce = next((r[4] for r in sub if r[0] == 'ConvexElems'), None)
+            if ce is None: continue
+        except Exception:
+            continue
+        vec = lambda v, default: np.array(struct.unpack('>3f', v[1]) if v else default)
+        loc, pivot = vec(a.get('Location'), (0, 0, 0)), vec(a.get('PrePivot'), (0, 0, 0))
+        scale = vec(a.get('DrawScale3D'), (1, 1, 1)) * a.get('DrawScale', 1.0)
+        rot = struct.unpack('>3i', a['Rotation'][1]) if a.get('Rotation') else (0, 0, 0)
+        R = levelinject.rotation_matrix(*rot)
+        P, idx = [], []
+        o_ = 4
+        for _ in range(struct.unpack_from('>i', ce, 0)[0]):
+            el, o_ = materialconv.raw_props(p, ce, o_)
+            r_ = {x[0]: x[4] for x in el}
+            if 'VertexData' not in r_ or 'FaceTriData' not in r_: continue
+            nv = struct.unpack_from('>i', r_['VertexData'], 0)[0]
+            V = np.array(struct.unpack_from(f'>{3 * nv}f', r_['VertexData'], 4), np.float64).reshape(nv, 3)
+            nt = struct.unpack_from('>i', r_['FaceTriData'], 0)[0]
+            T = struct.unpack_from(f'>{nt}i', r_['FaceTriData'], 4)
+            base = len(P) and sum(len(x) for x in P)
+            P.append(((V - pivot) * scale) @ R + loc)
+            for t in range(0, nt - 2, 3):
+                a_, b_, c_ = base + T[t], base + T[t + 1], base + T[t + 2]
+                idx += [a_, b_, c_, a_, c_, b_]
+        if not idx: continue
+        P = np.concatenate(P); n = len(P)
+        # thin horizontal slabs (under 48 units tall) left out: Gears 1 laid them over floors and thresholds the
+        # level's geometry already has; as boxes their tops were steps Gears 3's pawns could not climb (the prison
+        # cell's doorway: 26 units)
+        if P[:, 2].max() - P[:, 2].min() < 48: continue
+        tx = pack_normal(np.repeat(np.array([[1.0, 0, 0]]), n, 0)); tz = pack_normal(np.repeat(np.array([[0, 0, 1.0]]), n, 0))
+        uvh = np.zeros((n, 1, 2), '>f2')
+        verts = np.concatenate([tx, tz, np.frombuffer(uvh.tobytes(), np.uint8).reshape(n, 4)], 1)
+        lo, hi = P.min(0), P.max(0)
+        centre, ext = (lo + hi) / 2, (hi - lo) / 2
+        mesh = {'version': 828, 'props': {}, 'bounds': (*centre, *ext, float(np.linalg.norm(ext))),
+                'lods': [{'positions': (12, n, (12, n, P.astype('>f4').tobytes())),
+                          'vertices': (1, 12, n, 0, (12, n, verts.tobytes())),
+                          'indices': (2, len(idx), struct.pack(f'>{len(idx)}H', *idx)),
+                          'wireframe': (2, 0, b''),
+                          'elements': [{'first_index': 0, 'triangles': len(idx) // 3, 'min_vertex': 0, 'max_vertex': n - 1}],
+                          'materials_374': [0]}]}
+        out.append({'name': e['name'], 'mesh': mesh})
+    return out
+
+
 def build_mesh(m, polys):
     by_surf_material = {}
     for poly in polys:

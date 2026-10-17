@@ -140,7 +140,7 @@ def g1_blend(p, ref, depth=0):
     except ValueError:
         return None
     a = {n: v for n, t, k, v in pr}
-    if cn == 'Material':
+    if cn in ('Material', 'DecalMaterial'):             # (a decal's material: the prison's moss and grime)
         b = a.get('BlendMode', 0)
         return b if isinstance(b, int) else None
     par = a.get('Parent')

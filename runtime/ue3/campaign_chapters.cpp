@@ -155,9 +155,60 @@ void OnGameThread()
     LOGFN("campaign chapters: {} chapter maps (was {})", count, oldCount);
 }
 
+namespace
+{
+    // GearGameSP_Base.CurrentChapter comes from the URL's ?chapter= (InitGame); a load from a checkpoint (Continue)
+    // has none, and the chapter was 0 then: Restart Chapter (GearPC.RestartChapter: geargame_p?chapter=
+    // <CurrentChapter>) loaded the prologue, and the pause menu named it (GearGRI_SP.ChapterNum). While a new
+    // chapter's map is loaded, both are kept at its number.
+    void ChapterKeeper()
+    {
+        uint32_t lastGame = 0;
+        int chapter = -1;
+        for (;;)
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+            if (!g_done || g_chapters.empty()) continue;
+            static const uint32_t gameClass = ue3::FindClass("GearGameSP_Base"), griClass = ue3::FindClass("GearGRI_SP");
+            if (!gameClass) continue;
+            const auto games = ue3::FindInstancesOf(gameClass);
+            const uint32_t game = games.empty() ? 0 : games.front();
+            if (!game) { lastGame = 0; continue; }
+            if (game != lastGame)                     // a new map: which chapter's (its package loaded)
+            {
+                lastGame = game; chapter = -1;
+                for (auto& [n, map] : g_chapters)
+                    if (const uint32_t p = ue3::FindObject(map.c_str()); p && ue3::ObjectName(ue3::ClassOf(p)) == "Package") chapter = n;
+            }
+            if (chapter < 0) continue;
+            // (CurrentChapter is an int, GearGRI_SP.ChapterNum a byte: written at their own sizes; the first version
+            // wrote a byte into the int's top: chapter 536870944, and the restart found no map)
+            static const int off = ue3::PropertyOffset(gameClass, "CurrentChapter"), size = ue3::PropertySize(gameClass, "CurrentChapter");
+            if (off < 0 || (size != 1 && size != 4)) continue;
+            const uint32_t at = game + uint32_t(off);
+            const uint32_t cur = size == 4 ? ue3::Read32(at) : *(uint8_t*)g_memory.Translate(at);
+            if (cur != uint32_t(chapter))
+            {
+                LOGFN("campaign chapters: the game's chapter {} -> {} (the map is chapter {}'s)", cur, chapter, chapter);
+                if (size == 4) *(uint32_t*)g_memory.Translate(at) = ByteSwap(uint32_t(chapter));
+                else *(uint8_t*)g_memory.Translate(at) = uint8_t(chapter);
+            }
+            if (griClass)
+                for (uint32_t gri : ue3::FindInstancesOf(griClass))
+                {
+                    static const int goff = ue3::PropertyOffset(griClass, "ChapterNum"), gsize = ue3::PropertySize(griClass, "ChapterNum");
+                    if (goff < 0) continue;
+                    if (gsize == 4) *(uint32_t*)g_memory.Translate(gri + uint32_t(goff)) = ByteSwap(uint32_t(chapter));
+                    else if (gsize == 1) *(uint8_t*)g_memory.Translate(gri + uint32_t(goff)) = uint8_t(chapter);
+                }
+        }
+    }
+}
+
 void Start()
 {
     if (getenv("GOW3_NO_CAMPAIGN_CHAPTERS")) return;
     std::thread(Worker).detach();
+    std::thread(ChapterKeeper).detach();
 }
 }

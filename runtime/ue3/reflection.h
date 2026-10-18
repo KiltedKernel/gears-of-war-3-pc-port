@@ -27,5 +27,6 @@ namespace ue3
 
     // property offset (-1 if missing) and, for bools, the bit mask
     int PropertyOffset(uint32_t cls, const char* property);
+    int PropertySize(uint32_t cls, const char* property);   // ElementSize (UProperty +68), -1 when not found
     uint32_t BoolMask(uint32_t cls, const char* property);
 }

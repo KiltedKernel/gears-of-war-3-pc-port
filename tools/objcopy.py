@@ -1167,6 +1167,23 @@ def import_path(src, ref):
     return '.'.join(reversed(parts))
 
 
+def mover_materials(src):
+    """material refs a level's InterpActors' StaticMeshComponents override their meshes' with (Materials): converted
+    with the level's (the prison cell's door drew the template's rock: its mesh has none of its own)"""
+    import materialconv
+    out = set()
+    for i in movers(src):
+        for j, e in enumerate(src.exports):
+            if e['outer'] != i + 1 or src.class_name(e['class']) != 'StaticMeshComponent': continue
+            try: recs, _ = materialconv.raw_props(src, src.export_data(j), 8)
+            except Exception: continue
+            for r in recs:
+                if r[0] == 'Materials':
+                    n = struct.unpack_from('>i', r[4], 0)[0]
+                    out.update(x for x in struct.unpack_from(f'>{n}i', r[4], 4) if x)
+    return out
+
+
 def mover_meshes(src):
     """export indices of the static meshes the level's InterpActors show"""
     import materialconv
@@ -1779,6 +1796,34 @@ PLAYER_PAWN = None                                      # (Gears 3 class, 'op pa
 PLAYER_SPAWN = None
 
 
+# where the player's new pawn spawns (x, y, z, yaw in degrees; levelinject --player-spawn-at): a point of the
+# player's room beside its player start, which the old pawn stands on
+PLAYER_SPAWN_AT = None
+
+
+def spawn_point(c, at):
+    """a PathTargetPoint at (x, y, z, yaw) (+ the conversion offset) in the level, as Gears 3's SP_Hanover_P spawns
+    its player slot pawn at one; returns its ref"""
+    p3, w = c.p3, c.w
+    level = next(i for i in range(len(p3.exports)) if p3.path(i) == 'TheWorld.PersistentLevel')
+    cls, cyl = c.class_ref('PathTargetPoint'), c.class_ref('CylinderComponent')
+    pk = c.find_import('Core', 'Package', 0, 'Engine')
+    d_imp = c.find_import('Engine', 'PathTargetPoint', pk, 'Default__PathTargetPoint')
+    tmpl = c.find_import('Engine', 'CylinderComponent', d_imp, 'CollisionCylinder')
+    actor = w.add_export(cls, level + 1, c.unique_name('G1PlayerSpawnPoint', 0), b'', flags=0x0207000100000000)
+    comp = w.add_export(cyl, actor, ('CylinderComponent', 0), b'', flags=0x0007000100000000, archetype=tmpl)
+    w.replace(comp - 1, c.prelude_828('component', cyl) + encode(w, []))
+    x, y, z, yaw = at
+    recs = [['CylinderComponent', 'ObjectProperty', 0, b'', struct.pack('>i', comp)],
+            ['Components', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, comp)],
+            ['CollisionComponent', 'ObjectProperty', 0, b'', struct.pack('>i', comp)],
+            ['Location', 'StructProperty', 0, struct.pack('>ii', *w.name('Vector')), struct.pack('>3f', x + c.offset[0], y + c.offset[1], z + c.offset[2])],
+            ['Rotation', 'StructProperty', 0, struct.pack('>ii', *w.name('Rotator')), struct.pack('>3i', 0, int(round(yaw * 65536 / 360)), 0)]]
+    w.replace(actor - 1, c.prelude_828('actor', cls) + encode(w, recs))
+    add_to_level(p3, w, level, [actor])
+    return actor
+
+
 def player_pawn(up, made):
     if not PLAYER_PAWN or not PLAYER_SPAWN: return 0
     c, s, w = up.c, up.c.s, up.w
@@ -1788,7 +1833,8 @@ def player_pawn(up, made):
     ref = made[src]
     seq = struct.unpack_from('>i', w.exports[ref - 1], 8)[0]
     if seq <= 0: return 0
-    need = {k: c.class_ref(k) for k in ('SeqAct_AIFactory', 'SeqAct_ChangeCollision', 'SeqVar_Int', 'SeqVar_Object', 'SeqVar_Player')}
+    need = {k: c.class_ref(k) for k in ('SeqAct_AIFactory', 'SeqAct_ChangeCollision', 'SeqVar_Int', 'SeqVar_Object', 'SeqVar_Player',
+                                        'SeqAct_ToggleHidden', 'GearSeqVar_Player', 'SeqAct_Delay')}
     if not all(need.values()): return 0
     parent = ['ParentSequence', 'ObjectProperty', 0, b'', struct.pack('>i', seq)]
     def new(cls, name, recs):
@@ -1797,9 +1843,13 @@ def player_pawn(up, made):
         return x
     pk = c.find_import('Core', 'Package', 0, 'GearGameContent')
     pawn = c.find_import('Core', 'Class', pk, cls_name)
-    v_player = new('SeqVar_Player', 'G1PlayerPawn', [['bAllPlayers', 'BoolProperty', 0, b'', b'\x00']])
+    # the player's pawn (GearSeqVar_Player: PlayerSlots[PlayerIdx - 1]'s pawn; Engine's SeqVar_Player gives the
+    # controller: SetLocation and ToggleHidden moved and hid that, and the old pawn kept the spawn point)
+    v_player = new('GearSeqVar_Player', 'G1PlayerPawn', [['bAllPlayers', 'BoolProperty', 0, b'', b'\x00'],
+                                                        ['PlayerIdx', 'IntProperty', 0, b'', struct.pack('>i', 1)]])
     v_slot = new('SeqVar_Int', 'G1PlayerSlot', [['IntValue', 'IntProperty', 0, b'', struct.pack('>i', 1)]])
-    v_spawn = new('SeqVar_Object', 'G1PlayerSpawn', [['ObjValue', 'ObjectProperty', 0, b'', struct.pack('>i', c.remote_import(PLAYER_SPAWN))]])
+    spawn_at = spawn_point(c, PLAYER_SPAWN_AT) if PLAYER_SPAWN_AT else c.remote_import(PLAYER_SPAWN)
+    v_spawn = new('SeqVar_Object', 'G1PlayerSpawn', [['ObjValue', 'ObjectProperty', 0, b'', struct.pack('>i', spawn_at)]])
     def links(cls, wire):
         out = []
         for prop, conn in LINK_ARRAYS[:3]:
@@ -1840,9 +1890,17 @@ def player_pawn(up, made):
     factory = new('SeqAct_AIFactory', 'G1PlayerFactory', frecs + [['SpawnSets', 'ArrayProperty', 0, b'', struct.pack('>i', 1) + up.enc(spawn_set)]])
     en = up.g3.enums.get('CollisionType')
     coll = [['CollisionType', 'ByteProperty', 0, struct.pack('>ii', *w.name(en[0])), struct.pack('>ii', *w.name('COLLIDE_NoCollision'))]] if en else []
-    off = new('SeqAct_ChangeCollision', 'G1PlayerCollisionOff', links('SeqAct_ChangeCollision', {
-        ('VariableLinks', 'target'): struct.pack('>ii', 1, v_player), ('OutputLinks', 'out'): struct.pack('>i', 1) + link_to(factory)}) + coll)
-    # the op's output -> collision off -> the factory
+    # the old pawn hidden and without collision, then the factory: it spawns at PLAYER_SPAWN_AT, a point of the
+    # player's room beside the start (at the start itself the spawn waited until the player had walked off it:
+    # Marcus became the classic one only outside his cell, and was put back in it; the old pawn could not be moved)
+    target_out = lambda nxt: {('VariableLinks', 'target'): struct.pack('>ii', 1, v_player), ('OutputLinks', 'out'): struct.pack('>i', 1) + link_to(nxt)}
+    hide = new('SeqAct_ToggleHidden', 'G1PlayerHide', links('SeqAct_ToggleHidden', target_out(factory)))
+    off = new('SeqAct_ChangeCollision', 'G1PlayerCollisionOff', links('SeqAct_ChangeCollision', target_out(hide)) + coll)
+    # a moment after the Matinee ends: ending, it put the actors it moved (the player's pawn among them: a group
+    # of Gears 1's opening drives it) back where they began, after anything done on its "Completed"
+    wait = new('SeqAct_Delay', 'G1PlayerWait', links('SeqAct_Delay', {('OutputLinks', 'finished'): struct.pack('>i', 1) + link_to(off)}) + [
+        ['Duration', 'FloatProperty', 0, b'', struct.pack('>f', 0.3)], ['DefaultDuration', 'FloatProperty', 0, b'', struct.pack('>f', 0.3)]])
+    # the op's output -> a moment -> collision off, physics off, away, hidden -> the factory
     recs, end = parse828(w.current(ref - 1), 4, up.wname)
     for r in recs:
         if r[0] != 'OutputLinks': continue
@@ -1850,8 +1908,8 @@ def player_pawn(up, made):
         for e in els:
             if next((str_value(x[4]) for x in e if x[0] == 'LinkDesc'), '').lower() != at_out.lower(): continue
             lr = next((x for x in e if x[0] == 'Links'), None)
-            if lr is None: e.append(['Links', 'ArrayProperty', 0, b'', struct.pack('>i', 1) + link_to(off)])
-            else: lr[4] = struct.pack('>i', struct.unpack_from('>i', lr[4], 0)[0] + 1) + lr[4][4:] + link_to(off)
+            if lr is None: e.append(['Links', 'ArrayProperty', 0, b'', struct.pack('>i', 1) + link_to(wait)])
+            else: lr[4] = struct.pack('>i', struct.unpack_from('>i', lr[4], 0)[0] + 1) + lr[4][4:] + link_to(wait)
         r[4] = struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)
     d = w.current(ref - 1)
     w.replace(ref - 1, d[:4] + up.enc(recs) + d[end:])
@@ -1859,7 +1917,7 @@ def player_pawn(up, made):
     srecs, send = parse828(sd, 4, up.wname)
     for r in srecs:
         if r[0] == 'SequenceObjects':
-            r[4] = struct.pack('>i', struct.unpack_from('>i', r[4], 0)[0] + 5) + r[4][4:] + struct.pack('>5i', v_player, v_slot, v_spawn, factory, off)
+            r[4] = struct.pack('>i', struct.unpack_from('>i', r[4], 0)[0] + 7) + r[4][4:] + struct.pack('>7i', v_player, v_slot, v_spawn, factory, off, hide, wait)
     w.replace(seq - 1, sd[:4] + up.enc(srecs) + sd[send:])
     return 1
 

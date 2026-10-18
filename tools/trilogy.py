@@ -66,14 +66,33 @@ def shared_textures_into(manifest, package):
     m = json.load(open(manifest)) if os.path.isfile(manifest) else {'entries': {}}
     p3 = upk.Package(package); w = upkwrite.Rewriter(p3); p3.names = w.names
     by_path = {p3.path(i): i for i in range(len(p3.exports))}
-    sources = {}
+    sources, refs = {}, []
     for name, e in sorted(m['entries'].items()):
         sp = sources.get(e['source']) or sources.setdefault(e['source'], upk.Package(e['source']))
         tt = by_path[e['template']]
         upk.E = '>'
         data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, e['index']))
         flags = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
-        w.add_export(p3.exports[tt]['class'], 0, (name, 0), data, flags=flags, fixups=fix)
+        refs.append(w.add_export(p3.exports[tt]['class'], 0, (name, 0), data, flags=flags, fixups=fix))
+    # nothing in the level referred to them: the first garbage collection freed them before the sections resolved
+    # their imports, and every converted wall and floor drew its template's rock. A Kismet object list in the
+    # level's Main_Sequence holds them (the level keeps its sequence, the sequence its objects)
+    import objcopy, levelpkg
+    main = next(i for i in range(len(p3.exports)) if p3.path(i) == 'TheWorld.PersistentLevel.Main_Sequence')
+    wname = lambda i, n: (w.names[i] if n == 0 else f'{w.names[i]}_{n - 1}')
+    lst = w.add_export(levelpkg.class_import(p3, w, 'SeqVar_ObjectList'), main + 1, ('TrilogySharedTextures', 0), b'',
+                       flags=0x0007000100000000)
+    w.replace(lst - 1, struct.pack('>i', -1) + objcopy.encode(w, [
+        ['ObjList', 'ArrayProperty', 0, b'', struct.pack(f'>i{len(refs)}i', len(refs), *refs)],
+        ['ParentSequence', 'ObjectProperty', 0, b'', struct.pack('>i', main + 1)]]))
+    sd = w.current(main)
+    srecs, send = objcopy.parse828(sd, 4, wname)
+    for r in srecs:
+        if r[0] == 'SequenceObjects':
+            r[4] = struct.pack('>i', struct.unpack_from('>i', r[4], 0)[0] + 1) + r[4][4:] + struct.pack('>i', lst)
+    if not any(r[0] == 'SequenceObjects' for r in srecs):
+        srecs.append(['SequenceObjects', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, lst)])
+    w.replace(main, sd[:4] + objcopy.encode(w, srecs) + sd[send:])
     data = w.build()
     open(package, 'wb').write(data)
     return len(m['entries'])
@@ -340,6 +359,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         if ch.get('player_pawn') and ch['player_pawn'].split('@')[-1].split(':')[0].strip() == s:
             cls, at = (x.strip() for x in ch['player_pawn'].split('@'))     # Class @ Section: op: output
             options += ['--player-pawn', cls + ':' + at.split(':', 1)[1].strip()]
+            if ch.get('player_spawn_at'): options += ['--player-spawn-at=' + ch['player_spawn_at'].replace(' ', '')]
         levelinject(folder, target, [src(s)] + [src(x.strip()) for x in opts.get('extra_sources', '').split(',') if x.strip()],
                     ['--kit', kit, '--named-vars', src(persistent)] + materials + options + common + tex_options, g3cooked)
     if shared_tex:

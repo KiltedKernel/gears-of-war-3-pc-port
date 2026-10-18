@@ -200,6 +200,7 @@ def main():
                     "chapter's map change ends the game instead)")
     ap.add_argument('--pawn-classes', default='', help="Gears 1 pawn class=Gears 3 class, comma separated: factories "
                     "spawn that class (its content package loaded by the mod: mod.ini content =)")
+    ap.add_argument('--player-spawn-at', default=None, help="with --player-pawn: x,y,z,yaw: where the new pawn spawns (beside the player start, which the old pawn stands on)")
     ap.add_argument('--player-pawn', default=None, help="with --kit: 'Class:op:output': after that op's output (its path "
                     "in the source's Main_Sequence) an AI factory makes the player that Gears 3 class (squad slot 1), "
                     "spawned on the kit's player start")
@@ -228,6 +229,7 @@ def main():
         if ps:
             base, num = (ps.rsplit('_', 1)[0], int(ps.rsplit('_', 1)[1]) + 1) if ps.rsplit('_', 1)[-1].isdigit() else (ps, 0)
             objcopy.PLAYER_PAWN = (cls, op, out)
+            if args.player_spawn_at: objcopy.PLAYER_SPAWN_AT = tuple(float(x) for x in args.player_spawn_at.split(','))
             objcopy.PLAYER_SPAWN = [('Core', 'Package', os.path.splitext(os.path.basename(args.kit))[0], 0), ('Engine', 'World', 'TheWorld', 0),
                                     ('Engine', 'Level', 'PersistentLevel', 0), ('Engine', 'PlayerStart', base, num)]
     if args.named_vars:
@@ -431,6 +433,9 @@ def main():
         import_mats = {}                               # (source, import ref) -> (source, export ref) of the material
         refs_used = [(si, el['material']) for si, mi in mesh_keys for el in staticmesh.read(srcs[si], mi)['lods'][0]['elements']]
         refs_used += [(si, r) for (si, ci), ov in overrides.items() for r in ov if r]
+        if args.kismet and src.version == 374:      # movers' (doors') own materials: their components are copied
+            import objcopy
+            refs_used += [(si, r) for si, sp_ in enumerate(srcs) if not getattr(sp_, 'aux', False) for r in objcopy.mover_materials(sp_)]
         for si, ref in refs_used:
             if ref > 0: mats.add((si, ref - 1))
             elif ref < 0 and (si, ref) not in import_mats:
@@ -973,7 +978,7 @@ def main():
     # Kismet (and the actors it refers to) last: the steps above rewrite the Level from its original data, which
     # dropped the new actors from Level.Actors
     if args.kismet and src.version == 374:
-        kismet(srcs, [x for x in args.source.split(',') if x], p3, w, cls, args.offset, new_mesh, cover_map, args.content, args.g3cooked, args.player_starts)
+        kismet(srcs, [x for x in args.source.split(',') if x], p3, w, cls, args.offset, new_mesh, cover_map, args.content, args.g3cooked, args.player_starts, mic_map=mic_of)
     if manifest is not None:
         import json
         json.dump(manifest, open(args.texture_manifest, 'w'), indent=0)
@@ -993,7 +998,7 @@ def main():
           f'{(len(qd) - qend) // 64} matrices; {len(q.exports)} exports')
 
 
-def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_map=None, content_names=None, g3cooked=None, with_starts=False):
+def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_map=None, content_names=None, g3cooked=None, with_starts=False, mic_map=None):
     """every source's Main_Sequence (and all under it) into the target, a subsequence of the target's Main_Sequence"""
     import objcopy, collections
     g1dir = os.path.dirname(os.path.abspath(names[0]))
@@ -1039,6 +1044,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
         c.available_pawns = available
         for (msi, mi), ref in (new_mesh or {}).items():     # converted meshes stand for the source's
             if msi == si: c.obj_map[mi + 1] = ref
+        for (msi, mref), mic in (mic_map or {}).items():   # ... converted materials too (a mover's own Materials)
+            if msi == si and mic: c.obj_map.setdefault(mref, mic)
         for (isi, iref), key in imported_skel.items():     # ... and for its imports of them
             if isi == si and key in (new_mesh or {}): c.obj_map[iref] = new_mesh[key]
         for (csi, ci), ref in (cover_map or {}).items():    # cover links: the target's links holding their data

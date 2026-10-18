@@ -45,7 +45,14 @@ void Start()
     const std::string filter = std::string(spec) == "1" ? "" : spec;
     std::thread([filter] {
         while (!ue3::Init()) std::this_thread::sleep_for(std::chrono::seconds(1));
-        const uint32_t opClass = ue3::FindClass("SequenceOp"), eventClass = ue3::FindClass("SequenceEvent");
+        // (the tables are found early in the boot, before Engine's classes load: wait for them)
+        uint32_t opClass = 0, eventClass = 0;
+        for (int tries = 0; tries < 600 && !opClass; tries++)
+        {
+            opClass = ue3::FindClass("SequenceOp");
+            if (!opClass) std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+        eventClass = ue3::FindClass("SequenceEvent");
         if (!opClass) { LOGN_WARNING("kismet: SequenceOp not found"); return; }
         std::unordered_map<uint32_t, int> opOff, evOff;     // per class: ActivateCount / TriggerCount offsets
         std::unordered_map<uint32_t, uint32_t> last;        // op -> last count

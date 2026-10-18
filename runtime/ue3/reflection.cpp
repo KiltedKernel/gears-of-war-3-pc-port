@@ -376,6 +376,12 @@ int PropertyOffset(uint32_t cls, const char* property)
     return p ? int(Read32(p + 84)) : -1;
 }
 
+int PropertySize(uint32_t cls, const char* property)
+{
+    const uint32_t p = FindProperty(cls, property);
+    return p ? int(Read32(p + 68)) : -1;
+}
+
 uint32_t BoolMask(uint32_t cls, const char* property)
 {
     const uint32_t p = FindProperty(cls, property);

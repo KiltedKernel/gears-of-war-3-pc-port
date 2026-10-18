@@ -160,6 +160,12 @@ objects. Character map and details: `runtime/ui/prompts.cpp`, ENGINEERING_LOG.
   GearGame.int for text), found by `ChapterNum` (GearUIDataStore_GameResource.GetChapterDataProvider); their
   `MapName` is not what loads. EChapterPoint: chapters 0-30, CHAP_Gameover 31, CHAP_DLC_1..18 (32-49), CHAP_MAX 50.
 - New chapters: `runtime/ue3/campaign_chapters.cpp` (see MODDING.md).
+- `GearGameSP_Base.CurrentChapter` is an int (GearGRI_SP.ChapterNum a byte); `GearPC.RestartChapter` travels to
+  `geargame_p?loadcheckpoint=0?chapter=<CurrentChapter>`. In a converted chapter something sets it to 0 soon after
+  the start (a native write, return address 822D0374; SeqAct_Checkpoint has OverrideSavedChapter /
+  SavedChapterOverride): Restart Chapter loaded the prologue. The runtime keeps it at the chapter's number while its
+  map is loaded. Open: after that restart the chapter's persistent level loads but none of its Kismet runs (its
+  sections never stream in); Gears 3's own chapters restart.
 - Unlocking: `GearProfileSettings.HasChapterBeenUnlockedForAccess` returns true for a chapter whose config has
   `IsAlwaysUnlocked=true` (only chapter 0 on the disc), else tests bit N of profile setting 95 (chapters 0-31) or 96
   (32+). The Select Chapter screen checks the same flag (examples/mods/UnlockAllChapters).

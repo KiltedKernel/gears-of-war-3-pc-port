@@ -200,6 +200,9 @@ def main():
                     "chapter's map change ends the game instead)")
     ap.add_argument('--pawn-classes', default='', help="Gears 1 pawn class=Gears 3 class, comma separated: factories "
                     "spawn that class (its content package loaded by the mod: mod.ini content =)")
+    ap.add_argument('--kismet-relink', default='', help="Package/Op.Output>Op.Output:Target;...: a Kismet link moved to another output (in that source package's conversion)")
+    ap.add_argument('--object-vars', default='', help="VarPathSuffix=Actor;...: Kismet object variables pointed at another actor of the level")
+    ap.add_argument('--track-offsets', default='', help="Group@time:x,y,z;...: a Matinee group's position keys from that time on moved (a door swinging through a floor)")
     ap.add_argument('--player-spawn-at', default=None, help="with --player-pawn: x,y,z,yaw: where the new pawn spawns (beside the player start, which the old pawn stands on)")
     ap.add_argument('--player-pawn', default=None, help="with --kit: 'Class:op:output': after that op's output (its path "
                     "in the source's Main_Sequence) an AI factory makes the player that Gears 3 class (squad slot 1), "
@@ -232,6 +235,26 @@ def main():
             if args.player_spawn_at: objcopy.PLAYER_SPAWN_AT = tuple(float(x) for x in args.player_spawn_at.split(','))
             objcopy.PLAYER_SPAWN = [('Core', 'Package', os.path.splitext(os.path.basename(args.kit))[0], 0), ('Engine', 'World', 'TheWorld', 0),
                                     ('Engine', 'Level', 'PersistentLevel', 0), ('Engine', 'PlayerStart', base, num)]
+    if args.kismet_relink:
+        import objcopy
+        srcbase = os.path.splitext(os.path.basename(args.source.split(',')[0]))[0].lower()
+        for item in args.kismet_relink.split(';'):
+            if not item.strip() or '/' not in item: continue
+            pkg, rest = item.split('/', 1)
+            if pkg.strip().lower() != srcbase: continue
+            frm, rest = rest.split('>'); to, target = rest.split(':')
+            split = lambda x: tuple(v.strip() for v in x.split('.', 1))
+            objcopy.KISMET_RELINK.append((split(frm), split(to), target.strip()))
+    if args.object_vars:
+        import objcopy
+        for item in args.object_vars.split(';'):
+            if '=' in item: k, v = item.split('='); objcopy.OBJECT_VAR_OVERRIDES[k.strip()] = v.strip()
+    if args.track_offsets:
+        import objcopy
+        for item in args.track_offsets.split(';'):
+            if not item.strip(): continue
+            g, rest = item.split('@'); t, v = rest.split(':')
+            objcopy.TRACK_OFFSETS[g.strip()] = (float(t), tuple(float(x) for x in v.split(',')))
     if args.named_vars:
         import objcopy
         base = os.path.splitext(os.path.basename(args.named_vars))[0]

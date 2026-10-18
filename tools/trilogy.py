@@ -310,6 +310,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     nxt_built = bool(nxt) and os.path.isfile(os.path.join(os.path.dirname(folder), ch.get('next_folder', ''), 'GearGame', 'CookedXbox360', prefix + nxt + '.xxx'))
     common = ['--streaming-prefix', prefix, '--streaming-built', ','.join(built + ([nxt] if nxt_built else [])), '--content', content,
               '--chapter-number', ch['number']] + ([] if nxt_built else ['--last-chapter'])
+    if ch.get('kismet_relink'): common += ['--kismet-relink', ' '.join(ch['kismet_relink'].split())]
     if ch.get('pawn_classes'): common += ['--pawn-classes', ','.join(x.strip() for x in ch['pawn_classes'].split(','))]
     materials = ['--materials', ch['materials']] if ch.get('materials') else []
     if ch.get('skin_material'):                       # (package: MIC path) the skeletal meshes' material parent
@@ -360,6 +361,8 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
             cls, at = (x.strip() for x in ch['player_pawn'].split('@'))     # Class @ Section: op: output
             options += ['--player-pawn', cls + ':' + at.split(':', 1)[1].strip()]
             if ch.get('player_spawn_at'): options += ['--player-spawn-at=' + ch['player_spawn_at'].replace(' ', '')]
+        if ch.get('track_offsets'): options += ['--track-offsets=' + ch['track_offsets'].replace(' ', '')]
+        if ch.get('object_vars'): options += ['--object-vars=' + ch['object_vars'].replace(' ', '')]
         levelinject(folder, target, [src(s)] + [src(x.strip()) for x in opts.get('extra_sources', '').split(',') if x.strip()],
                     ['--kit', kit, '--named-vars', src(persistent)] + materials + options + common + tex_options, g3cooked)
     if shared_tex:

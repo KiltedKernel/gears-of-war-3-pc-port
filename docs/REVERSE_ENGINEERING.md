@@ -164,8 +164,21 @@ objects. Character map and details: `runtime/ui/prompts.cpp`, ENGINEERING_LOG.
   `geargame_p?loadcheckpoint=0?chapter=<CurrentChapter>`. In a converted chapter something sets it to 0 soon after
   the start (a native write, return address 822D0374; SeqAct_Checkpoint has OverrideSavedChapter /
   SavedChapterOverride): Restart Chapter loaded the prologue. The runtime keeps it at the chapter's number while its
-  map is loaded. Open: after that restart the chapter's persistent level loads but none of its Kismet runs (its
-  sections never stream in); Gears 3's own chapters restart.
+  map is loaded. The writer was Kismet: **SeqAct_DisplayChapterTitle.Activated** sets CurrentChapter (and
+  GearGRI_SP.ChapterNum) to ChapterToDisplay - 1 and shows that chapter's title card; ChapterToDisplay is rebuilt
+  on load from the editor's **DisplayChapter** (an EChapterPoint): DisplayChapter + 1. A converted title action
+  needs DisplayChapter = the chapter (CHAP_DLC_n for 32..49; as an FName CHAP_DLC with number n + 1). With it, the
+  prison's card reads its own title and Restart Chapter reloads the prison.
+- Checkpoints (GearPC.LoadCheckpoint: GearEngine.PendingCheckpointAction = 1) load in place. The save
+  (GearsCheckpointN.sav) holds the map, its streaming level names (with flags that are 0 for sublevels in Gears 3's
+  own saves too), actor records and Kismet records. Gears 3's chapters stream their sublevels with
+  LevelStreamingVolumes, which bring them back by player position after a load. Open: a chapter streamed by its
+  Kismet alone (the converted Gears 1 prison) has no Kismet records in the save, and Reload Last Checkpoint restores
+  the persistent level with every section unloaded (the sky).
+- AI moves (SeqAct_AIMove -> AICmd_MoveToGoal_Mesh -> AICmd_MoveToMesh): MoveToMesh.Pushed calls
+  NavigationHandle.GetValidatedAnchorPosition; when that fails and no nearby box fits, the command goes to
+  DelayFailure and the pawn never moves. Open: why the converted prison's Dom fails it at the cell door (navmesh
+  covers the spot; regenerated mesh, single-player or multiplayer Dom, the same).
 - Unlocking: `GearProfileSettings.HasChapterBeenUnlockedForAccess` returns true for a chapter whose config has
   `IsAlwaysUnlocked=true` (only chapter 0 on the disc), else tests bit N of profile setting 95 (chapters 0-31) or 96
   (32+). The Select Chapter screen checks the same flag (examples/mods/UnlockAllChapters).

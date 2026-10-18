@@ -564,6 +564,8 @@ class Copier:
             if kind == 'component' and cn in COMPONENT_DROP:
                 props = self.without(props, COMPONENT_DROP[cn])
             self.current_src = i
+            if cn == 'SeqVar_Object' and OBJECT_VAR_OVERRIDES:
+                props = object_var_override(self, props)
             if i in getattr(self, 'current_named', {}): props = named_squad_var(self, props)
             elif cn in FIXUPS: props = FIXUPS[cn](self, props)
             if i in getattr(self, 'passthrough_src', ()):
@@ -600,8 +602,9 @@ class Copier:
                 ['bPlaying', 'BoolProperty', 0, b'', b'\x01'], ['bLooping', 'BoolProperty', 0, b'', b'\x01']]
         return encode(self.w, recs)
 
-    def shift_points(self, curve, offset):
-        """an InterpCurveVector (tagged: Points of {InVal, OutVal, ...}) with every OutVal moved by offset"""
+    def shift_points(self, curve, offset, from_time=None):
+        """an InterpCurveVector (tagged: Points of {InVal, OutVal, ...}) with every OutVal moved by offset (from_time:
+        only the keys at or after it)"""
         wname = lambda i, n: (self.w.names[i] if n == 0 else f'{self.w.names[i]}_{n - 1}')
         sub, _ = parse828(curve, 0, wname)
         for r in sub:
@@ -609,6 +612,9 @@ class Copier:
             n = struct.unpack_from('>i', r[4], 0)[0]; o = 4; els = []
             for _ in range(n):
                 el, o = parse828(r[4], o, wname)
+                t = next((struct.unpack('>f', x[4])[0] for x in el if x[0] == 'InVal'), 0.0)
+                if from_time is not None and t < from_time - 1e-3:
+                    els.append(encode(self.w, el)); continue
                 for x in el:
                     if x[0] == 'OutVal' and len(x[4]) == 12:
                         v = struct.unpack('>3f', x[4]); x[4] = struct.pack('>3f', *(v[k] + offset[k] for k in range(3)))
@@ -815,7 +821,10 @@ class Upgrader:
                     d = LINK_ALIAS.get((src_class[ref], desc(e)), desc(e))
                     if passthrough and prop in ('InputLinks', 'OutputLinks') and new: mapping[k] = 0
                     elif d in nd: mapping[k] = nd.index(d)
-                    elif len(old) == len(new): mapping[k] = k
+                # (then by index when the counts agree, onto links no name took: Gears 1's AIMoveToActor "Aborted",
+                # index 1, overwrote "Finished" -> "Reached Goal", index 1, and Dom never turned to the player)
+                for k, e in enumerate(old):
+                    if k not in mapping and len(old) == len(new) and k not in mapping.values(): mapping[k] = k
                 for k, e in enumerate(old):
                     c = next((r for r in e if r[0] == conn), None) if conn else None
                     if k not in mapping:                        # no Gears 3 counterpart (a switch's "Link 3"...): kept
@@ -844,8 +853,21 @@ class Upgrader:
                         else:
                             tgt[:] = [r for r in tgt if r[0] != conn] + [list(c)]
                 if prop == 'InputLinks': input_map[ref] = mapping
+                if prop == 'OutputLinks' and self.g3.is_a(g3c, 'SeqAct_PlaySound'):
+                    # a line cut short (Gears 3's SeqAct_Speak: "Stopped") goes where a finished one goes when Gears 1
+                    # left it unlinked: the opening's Dom said "Let's go", never fired "Finished" and stood in the
+                    # corridor outside the cell door for good, blocking the player
+                    ds = [desc(e) for e in new]
+                    if 'finished' in ds and 'stopped' in ds:
+                        fin = next((r for r in new[ds.index('finished')] if r[0] == 'Links'), None)
+                        stp = new[ds.index('stopped')]
+                        cur_ = next((r for r in stp if r[0] == 'Links'), None)
+                        if fin is not None and struct.unpack_from('>i', fin[4], 0)[0] and (cur_ is None or not struct.unpack_from('>i', cur_[4], 0)[0]):
+                            stp[:] = [r for r in stp if r[0] != 'Links'] + [list(fin)]
+                            stats['lines cut short continue'] = stats.get('lines cut short continue', 0) + 1
                 arrays[prop] = new
             if arrays: plan[ref] = (recs, end, arrays); stats['ops upgraded'] += 1
+        if KISMET_RELINK: self.relink(made, plan, desc, stats)
         for ref, (recs, end, arrays) in plan.items():
             for el in arrays.get('OutputLinks', []):
                 for r in el:
@@ -866,6 +888,44 @@ class Upgrader:
             d = w.current(ref - 1)
             w.replace(ref - 1, d[:4] + self.enc(out) + d[end:])
         return stats
+
+    def relink(self, made, plan, desc, stats):
+        """KISMET_RELINK: a link to an op moved from one output to another (by op export names and output
+        descriptions, spaces and case ignored)"""
+        s = self.c.s
+        by_name = {}
+        for i, ref in made.items(): by_name.setdefault(s.exports[i]['name'], ref)
+        norm = lambda t: t.replace(' ', '').lower()
+        for (from_op, from_out), (to_op, to_out), target in KISMET_RELINK:
+            a, b, t = by_name.get(from_op), by_name.get(to_op), by_name.get(target)
+            if not (a in plan and b in plan and t):
+                print(f'kismet relink: {from_op} / {to_op} / {target} not all here: skipped'); continue
+            def out_el(ref, d):
+                return next((e for e in plan[ref][2].get('OutputLinks', []) if norm(desc(e)) == norm(d)), None)
+            ea, eb = out_el(a, from_out), out_el(b, to_out)
+            if ea is None or eb is None:
+                print(f'kismet relink: no output {from_out!r} / {to_out!r}: skipped'); continue
+            ra = next((r for r in ea if r[0] == 'Links'), None)
+            links_a = self.elements(ra[4], self.wname) if ra is not None else []
+            moved = [ln for ln in links_a if next((struct.unpack('>i', x[4])[0] for x in ln if x[0] == 'LinkedOp'), 0) == t]
+            if not moved:
+                print(f'kismet relink: {from_op}.{from_out} has no link to {target}: skipped'); continue
+            keep = [ln for ln in links_a if ln not in moved]
+            ra[4] = struct.pack('>i', len(keep)) + b''.join(self.enc(ln) for ln in keep)
+            rb = next((r for r in eb if r[0] == 'Links'), None)
+            links_b = self.elements(rb[4], self.wname) if rb is not None else []
+            links_b += moved
+            data = struct.pack('>i', len(links_b)) + b''.join(self.enc(ln) for ln in links_b)
+            if rb is not None: rb[4] = data
+            else: eb.append(['Links', 'ArrayProperty', 0, b'', data])
+            print(f'kismet relink: {target} from {from_op}.{from_out} to {to_op}.{to_out}')
+            stats['links moved'] = stats.get('links moved', 0) + 1
+
+
+# (recipe kismet_relink) [((op, output), (op, output), target op)]: Gears 1's prison start ran initialPlayerStuff,
+# whose checkpoint is the chapter's first, beside the streaming of its sections: the checkpoint saved them as not
+# loaded, and Reload Last Checkpoint restored an empty world (the sky); it now runs once they are in
+KISMET_RELINK = []
 
 
 # ---- level streaming in converted Kismet ----
@@ -1288,6 +1348,17 @@ def interp_move_lookup(c, props):
     mfname = wname(*struct.unpack('>ii', mf[4])) if mf is not None and len(mf[4]) == 8 else ('IMF_World' if mf is None or mf[4][:1] == b'\x00' else 'relative')
     if pos is not None and mfname == 'IMF_World' and any(c.offset):
         pos[4] = c.shift_points(pos[4], c.offset)
+    if pos is not None and TRACK_OFFSETS:                      # recipe: a group's keys moved from a time on
+        import materialconv
+        g = c.s.exports[c.current_src]['outer'] - 1
+        try:
+            grecs, _ = materialconv.raw_props(c.s, c.s.export_data(g), 4)
+            gname = next((c.s.fname(*struct.unpack('>ii', r[4][:8])) for r in grecs if r[0] == 'GroupName'), '')
+        except Exception:
+            gname = ''
+        if gname in TRACK_OFFSETS:
+            t, off = TRACK_OFFSETS[gname]
+            pos[4] = c.shift_points(pos[4], off, t)
     if any(r[0] == 'LookupTrack' for r in recs): return encode(c.w, recs)
     times = []
     if pos is not None:
@@ -1306,6 +1377,30 @@ def interp_move_lookup(c, props):
 
 
 FIXUPS = {'InterpTrackMove': interp_move_lookup}
+# (recipe object_vars) a Kismet object variable's value replaced by another actor of the same level:
+# {variable path suffix ("time2Go.SeqVar_Object_0"): actor name ("PathNode_4")}. Gears 1's opening spawns Dom at the
+# cell door and walks him down the corridor; his move never starts in Gears 3 (his AI fails to anchor on the
+# navmesh there) and he stood in the doorway, blocking the player: he spawns where the walk ends instead
+OBJECT_VAR_OVERRIDES = {}
+
+
+def object_var_override(c, props):
+    path = c.s.path(c.current_src)
+    actor = next((a for k, a in OBJECT_VAR_OVERRIDES.items() if path.endswith(k)), None)
+    if actor is None: return props
+    src = next((j for j, e in enumerate(c.s.exports) if e['name'] == actor and c.s.path(j).count('.') == 2), None)
+    ref = c.obj_map.get(src + 1) if src is not None else None
+    if not ref:
+        print(f'object_vars: {actor} for {path} not copied: left as it is'); return props
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] != 'ObjValue'] + [['ObjValue', 'ObjectProperty', 0, b'', struct.pack('>i', ref)]]
+    print(f'object_vars: {path} = {actor}')
+    return encode(c.w, recs)
+# Matinee group name -> (time, (x, y, z)): its position keys from that time on moved by the offset (recipe
+# track_offsets; Gears 1's opening swings the cell door, its base at the cell floor's height, through the corridor's
+# 8-12 units higher floor: lifted as it starts to open)
+TRACK_OFFSETS = {}
 
 
 # Gears 1 assets copied when something copied refers to them (animation sets: Matinee groups, components)
@@ -1561,15 +1656,30 @@ CHAPTER_NUMBER = None
 CHAPTER_LAST = False
 
 
+def chapter_point(n):
+    """EChapterPoint's value name for chapter n: 32..49 are CHAP_DLC_1..18, the free chapters (docs/MODDING.md);
+    (Script3's enum table read 10 names of it, from CHAP_DLC_10: the chapter fixups never applied)"""
+    return f'CHAP_DLC_{n - 31}' if 32 <= n <= 49 else None
+
+
+def enum_name(w, value):
+    """an enum value's FName as UE3 stores it: a numeric suffix is the FName's number + 1 (CHAP_DLC_1 is CHAP_DLC,
+    number 2; written as one string it matched no value and the chapter loaded as 50, CHAP_MAX)"""
+    base, _, num = value.rpartition('_')
+    if base and num.isdigit() and not (len(num) > 1 and num[0] == '0'):
+        return w.name(base, int(num) + 1)
+    return w.name(value)
+
+
 def chapter_complete(c, props):
-    if CHAPTER_NUMBER is None or not c.g3: return props
-    en = c.g3.enums.get('ChapterCompleted')
-    if not en or CHAPTER_NUMBER + 1 >= len(en[1]): return props
+    if CHAPTER_NUMBER is None: return props
+    value = chapter_point(CHAPTER_NUMBER + 1)
+    if value is None: return props
     wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
     recs, _ = parse828(props, 0, wname)
     recs = [r for r in recs if r[0] != 'ChapterCompleted']
-    recs.append(['ChapterCompleted', 'ByteProperty', 0, struct.pack('>ii', *c.w.name(en[0])),
-                 struct.pack('>ii', *c.w.name(en[1][CHAPTER_NUMBER + 1]))])
+    recs.append(['ChapterCompleted', 'ByteProperty', 0, struct.pack('>ii', *c.w.name('EChapterPoint')),
+                 struct.pack('>ii', *enum_name(c.w, value))])
     return encode(c.w, recs)
 
 
@@ -1580,6 +1690,26 @@ def end_game(c, props):
 
 
 FIXUPS['SeqAct_ChapterComplete'] = chapter_complete
+
+
+# Gears 3's SeqAct_DisplayChapterTitle sets GearGameSP_Base.CurrentChapter (and the replicated ChapterNum) to
+# ChapterToDisplay - 1 and shows that chapter's title card. Gears 1's has no ChapterToDisplay: Gears 3's default, 1,
+# showed "Act I - Prologue" over the prison's opening and made the chapter 0 (a checkpoint then reloaded the prologue)
+def chapter_title(c, props):
+    if CHAPTER_NUMBER is None: return props
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in ('ChapterToDisplay', 'DisplayChapter')]
+    recs.append(['ChapterToDisplay', 'IntProperty', 0, b'', struct.pack('>i', CHAPTER_NUMBER + 1)])
+    # (the editor's DisplayChapter, an EChapterPoint, is what loads: ChapterToDisplay = DisplayChapter + 1 on load,
+    # the 33 written alone came back as 1)
+    if chapter_point(CHAPTER_NUMBER):
+        recs.append(['DisplayChapter', 'ByteProperty', 0, struct.pack('>ii', *c.w.name('EChapterPoint')),
+                     struct.pack('>ii', *enum_name(c.w, chapter_point(CHAPTER_NUMBER)))])
+    return encode(c.w, recs)
+
+
+FIXUPS['SeqAct_DisplayChapterTitle'] = chapter_title
 
 
 def set_chapter(number, last):

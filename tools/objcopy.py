@@ -566,6 +566,11 @@ class Copier:
             self.current_src = i
             if cn == 'SeqVar_Object' and OBJECT_VAR_OVERRIDES:
                 props = object_var_override(self, props)
+            if NO_COLLISION and (kind == 'actor' and self.s.exports[i]['name'] in NO_COLLISION or kind == 'component'
+                                 and cn in ('StaticMeshComponent', 'SkeletalMeshComponent', 'CylinderComponent')
+                                 and self.s.exports[i]['outer'] > 0
+                                 and self.s.exports[self.s.exports[i]['outer'] - 1]['name'] in NO_COLLISION):
+                props = no_collision(self, props, kind)
             if i in getattr(self, 'current_named', {}): props = named_squad_var(self, props)
             elif cn in FIXUPS: props = FIXUPS[cn](self, props)
             if i in getattr(self, 'passthrough_src', ()):
@@ -1030,6 +1035,10 @@ def light_environments(up, made):
         if not any(r[0] == 'Components' for r in recs):
             recs.append(['Components', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, comp)])
         recs = [r for r in recs if r[0] != 'LightEnvironment'] + [['LightEnvironment', 'ObjectProperty', 0, b'', struct.pack('>i', comp)]]
+        # cutscene characters do not block: Gears 3's SkeletalMeshActor collides and blocks by default, and the prison
+        # opening's (SP_Prison_Cine_Start: hidden once it ends, still loaded) stand invisible in the cell doorway
+        recs = [r for r in recs if r[0] not in ('bCollideActors', 'bBlockActors')] + [
+            ['bCollideActors', 'BoolProperty', 0, b'', b'\x00'], ['bBlockActors', 'BoolProperty', 0, b'', b'\x00']]
         w.replace(ref - 1, d[:26] + encode(w, recs) + d[end:])
         if mesh > 0:
             md = w.current(mesh - 1)
@@ -1382,6 +1391,21 @@ FIXUPS = {'InterpTrackMove': interp_move_lookup}
 # cell door and walks him down the corridor; his move never starts in Gears 3 (his AI fails to anchor on the
 # navmesh there) and he stood in the doorway, blocking the player: he spawns where the walk ends instead
 OBJECT_VAR_OVERRIDES = {}
+# (recipe no_collision) actors of the level that neither collide nor block: Gears 1's cell door, swung open by the
+# prison's opening, ends angled into the doorway, where a Gears 3 pawn walking out of the cell caught on it
+NO_COLLISION = set()
+
+
+def no_collision(c, props, kind):
+    # the actor's flags and its components': the opening's end turns the door's actor collision back on
+    # (bCollideActors 1 once its Matinee is done), which leaves components that do not collide as they are
+    names = ('bCollideActors', 'bBlockActors') if kind == 'actor' else (
+        'CollideActors', 'BlockActors', 'BlockZeroExtent', 'BlockNonZeroExtent', 'BlockRigidBody')
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in names] + [[n, 'BoolProperty', 0, b'', b'\x00'] for n in names]
+    print(f'no_collision: {c.s.path(c.current_src)}')
+    return encode(c.w, recs)
 
 
 def object_var_override(c, props):
@@ -1796,11 +1820,26 @@ def checkpoint_events(up, made):
     actions = [(i, ref) for i, ref in made.items() if s.class_name(s.exports[i]['class']) == 'SeqAct_WarCheckPoint']
     events = [(i, ref) for i, ref in made.items() if s.class_name(s.exports[i]['class']) == 'SeqEvt_CheckpointActivated']
     if not actions or not events: return 0
+    def checkpoint_name(ref):       # a name for Gears 1's checkpoint actor: its package's and its own
+        while ref < 0 and s.imports[-ref - 1]['outer']: ref = s.imports[-ref - 1]['outer']
+        pkg = s.imports[-ref - 1]['name'] if ref < 0 else os.path.splitext(os.path.basename(s.filename))[0]
+        return f"G1_{pkg}_{s.exports[ref - 1]['name'] if ref > 0 else ''}".rstrip('_')
+    def set_name(ref, prop, value):
+        recs, end = parse828(w.current(ref - 1), 4, up.wname)
+        recs = [r for r in recs if r[0] != prop] + [[prop, 'NameProperty', 0, b'', struct.pack('>ii', *w.name(value))]]
+        d = w.current(ref - 1)
+        w.replace(ref - 1, d[:4] + up.enc(recs) + d[end:])
     n = 0
     for ei, eref in events:
         ea = g1_props(ei)
         origin = struct.unpack('>i', ea['Originator'][4])[0] if 'Originator' in ea else 0
         mine = [(ai, aref) for ai, aref in actions if origin and origin in var_values(ai, 'Checkpoint')]
+        # named: Gears 3 fires a SeqEvent_CheckpointLoaded on a load when its FindCheckPointName is None or the
+        # loaded checkpoint's (SeqAct_Checkpoint.CheckpointName); unnamed, every event ran on every load (the
+        # prison's start, initialPlayerStuff, put the player back in the cell from any checkpoint)
+        if origin > 0 and mine:
+            set_name(eref, 'FindCheckPointName', checkpoint_name(origin))
+            for ai, aref in mine: set_name(aref, 'CheckpointName', checkpoint_name(origin))
         if not mine: mine = [(ai, aref) for ai, aref in actions if s.exports[ai]['outer'] == s.exports[ei]['outer']]
         # the event's converted output links
         erecs, _ = parse828(w.current(eref - 1), 4, up.wname)

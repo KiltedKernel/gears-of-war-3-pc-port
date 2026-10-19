@@ -201,6 +201,7 @@ def main():
     ap.add_argument('--pawn-classes', default='', help="Gears 1 pawn class=Gears 3 class, comma separated: factories "
                     "spawn that class (its content package loaded by the mod: mod.ini content =)")
     ap.add_argument('--kismet-relink', default='', help="Package/Op.Output>Op.Output:Target;...: a Kismet link moved to another output (in that source package's conversion)")
+    ap.add_argument('--actors-no-collision', default='', help="Package/Actor;...: actors that neither collide nor block (when the source is that package)")
     ap.add_argument('--object-vars', default='', help="VarPathSuffix=Actor;...: Kismet object variables pointed at another actor of the level")
     ap.add_argument('--track-offsets', default='', help="Group@time:x,y,z;...: a Matinee group's position keys from that time on moved (a door swinging through a floor)")
     ap.add_argument('--player-spawn-at', default=None, help="with --player-pawn: x,y,z,yaw: where the new pawn spawns (beside the player start, which the old pawn stands on)")
@@ -245,6 +246,13 @@ def main():
             frm, rest = rest.split('>'); to, target = rest.split(':')
             split = lambda x: tuple(v.strip() for v in x.split('.', 1))
             objcopy.KISMET_RELINK.append((split(frm), split(to), target.strip()))
+    if args.actors_no_collision:
+        import objcopy
+        srcbase = os.path.splitext(os.path.basename(args.source.split(',')[0]))[0].lower()
+        for item in args.actors_no_collision.split(';'):
+            if '/' not in item: continue
+            pkg, actor = (x.strip() for x in item.split('/', 1))
+            if pkg.lower() == srcbase: objcopy.NO_COLLISION.add(actor)
     if args.object_vars:
         import objcopy
         for item in args.object_vars.split(';'):

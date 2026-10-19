@@ -172,9 +172,15 @@ objects. Character map and details: `runtime/ui/prompts.cpp`, ENGINEERING_LOG.
 - Checkpoints (GearPC.LoadCheckpoint: GearEngine.PendingCheckpointAction = 1) load in place. The save
   (GearsCheckpointN.sav) holds the map, its streaming level names (with flags that are 0 for sublevels in Gears 3's
   own saves too), actor records and Kismet records. Gears 3's chapters stream their sublevels with
-  LevelStreamingVolumes, which bring them back by player position after a load. Open: a chapter streamed by its
-  Kismet alone (the converted Gears 1 prison) has no Kismet records in the save, and Reload Last Checkpoint restores
-  the persistent level with every section unloaded (the sky).
+  LevelStreamingVolumes, which bring them back by player position after a load. The in-place load reads the checkpoint
+  from memory (the .sav is not opened again) and leaves every LevelStreamingKismet with bShouldBeLoaded and
+  bShouldBeVisible 0 (their levels unloaded): a chapter streamed by its Kismet alone (the converted Gears 1 prison)
+  reloaded into the sky. `GearGameSP_Base.CheckpointLoadComplete` then makes a new AIVisMan and fires every
+  SeqEvent_CheckpointLoaded whose FindCheckPointName is None or the loaded checkpoint's (SeqAct_Checkpoint.CheckpointName
+  -> GearPC.LastCheckpointSaveName); `GearPC.SaveCheckpointWorker` sets LastCheckpointSaveTime. The runtime
+  (`runtime/ue3/campaign_chapters.cpp`) follows a new chapter's sections and, after a load, streams back in those
+  streamed in at the save or just before the load (the chapter's first checkpoint, saved at its start: its sections
+  shown, and the opening plays again). The reloaded sections' Kismet starts over.
 - AI moves (SeqAct_AIMove -> AICmd_MoveToGoal_Mesh -> AICmd_MoveToMesh): MoveToMesh.Pushed calls
   NavigationHandle.GetValidatedAnchorPosition; when that fails and no nearby box fits, the command goes to
   DelayFailure and the pawn never moves. Open: why the converted prison's Dom fails it at the cell door (navmesh

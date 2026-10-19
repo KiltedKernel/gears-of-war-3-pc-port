@@ -363,6 +363,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
             if ch.get('player_spawn_at'): options += ['--player-spawn-at=' + ch['player_spawn_at'].replace(' ', '')]
         if ch.get('track_offsets'): options += ['--track-offsets=' + ch['track_offsets'].replace(' ', '')]
         if ch.get('object_vars'): options += ['--object-vars=' + ch['object_vars'].replace(' ', '')]
+        if ch.get('no_collision'): options += ['--actors-no-collision=' + ch['no_collision'].replace(' ', '')]
         levelinject(folder, target, [src(s)] + [src(x.strip()) for x in opts.get('extra_sources', '').split(',') if x.strip()],
                     ['--kit', kit, '--named-vars', src(persistent)] + materials + options + common + tex_options, g3cooked)
     if shared_tex:

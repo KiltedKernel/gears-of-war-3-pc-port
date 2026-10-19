@@ -147,6 +147,97 @@ def g1_blend(p, ref, depth=0):
     return g1_blend(p, par, depth + 1) if isinstance(par, int) else None
 
 
+def g1_mask(p, mat):
+    """a masked Gears 1 Material's (BlendMode 1) cutout: (texture export index, 'A' | 'R'), the texture its
+    OpacityMask samples and the channel (the diffuse's alpha: the prison's fence, razor wire, grass; a texture of its
+    own's red: a tarp's _Alpha), or None"""
+    if mat < 0 or p.class_name(p.exports[mat]['class']) != 'Material': return None
+    try:
+        o, pr, end = levelinject.props_at(p, p.export_data(mat))
+    except ValueError:
+        return None
+    a = {n: v for n, t, k, v in pr}
+    if a.get('BlendMode') != 1 or 'OpacityMask' not in a: return None
+    inp = {n: v for n, t, k, v in p.properties(a['OpacityMask'][1], 0)[0]}
+    queue, seen, channel = [inp.get('Expression', 0)], set(), 'A' if inp.get('MaskA') else 'R' if inp.get('MaskR') else None
+    while queue:
+        ref = queue.pop(0)
+        if ref <= 0 or ref in seen: continue
+        seen.add(ref)
+        try:
+            _, epr, _ = levelinject.props_at(p, p.export_data(ref - 1))
+        except Exception:
+            continue
+        for n, t, k, v in epr:
+            if n == 'Texture' and t == 'ObjectProperty' and v > 0 and p.class_name(p.exports[v - 1]['class']) == 'Texture2D':
+                if channel is None:                     # (through Add / Multiply: the diffuse's alpha, or a mask's red)
+                    channel = 'A' if v - 1 == g1_textures(p, mat).get('diffuse') else 'R'
+                return v - 1, channel
+            if t == 'StructProperty' and v[0] == 'ExpressionInput':
+                e = {nn: vv for nn, tt, kk, vv in p.properties(v[1], 0)[0]}
+                queue.append(e.get('Expression', 0))
+                if channel is None and e.get('MaskA'): channel = 'A'
+    return None
+
+
+def red_to_alpha(data, fmt):
+    """a tiled DXT1 mip whose alpha (1-bit: DXT1's punch-through) is its red, white where kept (a Gears 1 mask
+    texture's cutout: the masked Gears 3 master reads its mask texture's alpha). Block by block in place, so the
+    tiling and the packed mip tail stay as they are: 8-byte blocks, 16-bit words big-endian; both colour endpoints
+    white (3-colour mode), index 3 (transparent) where red is under half"""
+    import numpy as np
+    if fmt != 'PF_DXT1': raise ValueError(f'red_to_alpha: {fmt}')
+    pad = (-len(data)) % 8
+    blk = np.frombuffer(data + bytes(pad), dtype=np.uint8).reshape(-1, 8)
+    le = blk.reshape(-1, 2)[:, ::-1].reshape(-1, 8)                       # little-endian block bytes
+    c0 = le[:, 0].astype(np.int32) | (le[:, 1].astype(np.int32) << 8)
+    c1 = le[:, 2].astype(np.int32) | (le[:, 3].astype(np.int32) << 8)
+    bits = np.ascontiguousarray(le[:, 4:8]).view('<u4')[:, 0]
+    idx = ((bits[:, None] >> (2 * np.arange(16, dtype=np.uint32))[None]) & 3).astype(np.int64)
+    r0, r1 = (c0 >> 11) * 255 // 31, (c1 >> 11) * 255 // 31
+    four = c0 > c1
+    pal = np.stack([r0, r1, np.where(four, (2 * r0 + r1) // 3, (r0 + r1) // 2), np.where(four, (r0 + 2 * r1) // 3, 0)], 1)
+    red = np.take_along_axis(pal, idx, 1)
+    new = np.where(red >= 128, 0, 3).astype(np.uint32)
+    nbits = (new << (2 * np.arange(16, dtype=np.uint32))[None]).sum(1).astype('<u4')
+    out = np.concatenate([np.full((len(le), 4), 0xff, np.uint8), nbits.view(np.uint8).reshape(-1, 4)], 1)
+    return out.reshape(-1, 2)[:, ::-1].reshape(-1).tobytes()[:len(data)]
+
+
+def alpha_to_grey(data, fmt):
+    """a tiled DXT1/3/5 mip whose colour is grey from its alpha, the alpha kept (a mask read on any channel: the
+    masked Gears 3 master's channel switch is its own). Block by block in place, so the tiling and the packed mip
+    tail stay as they are: a block is 8 (DXT1) or 16 bytes, 16-bit words big-endian; its colour half white/black
+    endpoints (4-colour mode: 255, 0, 170, 85) indexed by each texel's alpha (DXT1: its 1-bit alpha, kept as 3-colour
+    mode's transparent index)"""
+    import numpy as np
+    bpb = 8 if fmt == 'PF_DXT1' else 16
+    pad = (-len(data)) % bpb
+    blk = np.frombuffer(data + bytes(pad), dtype=np.uint8).reshape(-1, bpb)
+    le = blk.reshape(-1, 2)[:, ::-1].reshape(-1, bpb)                     # little-endian block bytes
+    if fmt == 'PF_DXT1':
+        c0 = le[:, 0].astype(np.int32) | (le[:, 1].astype(np.int32) << 8)
+        c1 = le[:, 2].astype(np.int32) | (le[:, 3].astype(np.int32) << 8)
+        bits = np.ascontiguousarray(le[:, 4:8]).view('<u4')[:, 0]
+        idx = (bits[:, None] >> (2 * np.arange(16, dtype=np.uint32))[None]) & 3
+        new = np.where((idx == 3) & (c0 <= c1)[:, None], 3, 0).astype(np.uint32)       # white, or transparent
+        nbits = (new << (2 * np.arange(16, dtype=np.uint32))[None]).sum(1).astype('<u4')
+        out = np.concatenate([np.full((len(le), 4), 0xff, np.uint8), nbits.view(np.uint8).reshape(-1, 4)], 1)
+        return out.reshape(-1, 2)[:, ::-1].reshape(-1).tobytes()[:len(data)]
+    if fmt == 'PF_DXT5':
+        alpha = texture2d.decode_bc4(np.ascontiguousarray(le[:, :8]))
+    else:
+        a4 = np.unpackbits(le[:, :8], axis=1, bitorder='little').reshape(-1, 16, 4)
+        alpha = (a4 * (1 << np.arange(4))).sum(2) * 17
+    levels = np.array([255, 0, 170, 85])
+    idx = np.abs(alpha[:, :, None].astype(np.int32) - levels[None, None]).argmin(2).astype(np.uint32)
+    bits = (idx << (2 * np.arange(16, dtype=np.uint32))[None]).sum(1).astype('<u4')
+    out = le.copy()
+    out[:, 8:12] = np.array([0xff, 0xff, 0, 0], np.uint8)
+    out[:, 12:16] = bits.view(np.uint8).reshape(-1, 4)
+    return out.reshape(-1, 2)[:, ::-1].reshape(-1).tobytes()[:len(data)]
+
+
 def g1_see_through(p, mesh_elements):
     """every element of a Gears 1 static mesh drawn translucent / additive / modulated (light shafts, fog sheets):
     the conversion's one material template is opaque, which drew them as solid white cones"""
@@ -156,9 +247,10 @@ def g1_see_through(p, mesh_elements):
 
 # ---- Gears 1 texture -> Gears 3 Texture2D serial data ----
 
-def texture_828(w, p3, template, src):
+def texture_828(w, p3, template, src, mask=None):
     """(data, fixups) for a Gears 3 Texture2D export: template = a Gears 3 texture export index (its properties),
-    src = texture2d.Texture of a Gears 1 texture"""
+    src = texture2d.Texture of a Gears 1 texture; mask: 'A' (its alpha as grey too: alpha_to_grey) or 'R' (a DXT1
+    mask's red as its alpha: red_to_alpha)"""
     d3 = p3.export_data(template)
     props, end = raw_props(p3, d3, 4)
     fmt = src.format if isinstance(src.format, str) else FORMATS_374.get(src.format, 'PF_DXT1')
@@ -185,6 +277,7 @@ def texture_828(w, p3, template, src):
     out += struct.pack('>i', len(mips))
     for m, mip in enumerate(mips):
         data = src.mip_bytes(first + m)
+        if data is not None and mask: data = (red_to_alpha if mask == 'R' else alpha_to_grey)(data, fmt)
         if data is None:
             out += struct.pack('>Iiii', 0x21, 0, -1, -1)
         else:

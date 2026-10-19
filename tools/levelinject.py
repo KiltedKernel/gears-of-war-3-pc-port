@@ -182,6 +182,10 @@ def main():
                     "BSP's floors (a start inside the new floor kills the pawn at spawn)")
     ap.add_argument('--materials', default=None, help='a Gears 3 MaterialInstanceConstant (path substring) to clone '
                     'per source material, with its Diffuse_01/Normal_01/Specular_01 set to the converted textures')
+    ap.add_argument('--masked-material', default=None, help="a masked Gears 3 MaterialInstanceConstant of the target "
+                    "itself (path substring; its parent takes Diffuse_01 / Normal_01 and a mask texture read for its "
+                    "alpha): masked Gears 1 materials (fences, razor wire, grass) become child instances of it, their "
+                    "cutout the diffuse's alpha, or a DXT1 mask's red as its alpha (materialconv.red_to_alpha)")
     ap.add_argument('--kit', default=None, help="a chapter of its own: the Gears 3 package (the chapter's persistent level, "
                     "loaded first) holding the material instance templates (--materials, the skeletal one): converted "
                     "materials are child instances of them, through imports (tools/levelpkg.py)")
@@ -361,7 +365,12 @@ def main():
     cls = lambda i: p3.class_name(p3.exports[i]['class'])
     # template component: no lightmap (4-byte native tail), with Scale3D and VisibilityId properties
     tcomp = fallback = None
-    for i, e in enumerate(p3.exports):
+    # a collection actor's components first (SP_Azura2_02_S's only light-map-less one is a pickup's: its settings left
+    # every converted mesh black)
+    in_collection = lambda i: p3.exports[i]['outer'] > 0 and cls(p3.exports[i]['outer'] - 1) == 'StaticMeshCollectionActor'
+    order = sorted(range(len(p3.exports)), key=lambda i: not in_collection(i))
+    for i in order:
+        if fallback is not None and not args.template and not in_collection(i) and in_collection(fallback): break
         if cls(i) != 'StaticMeshComponent' or not p3.path(i).startswith('TheWorld'): continue
         d = p3.export_data(i)
         try: o, pr, end = props_at(p3, d, (8,))
@@ -391,8 +400,9 @@ def main():
             td = remove_property(p3, td, to, prop); to, tpr, tend = props_at(p3, td, (8,))
             td = bytes(set_property(p3, w, bytearray(td), to, prop, b'\x01', 'BoolProperty')); to, tpr, tend = props_at(p3, td, (8,))
     # the mesh's own element materials apply (a Materials array on the component overrides them), and the
-    # template's IrrelevantLights (GUIDs of the lights that do not affect the original) do not apply here
-    for prop in ('Materials', 'IrrelevantLights'):
+    # template's IrrelevantLights (GUIDs of the lights that do not affect the original) do not apply here; nor its
+    # own placement (SP_Azura2_02_S's: Translation, Rotation, Scale 0.625: every converted mesh shrunk and moved)
+    for prop in ('Materials', 'IrrelevantLights', 'Translation', 'Rotation', 'Scale'):
         td = remove_property(p3, td, to, prop); to, tpr, tend = props_at(p3, td, (8,))
     if 'Scale3D' not in [n for n, *_ in tpr]:          # every new component's scale is written into this tag
         td = bytes(set_property(p3, w, bytearray(td), to, 'Scale3D', struct.pack('>fff', 1, 1, 1), 'StructProperty', 'Vector'))
@@ -420,16 +430,17 @@ def main():
         import json
         manifest = json.load(open(args.texture_manifest)) if os.path.isfile(args.texture_manifest) else {'names': {}, 'entries': {}}
     shared_pkg, kit_tex_template = [], {}
-    def shared_texture(sp, ti, tt, tkey, slot):
+    def shared_texture(sp, ti, tt, tkey, slot, mask=None):
         name = manifest['names'].get(tkey)
         if name is None:
-            base = name = 'TrilogyT_' + tkey.split('.')[-1]
+            base = name = 'TrilogyT_' + tkey.split('.')[-1].split('#')[0] + ('_Mask' if mask else '')
             k = 2
             while name in manifest['entries']: name = f'{base}_v{k}'; k += 1
             manifest['names'][tkey] = name
             kt = kit_tex_template.get(slot)            # (the persistent level is a clone of the kit)
             template = pk.path(kt) if pk is not None and kt is not None and kt >= 0 else p3.path(tt)
             manifest['entries'][name] = {'source': os.path.abspath(sp.filename), 'index': ti, 'template': template}
+            if mask: manifest['entries'][name]['mask'] = mask
         if not shared_pkg: shared_pkg.append(w.add_import('Core', 'Package', 0, args.shared_textures))
         return w.add_import('Engine', 'Texture2D', shared_pkg[0], name)
     if args.materials and src.version == 374:
@@ -458,6 +469,16 @@ def main():
             print(f'kit: material template {pk.path(tmic)} (imported), texture templates '
                   f"{', '.join(f'{k} {p3.path(v)}' for k, v in tex_template.items() if v is not None)}")
         tex_ref = {}
+        masked_mic = None                              # the masked template: an instance in the target itself
+        masked_param = None
+        if args.masked_material:
+            masked_mic = next((i for i in range(len(p3.exports)) if cls(i) == 'MaterialInstanceConstant'
+                               and args.masked_material.lower() in p3.path(i).lower()), None)
+            # its mask texture parameter (M_DiscoverPickups_MASTER_MASKED: OpacityMaskTexture, read for its alpha)
+            masked_param = next((n for n in materialconv.mic_texture_params(p3, masked_mic) if 'opacity' in n.lower()), None) \
+                if masked_mic is not None else None
+            print(f'masked material template: {p3.path(masked_mic) if masked_mic is not None else "not in the target"} ({masked_param})')
+        n_masked = 0
         mats = set()                                   # (source index, material export index)
         for (si, mi), sk in skel_meshes.items():
             mats.update((si, x - 1) for x in sk['materials'] if x > 0)
@@ -504,7 +525,27 @@ def main():
                     tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1], 0), data, flags=tflags_, fixups=fix)
                 refs[{'diffuse': 'Diffuse_01', 'normal': 'Normal_01', 'specular': 'Specular_01'}[slot]] = tex_ref[tkey]
-            if pk is not None:
+            # masked (the fence, razor wire, grass): a child of the masked template, its mask texture the cutout as
+            # grey and alpha (the diffuse's alpha: alpha_to_grey; a DXT1 mask's red: red_to_alpha)
+            mask = materialconv.g1_mask(sp, gm) if masked_mic is not None and masked_param else None
+            if mask is not None and mask[1] == 'R' and texture2d.Texture(sp, mask[0]).format != 'PF_DXT1': mask = None
+            if mask is not None and tex_template.get('diffuse') is not None:
+                ti, channel = mask
+                tt = tex_template['diffuse']
+                tkey = sp.path(ti) + '#mask'
+                if tkey not in tex_ref and args.shared_textures:
+                    tex_ref[tkey] = shared_texture(sp, ti, tt, tkey, 'diffuse', mask=channel)
+                if tkey not in tex_ref:
+                    upk.E = '>'
+                    data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti), mask=channel)
+                    tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
+                    tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1].replace('#mask', '_Mask'), 0), data, flags=tflags_, fixups=fix)
+                refs[masked_param] = tex_ref[tkey]
+                data = materialconv.child_mic(w, p3, p3, masked_mic, masked_mic + 1, refs)
+                mflags_m = struct.unpack_from('>Q', p3.data, p3.exports[masked_mic]['entry'] + 24)[0]
+                mic_of[(si, gm + 1)] = by_name[name] = w.add_export(p3.exports[masked_mic]['class'], 0, ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_m)
+                n_masked += 1
+            elif pk is not None:
                 data = materialconv.child_mic(w, p3, pk, tmic, kit_parent, refs)
                 mic_of[(si, gm + 1)] = by_name[name] = w.add_export(mic_cls, 0, ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_)
             else:
@@ -515,7 +556,7 @@ def main():
             if v in mic_of: mic_of[k] = mic_of[v]
             if v in unlit_mats: unlit_mats.add(k)
         if import_mats: print(f'{len(import_mats)} imported materials, {sum(1 for k in import_mats if k in mic_of)} converted')
-        print(f'{len(mic_of)} materials, {len(tex_ref)} textures converted (template {tp.path(tmic)})')
+        print(f'{len(mic_of)} materials ({n_masked} masked), {len(tex_ref)} textures converted (template {tp.path(tmic)})')
     # converted meshes have no BodySetup (simple collision): line and box checks must use the triangles (the kDOP
     # tree), or a simple-collision check finds nothing (UseSimpleLineCollision / UseSimpleBoxCollision off)
     def per_poly_collision(data):
@@ -925,8 +966,9 @@ def main():
         P = np.array([q for r, j, q in flat])
         dist = []; reached = set()
         for k, (r, j) in enumerate(pairs):
+            if not 0 <= r < len(link_refs): continue   # (a pair outside the level's own links: left as the template has it)
             ti = link_refs[r]
-            if not len(P): break                       # (no source cover among the target's links: nothing to aim at)
+            if not len(P): break                      # (no source cover among the target's links: nothing to aim at)
             if j >= len(old_pos.get(ti, [])): continue
             dd = np.linalg.norm(P - old_pos[ti][j], axis=1); m = int(dd.argmin()); dist.append(dd[m])
             struct.pack_into('>iB', ld, pairs_at + 5 * k, flat[m][0], flat[m][1]); reached.add(m)
@@ -1134,8 +1176,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
     if added:                                          # the target's Main_Sequence lists them
         d = bytearray(w.current(main3)); o, pr, end = props_at(p3, bytes(d), (4,))
         v, size = tag_value_offset(p3, bytes(d), o, 'SequenceObjects')
-        n = struct.unpack_from('>i', d, v)[0]
-        value = struct.pack('>i', n + len(added)) + bytes(d[v + 4:v + size]) + b''.join(struct.pack('>i', r) for r in added)
+        n, old = (struct.unpack_from('>i', d, v)[0], bytes(d[v + 4:v + size])) if v is not None else (0, b'')   # (none yet)
+        value = struct.pack('>i', n + len(added)) + old + b''.join(struct.pack('>i', r) for r in added)
         d = set_property(p3, w, d, o, 'SequenceObjects', value, 'ArrayProperty')
         w.replace(main3, bytes(d))
     si_ = [k[10:] for k in stats if k.startswith('stand-in: ')]

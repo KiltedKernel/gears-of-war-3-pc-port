@@ -57,6 +57,14 @@ def levelinject(folder, target, sources, options, g3cooked):
         f'converting {len(sources)} package(s) into {os.path.basename(target)}')
 
 
+def has_masked(package):
+    """a Gears 1 package carrying a masked material (BlendMode 1) whose cutout is a texture"""
+    import upk, materialconv
+    p = upk.Package(package)
+    return any(p.class_name(e['class']) == 'Material' and materialconv.g1_mask(p, i) is not None
+               for i, e in enumerate(p.exports))
+
+
 def shared_textures_into(manifest, package):
     """the chapter's shared textures (levelinject --shared-textures) added to a package (the persistent level's):
     every texture the manifest lists, converted from its Gears 1 source with the template texture it names (the
@@ -71,7 +79,7 @@ def shared_textures_into(manifest, package):
         sp = sources.get(e['source']) or sources.setdefault(e['source'], upk.Package(e['source']))
         tt = by_path[e['template']]
         upk.E = '>'
-        data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, e['index']))
+        data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, e['index']), e.get('mask'))
         flags = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
         refs.append(w.add_export(p3.exports[tt]['class'], 0, (name, 0), data, flags=flags, fixups=fix))
     # nothing in the level referred to them: the first garbage collection freed them before the sections resolved
@@ -354,7 +362,15 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         options = opts.get('options', ch.get('options', '--bsp --replace --cover --kismet')).split()
         keep = levelpkg.KEEP_SECTION if s in nav_for else tuple(k for k in levelpkg.KEEP_SECTION if k != 'Pylon')
         target = os.path.join(work, prefix + s + '.xxx')
-        levelpkg.clone(os.path.join(g3cooked, ch['section_template'] + '.xxx'), target, keep=keep)
+        # a section drawing masked Gears 1 materials (fences, razor wire, grass) without a navmesh of its own: a clone
+        # of the masked template (masked_template: a Gears 3 level carrying the masked master's instance and its
+        # compiled shaders), its materials child instances of that instance (levelinject --masked-material)
+        template = ch['section_template']
+        only = [x.strip() for x in ch.get('masked_sections', '').split(',') if x.strip()]
+        if ch.get('masked_template') and s not in nav_for and (s in only if only else True) and has_masked(src(s)):
+            template = ch['masked_template']
+            options += ['--masked-material', ch.get('masked_material', 'Masked')]
+        levelpkg.clone(os.path.join(g3cooked, template + '.xxx'), target, keep=keep)
         if s in nav_for:                               # its pylon where the region's navmesh is generated from
             options += seed_options(navs[nav_for[s]], (0, 0, 0))
         if ch.get('player_pawn') and ch['player_pawn'].split('@')[-1].split(':')[0].strip() == s:

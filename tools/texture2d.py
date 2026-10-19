@@ -141,7 +141,7 @@ def decode_bc4(blk8):
     a0, a1 = blk8[:, 0].astype(np.int32), blk8[:, 1].astype(np.int32)
     bits = np.zeros(len(blk8), dtype=np.uint64)
     for k in range(6): bits |= blk8[:, 2 + k].astype(np.uint64) << np.uint64(8 * k)
-    i = np.arange(8)
+    i = np.arange(8) - 1                                   # index k (2..7) is (8-k)/7 a0 + (k-1)/7 a1
     p8 = ((7 - i)[None] * a0[:, None] + i[None] * a1[:, None] + 3) // 7
     p6 = ((5 - i)[None] * a0[:, None] + i[None] * a1[:, None] + 2) // 5
     p6[:, 6], p6[:, 7] = 0, 255

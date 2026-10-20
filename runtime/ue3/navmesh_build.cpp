@@ -302,3 +302,19 @@ PPC_FUNC(sub_8256F2A0)
     LOGFN("navmesh_build:     line check ({:.0f},{:.0f},{:.0f}) -> ({:.0f},{:.0f},{:.0f}) flags {:X} -> {}{}", sx, sy, sz, px, py, pz,
           flags, ctx.r3.u32, hits.substr(0, 120));
 }
+
+// GOW3_NAV_NO_CORRIDOR=1 (diagnostic): the path search's corridor check between a polygon's entry and exit edges
+// (sub_8259D540, called from FNavMeshEdgeBase::Supports sub_825C25B0 on the predecessor edge: room for the entity's
+// extent from one edge to the next inside the polygon) always passes; each rejection it overrides is counted
+extern "C" PPC_FUNC(__imp__sub_8259D540);
+PPC_FUNC(sub_8259D540)
+{
+    static const bool off = getenv("GOW3_NAV_NO_CORRIDOR") != nullptr;
+    static uint64_t overridden = 0;
+    __imp__sub_8259D540(ctx, base);
+    if (off && !ctx.r3.u32)
+    {
+        if (++overridden % 50 == 1) LOGFN("navmesh: corridor check overridden ({} so far)", overridden);
+        ctx.r3.u64 = 1;
+    }
+}

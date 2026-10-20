@@ -89,6 +89,10 @@ def polygons(m, p=None, lightmaps=None):
         if k < 3: continue
         s = m['surfs'][nd['surf']]
         if s['flags'] & (PF_INVISIBLE | PF_PORTAL): continue
+        # no material: the editor's hull boxes round a level (the prison's persistent level and SP_Prison_World),
+        # never seen. UE3's BSP stops a pawn only going from empty into solid space and Gears 1's player walked
+        # outside them (solid) and in; as meshes they were walls both ways (the left path's stairs, behind one)
+        if s['material'] == 0: continue
         pts = m['points'][m['verts'][nd['vert_pool']:nd['vert_pool'] + k]]
         base, U, V = m['points'][s['base']], m['vectors'][s['u']], m['vectors'][s['v']]
         uv = np.stack([(pts - base) @ U, (pts - base) @ V], 1) / 128.0

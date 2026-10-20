@@ -1,0 +1,33 @@
+# (fresh; needs the Gears1_Chapter1 mod: python -P tools/trilogy.py build gears1_ch1) Gears 1's first chapter, the left
+# path (Gears 1's hard route: ChoosePath sets "Hard"): as g1_chapter1_play.txt to the path choice, the left trigger,
+# after Dom past the ceiling collapse (its point-of-interest hint no longer freezes the player) to the jammed door
+# (Trigger_DoorInteraction_1): the kick (X), then through it toward the prison blocks. Run with GOW3_KISMET_TRACE=GOW1_
+# and GOW3_LOG_POS=1: hardRouteDoor's SeqEvt_DoorOpen_0 and SeqAct_Interp_1 run, the player passes y 2500; about 8 minutes
+45 pad 0010 250
+52 pad 1000 250
+60 pad 1000 250
+64 pad 1000 250
+68 pad 0002 150
+70 pad 1000 250
+74 pad 0008 150
+76 pad 0008 150
+78 pad 0008 150
+80 pad 0008 150
+82 pad 0008 150
+86 pad 1000 250
+90 pad 1000 250
+94 pad 1000 250
+98 pad 1000 250
+102 pad 1000 250
+106 pad 1000 250
+200 capture
+201 walkto 138 1042 15
+220 follow COGDom 25 120
+250 walkto -429 1150 15
+255 choose L
+285 route -950,1150;-1210,1227;-1104,1361;-1391,1869;-1428,1944;-1300,2250;-1220,2370 20
+360 pad 4000 300
+362 pad 1000 300
+365 pad 4000 1500
+370 capture
+380 route -1199,2600 20

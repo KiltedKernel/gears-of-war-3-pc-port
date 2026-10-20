@@ -502,6 +502,8 @@ class Copier:
             if i in as_player and self.class_ref('GearSeqVar_Player'):
                 cls = self.class_ref('GearSeqVar_Player')
                 self.renamed_player_vars = getattr(self, 'renamed_player_vars', 0) + 1
+            if cls and cn == 'SeqAct_TutorialManual' and tutorial_is_modal(self, i):
+                cls = 0                                    # (a pass-through, below: tutorials, "modal tutorial")
             if not cls and cn.startswith('SeqAct_') and cn not in SKIP_CLASSES and not os.environ.get('OBJCOPY_NO_PASSTHROUGH'):
                 # an action Gears 3 has no class for: a pass-through (SeqAct_Log, screen output off) keeps the chains
                 # through it running (dropped, it stopped every chain: the opening's AISetTetherDist left the player
@@ -572,9 +574,9 @@ class Copier:
                                  and self.s.exports[self.s.exports[i]['outer'] - 1]['name'] in NO_COLLISION):
                 props = no_collision(self, props, kind)
             if i in getattr(self, 'current_named', {}): props = named_squad_var(self, props)
-            elif cn in FIXUPS: props = FIXUPS[cn](self, props)
+            elif cn in FIXUPS and i not in getattr(self, 'passthrough_src', ()): props = FIXUPS[cn](self, props)
             if i in getattr(self, 'passthrough_src', ()):
-                props = self.without(props, {'bOutputToScreen'})
+                props = self.without(props, {'bOutputToScreen', 'TutorialType'})
                 wn = lambda a_, n_: (self.w.names[a_] if n_ == 0 else f'{self.w.names[a_]}_{n_ - 1}')
                 recs_, _ = parse828(props, 0, wn)
                 props = encode(self.w, recs_ + [['bOutputToScreen', 'BoolProperty', 0, b'', b'\x00']])
@@ -1716,6 +1718,18 @@ def end_game(c, props):
 FIXUPS['SeqAct_ChapterComplete'] = chapter_complete
 
 
+def door_interaction(c, props):
+    """Trigger_DoorInteraction: Gears 3's pawn takes a door trigger only with a clear trace from the trigger to it
+    (bDoTraceToPlayer, default on); Gears 1's triggers sit in the doorway, the door itself between them and the player
+    (the prison's jammed door on the left path: the kick was never offered). Gears 1 did no such trace."""
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    return encode(c.w, [r for r in recs if r[0] != 'bDoTraceToPlayer'] + [['bDoTraceToPlayer', 'BoolProperty', 0, b'', b'\x00']])
+
+
+FIXUPS['Trigger_DoorInteraction'] = door_interaction
+
+
 # Gears 3's SeqAct_DisplayChapterTitle sets GearGameSP_Base.CurrentChapter (and the replicated ChapterNum) to
 # ChapterToDisplay - 1 and shows that chapter's title card. Gears 1's has no ChapterToDisplay: Gears 3's default, 1,
 # showed "Act I - Prologue" over the prison's opening and made the chapter 0 (a checkpoint then reloaded the prologue)
@@ -1762,6 +1776,25 @@ TUTORIAL_TYPES = {
     'ETT_PointOfInterest': 'GEARTUT_PointOfInterest', 'ETT_Revive': 'GEARTUT_Revive', 'ETT_TorqueBow': 'GEARTUT_WeapBow',
     'ETT_HammerOfDawn': 'GEARTUT_WeapHOD',
 }
+
+
+# Gears 3's "press a button to continue" tutorials (GearTutorial_GenericPress_Base: POI, Objectives, ChangeWeapon)
+# freeze the player (GearPC.DisableInput) until their button closes them; Gears 1's were hints that never stopped the
+# player. Started where Gears 1 showed its hint, the POI one (the ceiling collapse after the left path, its point of
+# interest not converted) held the player in place for good. Those, and Gears 1 types with no Gears 3 tutorial (left
+# as Gears 3's default type), become pass-throughs.
+MODAL_TUTORIALS = {'GEARTUT_PointOfInterest', 'GEARTUT_Objectives', 'GEARTUT_ChangeWeapon'}
+
+
+def tutorial_is_modal(c, i):
+    import materialconv
+    en1 = c.g1.enums.get('TutorialType') if c.g1 else None
+    if not en1: return False
+    try: g1 = {r[0]: r for r in materialconv.raw_props(c.s, c.s.export_data(i), 4)[0]}
+    except Exception: return False
+    idx = g1['TutorialType'][4][0] if 'TutorialType' in g1 else 0
+    name = TUTORIAL_TYPES.get(en1[1][idx] if idx < len(en1[1]) else '')
+    return name is None or name in MODAL_TUTORIALS
 
 
 def tutorial_manual(c, props):

@@ -1,0 +1,35 @@
+# (fresh; needs the Gears1_Chapter1 mod: python -P tools/trilogy.py build gears1_ch1) Gears 1's first chapter, the right
+# path (Gears 1's easy route): as g1_chapter1_play.txt to the path choice, the right trigger, then the player put beside
+# the easy route's door button (Trigger_ButtonInteraction_1, up the second stairs; the scripted walker cannot climb
+# them), facing it (Gears 3's interaction events check distance and facing: SeqEvt_Interaction InteractFOV), X.
+# Run with GOW3_KISMET_TRACE=GOW1_ and GOW3_LOG_POS=1: easyDoorRoom's SeqEvt_ButtonPush_0 and SeqAct_Interp_0 run, then
+# dom's SeqAct_AIMove_32 (a Gears 1 Route: its last point; Dom walks there only over a navmesh built without the
+# old BSP hull walls: regenerate the cellblock region, build	rilogyGears1_Chapter1_cellblock.navm); about 6 minutes
+45 pad 0010 250
+52 pad 1000 250
+60 pad 1000 250
+64 pad 1000 250
+68 pad 0002 150
+70 pad 1000 250
+74 pad 0008 150
+76 pad 0008 150
+78 pad 0008 150
+80 pad 0008 150
+82 pad 0008 150
+86 pad 1000 250
+90 pad 1000 250
+94 pad 1000 250
+98 pad 1000 250
+102 pad 1000 250
+106 pad 1000 250
+200 capture
+201 walkto 138 1042 15
+220 follow COGDom 25 120
+250 walkto -429 1150 15
+255 choose R
+275 teleport -2160 71 880
+280 walkto -2500 71 0.3
+281 face -2242 71
+283 pad 4000 200
+286 pad 4000 600
+289 pad 4000 1500

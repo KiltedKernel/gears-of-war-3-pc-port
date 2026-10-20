@@ -1128,7 +1128,9 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
         new_actors = []
         lights_ = [] if os.environ.get('LEVELINJECT_NO_LIGHTS') else objcopy.lights(sp)   # (the level's lights, for characters)
         starts_ = objcopy.player_starts(sp) if with_starts else []
-        wanted = objcopy.kismet_actors(sp, todo, objcopy.movers(sp) + objcopy.skeletal_actors(sp) + objcopy.sound_actors(sp) + lights_ + starts_)
+        routes = objcopy.route_ends(sp)                 # (Routes: their last points, copied, stand for them)
+        ends = [n for n in set(routes.values()) if sp.class_name(sp.exports[n]['class']) in objcopy.ACTOR_CLASSES]
+        wanted = objcopy.kismet_actors(sp, todo, objcopy.movers(sp) + objcopy.skeletal_actors(sp) + objcopy.sound_actors(sp) + lights_ + starts_ + ends)
         copied = []
         for ai in wanted:
             cn = sp.class_name(sp.exports[ai]['class'])
@@ -1141,6 +1143,9 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
         # in one pass: every reference between them resolves (exports are made before any data is written)
         made_a = c.copy(c.plan(copied), {level1: level3 + 1})
         new_actors += [made_a[ai] for ai in copied if made_a.get(ai)]
+        for r, n in routes.items():                     # (a cover link end: the target link holding it)
+            ref = made_a.get(n) or c.obj_map.get(n + 1)
+            if ref: c.obj_map[r + 1] = ref; stats['routes: their last point'] += 1
         for ai in objcopy.collision_enabled_by_script(sp) & set(made_a):    # off until the script turns it on
             if made_a[ai]: objcopy.collision_off(c, made_a[ai]); stats['actors: collision off until scripted'] += 1
         objcopy.add_to_level(p3, w, level3, new_actors)

@@ -1184,6 +1184,30 @@ def player_starts(src):
             and src.path(i).count('.') == 2 and src.path(i).startswith('TheWorld.PersistentLevel')]
 
 
+def route_ends(src):
+    """{Route export: the export of its last point} for the level's Gears 1/2 Routes. They are not copied (Gears 1's
+    NavList of {Nav, Guid} is not Gears 3's RouteList); a Kismet reference to one stands for its last point instead,
+    which a GearAI move takes as a tether and walks to over the navmesh (the prison's easy route: Dom's move up the
+    stairs was a Route, written as None, and he stayed behind)"""
+    import materialconv
+    out = {}
+    for i, e in enumerate(src.exports):
+        if src.class_name(e['class']) != 'Route': continue
+        try: recs, _ = materialconv.raw_props(src, src.export_data(i), 32)
+        except Exception: continue
+        raw = next((r[4] for r in recs if r[0] in ('NavList', 'RouteList')), None)
+        if not raw or len(raw) < 4: continue
+        o, last = 4, 0
+        try:
+            for _ in range(struct.unpack_from('>i', raw, 0)[0]):
+                el, o = materialconv.raw_props(src, raw, o)
+                for r in el:
+                    if r[0] in ('Nav', 'Actor') and len(r[4]) == 4: last = struct.unpack('>i', r[4])[0] or last
+        except Exception: continue
+        if last > 0: out[i] = last - 1
+    return out
+
+
 def sound_actors(src):
     """the level's ambient sound actors (copied with their sounds)"""
     return [i for i, e in enumerate(src.exports) if src.class_name(e['class']) in SOUND_ACTORS

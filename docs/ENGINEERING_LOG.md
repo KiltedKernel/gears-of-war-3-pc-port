@@ -2004,3 +2004,16 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   the walls. With both, Dom walks the easy route up both flights first time (the override fired once) to Gears 1's
   CoverLink_5073 by the opened door (AIMove_35: Route_0 -> its end; Gears 1's CoverGroup_0 has no conversion).
   (Stock Gridlock has slivers too, 223 of 590 under 34: the check is fine where routes cross them, not along them.)
+- **Light shafts and fog sheets** (the prison's volumetrics had been left out: about 170 actors). Gears 1's are
+  unlit translucent materials (RB_Caves_Volumetrics_Distancesheet01, ..._Lightcone01_M, the LightBeam_* instances,
+  COG_City_TimgadVolume*): panning dust x falloff textures x a colour, depth-biased. The kit (SP_Nightmare_02_S)
+  carries Gears 3's successor, EngineVolumetrics' M_EV_FogSheet_Master_01 (translucent, unlit; used directly by the
+  emergence hole's HoleFog, so its default permutation is compiled into the kit's shader cache), and the cook kept
+  its parameters but not its graph. Each Gears 1 volumetric (materialconv.g1_volumetric: translucent or additive,
+  unlit, no normal map) becomes a MaterialInstanceConstant of it written from properties only
+  (materialconv.param_mic: Parent + Scalar/VectorParameterValues with the master's ExpressionGUIDs): Color = Gears 1's
+  FogColor / LightColor, Opacity = its Brightness / BeamOpacity x 1.5, DepthBasedDensity 0.004, FalloffExponent 0.
+  In game the first version (master defaults) and the second (Gears 1's values, edge falloff left at 3) drew nothing;
+  with the edge falloff off the beams drew, hard at opacity 1; the values above give the cell block's faint window
+  beams and the upper floor's skylight shaft. Gears 1 reuses the fog sheet mesh for decal cards (dirt, moss, stains,
+  blood: modulated) -- still left out, with the chain-link fences (translucent, normal-mapped).

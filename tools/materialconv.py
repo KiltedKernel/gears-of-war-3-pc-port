@@ -245,6 +245,24 @@ def g1_see_through(p, mesh_elements):
     return bool(modes) and all(m is not None and m >= 2 for m in modes)
 
 
+def g1_volumetric(p, ref):
+    """a Gears 1 material reference drawn as light in the air (translucent or additive, with no normal map): the
+    prison's fog sheets (RB_Caves_Volumetrics_Distancesheet01), light cones (..._Lightcone01_M) and light rays
+    (COG_City_TimgadVolume2_CP_Mat): unlit. Not the see-through chain-link fences (a normal map), the cobwebs (lit)
+    nor the decal cards (modulated: moss, dirt, stains)"""
+    if g1_blend(p, ref) not in (2, 3): return False
+    if ref < 0: return False
+    try:
+        mat = ref - 1
+        while p.class_name(p.exports[mat]['class']) == 'MaterialInstanceConstant':       # (unlit: the parent Material's)
+            recs, _ = raw_props(p, p.export_data(mat), 4)
+            par = next((struct.unpack('>i', r[4][:4])[0] for r in recs if r[0] == 'Parent'), 0)
+            if par <= 0: return False
+            mat = par - 1
+        return g1_unlit(p, mat) and 'normal' not in g1_textures(p, ref - 1)
+    except Exception: return False
+
+
 # ---- Gears 1 texture -> Gears 3 Texture2D serial data ----
 
 def texture_828(w, p3, template, src, mask=None):
@@ -437,6 +455,66 @@ def child_mic(w, p3, pk, kit_mic, parent_ref, textures, scalars=None):
                           for e in elements('ScalarParameterValues')) if x is not None]
         if sc: props.append(['ScalarParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(sc)) + b''.join(sc)])
     return d[:o] + encode_props(w, props)
+
+
+def material_param_guids(p, mat):
+    """{parameter name: ExpressionGUID bytes} of a Gears 3 Material export's parameter expressions (kept by the cook)"""
+    out = {}
+    for i, e in enumerate(p.exports):
+        if e['outer'] != mat + 1 or 'Parameter' not in p.class_name(e['class']): continue
+        try: recs, _ = raw_props(p, p.export_data(i), 4)
+        except Exception: continue
+        a = {r[0]: r[4] for r in recs}
+        if 'ParameterName' in a and 'ExpressionGUID' in a: out[p.fname(*struct.unpack('>ii', a['ParameterName']))] = a['ExpressionGUID']
+    return out
+
+
+def param_mic(w, header, parent_ref, guids, scalars=None, vectors=None):
+    """serial data for a new MaterialInstanceConstant of a Gears 3 Material (parent_ref) setting scalar ({name: float})
+    and vector ({name: (r, g, b, a)}) parameters, each with its ExpressionGUID from guids (material_param_guids);
+    header: the bytes before the properties (a MaterialInstanceConstant's NetIndex). Properties only: the game draws
+    it with the parent's compiled shaders."""
+    def element(name, typ, extra, value):
+        return encode_props(w, [['ParameterName', 'NameProperty', 0, b'', fname_bytes(w, name)],
+                                ['ParameterValue', typ, 0, extra, value],
+                                ['ExpressionGUID', 'StructProperty', 0, fname_bytes(w, 'Guid'), guids[name]]])
+    props = [['Parent', 'ObjectProperty', 0, b'', struct.pack('>i', parent_ref)]]
+    sc = [element(n, 'FloatProperty', b'', struct.pack('>f', v)) for n, v in (scalars or {}).items() if n in guids]
+    vc = [element(n, 'StructProperty', fname_bytes(w, 'LinearColor'), struct.pack('>4f', *v)) for n, v in (vectors or {}).items() if n in guids]
+    if sc: props.append(['ScalarParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(sc)) + b''.join(sc)])
+    if vc: props.append(['VectorParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(vc)) + b''.join(vc)])
+    return bytes(header) + encode_props(w, props)
+
+
+def g1_vector_params(p, ref, depth=0):
+    """{parameter name: (r, g, b, a)} of a Gears 1 material reference: a material instance's VectorParameterValues,
+    then its parent's; a Material's VectorParameter expressions' defaults"""
+    if ref <= 0 or depth > 8: return {}
+    i = ref - 1
+    cn = p.class_name(p.exports[i]['class'])
+    out = {}
+    if cn == 'Material':
+        for k, e in enumerate(p.exports):
+            if e['outer'] != ref or p.class_name(e['class']) != 'MaterialExpressionVectorParameter': continue
+            try: _, pr, _ = levelinject.props_at(p, p.export_data(k))
+            except Exception: continue
+            a = {n: v for n, t, x, v in pr}
+            if 'ParameterName' in a:
+                out[a['ParameterName']] = struct.unpack('>4f', a['DefaultValue'][1][:16]) if 'DefaultValue' in a else (0.0, 0.0, 0.0, 0.0)
+        return out
+    try: recs, _ = raw_props(p, p.export_data(i), 4)
+    except Exception: return out
+    a = {r[0]: r[4] for r in recs}
+    if 'VectorParameterValues' in a:
+        v, o = a['VectorParameterValues'], 4
+        for _ in range(struct.unpack_from('>i', v, 0)[0]):
+            el, o = raw_props(p, v, o)
+            e = {x[0]: x[4] for x in el}
+            if 'ParameterName' in e and 'ParameterValue' in e:
+                out[p.fname(*struct.unpack('>ii', e['ParameterName'][:8]))] = struct.unpack('>4f', e['ParameterValue'][:16])
+    if 'Parent' in a:
+        for k, x in g1_vector_params(p, struct.unpack('>i', a['Parent'][:4])[0], depth + 1).items(): out.setdefault(k, x)
+    return out
 
 
 def texture_settings(p, i):

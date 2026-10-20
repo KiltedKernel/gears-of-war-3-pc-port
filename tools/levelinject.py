@@ -48,6 +48,13 @@ def g1_import(srcs, si, ref, want_class):
         if ap not in srcs: srcs.append(ap)
         return srcs.index(ap), idx
     return None
+# Gears 1's fog sheets and light cones on the kit's fog material (--fog-material, M_EV_FogSheet_Master_01, its compiled
+# permutation): Gears 1's opacity (Brightness / BeamOpacity) times FOG_OPACITY (the master multiplies in its own falloff
+# and cloud textures: at Gears 1's value the cell block's sun beams, 0.1, did not show); faded over 1 / DepthBasedDensity
+# units of depth behind them (Gears 1's DepthBiasedBlend: bias 0.5 x 500); no edge falloff (FalloffExponent 0: Gears 1's
+# cones have none, and with the master's default of 3 the converted beams did not draw at all)
+FOG_SCALARS = {'Density': 1.0, 'DepthBasedDensity': 0.004, 'FalloffExponent': 0.0}
+FOG_OPACITY = 1.5
 UNLIT_LIGHT = 1.0           # their light map: constant (diffuse x 1 = the texture as it is)
 
 
@@ -186,6 +193,10 @@ def main():
                     "itself (path substring; its parent takes Diffuse_01 / Normal_01 and a mask texture read for its "
                     "alpha): masked Gears 1 materials (fences, razor wire, grass) become child instances of it, their "
                     "cutout the diffuse's alpha, or a DXT1 mask's red as its alpha (materialconv.red_to_alpha)")
+    ap.add_argument('--fog-material', default='EngineVolumetrics.Fogsheet.Materials.M_EV_FogSheet_Master_01',
+                    help="a translucent Gears 3 Material of the kit (or the target), with its shaders compiled there: Gears 1's "
+                    "fog sheets, light cones and light rays (materialconv.g1_volumetric) are drawn with it; 'none': they "
+                    "are left out")
     ap.add_argument('--kit', default=None, help="a chapter of its own: the Gears 3 package (the chapter's persistent level, "
                     "loaded first) holding the material instance templates (--materials, the skeletal one): converted "
                     "materials are child instances of them, through imports (tools/levelpkg.py)")
@@ -303,12 +314,23 @@ def main():
         els = mesh_elements[(si, mi)]
         ov = overrides.get((si, ci), [])
         return [ov[k] if k < len(ov) and ov[k] else el['material'] for k, el in enumerate(els)]
-    # meshes drawn only see-through (light shafts, fog sheets): left out until translucent materials convert
+    # meshes drawn only see-through: the fog sheets, light cones and light rays drawn with the kit's translucent
+    # fog material (--fog-material) when it has one; the rest (chain-link fences, moss decals) left out until their
+    # materials convert
+    fog_index = None
+    if args.materials and src.version == 374 and args.fog_material.lower() != 'none':
+        fp = upk.Package(args.kit or args.target, tables_only=True)
+        fog_index = next((i for i, e in enumerate(fp.exports) if fp.path(i) == args.fog_material
+                          and fp.class_name(e['class']) == 'Material'), None)
+        print(f"fog material: {args.fog_material if fog_index is not None else 'none in ' + (args.kit or args.target)}")
     see_through = {}
     def key_of(a): return a[:2] + tuple(overrides.get((a[0], a[5]), ()))
     for a in actors:
         if key_of(a) not in see_through:
-            try: see_through[key_of(a)] = materialconv.g1_see_through(srcs[a[0]], [{'material': x} for x in element_materials(a[0], a[1], a[5])])
+            try:
+                els_ = element_materials(a[0], a[1], a[5])
+                see_through[key_of(a)] = materialconv.g1_see_through(srcs[a[0]], [{'material': x} for x in els_]) and not (
+                    fog_index is not None and all(materialconv.g1_volumetric(srcs[a[0]], x) for x in els_))
             except Exception: see_through[key_of(a)] = False
     n_before = len(actors)
     actors = [a for a in actors if not see_through[key_of(a)]]
@@ -478,7 +500,7 @@ def main():
             masked_param = next((n for n in materialconv.mic_texture_params(p3, masked_mic) if 'opacity' in n.lower()), None) \
                 if masked_mic is not None else None
             print(f'masked material template: {p3.path(masked_mic) if masked_mic is not None else "not in the target"} ({masked_param})')
-        n_masked = 0
+        n_masked, n_fog, fog_ref = 0, 0, [None, None]
         mats = set()                                   # (source index, material export index)
         for (si, mi), sk in skel_meshes.items():
             mats.update((si, x - 1) for x in sk['materials'] if x > 0)
@@ -506,6 +528,24 @@ def main():
             if name in by_name:
                 mic_of[(si, gm + 1)] = by_name[name]
                 if (by_name.get(('unlit', name))): unlit_mats.add((si, gm + 1))
+                continue
+            if fog_index is not None and materialconv.g1_volumetric(sp, gm + 1):
+                # light in the air: an instance of the kit's fog material, Gears 1's colour and opacity on it (unlit:
+                # no light map)
+                if fog_ref[0] is None:
+                    fog_ref[0] = materialconv.import_object(w, p3, pk, fog_index, kit_imports) if pk is not None else fog_index + 1
+                    fog_ref[1] = materialconv.material_param_guids(pk if pk is not None else p3, fog_index)
+                g1v = materialconv.g1_vector_params(sp, gm + 1)
+                colour = g1v.get('FogColor') or g1v.get('LightColor') or (1.0, 1.0, 1.0, 1.0)
+                opacity = (g1v.get('Brightness') or g1v.get('BeamOpacity') or (1.0,))[0]
+                data = materialconv.param_mic(w, md[:mo], fog_ref[0], fog_ref[1],
+                                              dict(FOG_SCALARS, Opacity=opacity * FOG_OPACITY),
+                                              {'Color': tuple(colour[:3]) + (1.0,)})
+                mic_of[(si, gm + 1)] = by_name[name] = w.add_export(mic_cls if pk is not None else tp.exports[tmic]['class'], 0,
+                                                                    ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_)
+                unlit_mats.add((si, gm + 1)); by_name[('unlit', name)] = True
+                mic_refs[(si, gm + 1)] = mic_refs[name] = {}
+                n_fog += 1
                 continue
             texs = materialconv.g1_textures(sp, gm)
             if 'diffuse' not in texs: continue
@@ -556,7 +596,7 @@ def main():
             if v in mic_of: mic_of[k] = mic_of[v]
             if v in unlit_mats: unlit_mats.add(k)
         if import_mats: print(f'{len(import_mats)} imported materials, {sum(1 for k in import_mats if k in mic_of)} converted')
-        print(f'{len(mic_of)} materials ({n_masked} masked), {len(tex_ref)} textures converted (template {tp.path(tmic)})')
+        print(f'{len(mic_of)} materials ({n_masked} masked, {n_fog} fog), {len(tex_ref)} textures converted (template {tp.path(tmic)})')
     # converted meshes have no BodySetup (simple collision): line and box checks must use the triangles (the kDOP
     # tree), or a simple-collision check finds nothing (UseSimpleLineCollision / UseSimpleBoxCollision off)
     def per_poly_collision(data):

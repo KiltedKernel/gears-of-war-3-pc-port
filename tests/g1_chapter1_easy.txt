@@ -4,7 +4,7 @@
 # them), facing it (Gears 3's interaction events check distance and facing: SeqEvt_Interaction InteractFOV), X.
 # Run with GOW3_KISMET_TRACE=GOW1_ and GOW3_LOG_POS=1: easyDoorRoom's SeqEvt_ButtonPush_0 and SeqAct_Interp_0 run, then
 # dom's SeqAct_AIMove_32 (a Gears 1 Route: its last point; Dom walks there only over a navmesh built without the
-# old BSP hull walls: regenerate the cellblock region, build	rilogyGears1_Chapter1_cellblock.navm); about 6 minutes
+# old BSP hull walls: regenerate the cellblock region, build/trilogy/Gears1_Chapter1_cellblock.navm); about 6 minutes
 45 pad 0010 250
 52 pad 1000 250
 60 pad 1000 250

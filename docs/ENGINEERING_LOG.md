@@ -1990,3 +1990,17 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (tools/xpack/lzxd_xmem.c): all four decode, GearGame.xxx in full (660 blocks).
 - **Gears 2** (docs/TRILOGY.md): the hospital's 27 packages decode; its chapter starts from an intro map's
   PrepareMapChange; its streaming lives in the _S sublevels.
+- **Navmesh slivers and the corridor check** (Dom stood at the foot of the prison's easy-route stairs). The in-game
+  generator's polygons over a converted level are mostly slivers (cell block: 163 of 257 narrower than 68, twice a
+  pawn's 34 radius; the stairs reached through a 30-wide strip). FNavMeshEdgeBase::Supports (sub_825C25B0) checks
+  EdgeLength > the extent's x/y, the other polygon's height > 2 z, and, on the predecessor edge, sub_8259D540: a
+  corridor of the extent from the entry edge to the exit edge inside the polygon; Dom's route failed there
+  (LastPathError 3, NOPATHFOUND). Found by retargeting his AIMove in the built package step by step, then proven by
+  overriding the check. Two fixes: tools/navmerge.py (run by navinject; --no-merge skips it) merges neighbouring
+  polygons, narrowest first, while the union is convex within 32-unit dents filled where no other polygon lies,
+  near one plane and at most 9 vertices (shipped maximum) -- cell block 257 -> 188, the 3549-polygon region in 14 s;
+  and the runtime passes the corridor check while a new chapter's map is loaded (campaign_chapters::InNewChapter;
+  GOW3_NAV_CORRIDOR=1 keeps it, =0 overrides it everywhere): our edges are already placed only where the pawn clears
+  the walls. With both, Dom walks the easy route up both flights first time (the override fired once) to Gears 1's
+  CoverLink_5073 by the opened door (AIMove_35: Route_0 -> its end; Gears 1's CoverGroup_0 has no conversion).
+  (Stock Gridlock has slivers too, 223 of 590 under 34: the check is fine where routes cross them, not along them.)

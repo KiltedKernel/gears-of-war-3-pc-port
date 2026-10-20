@@ -343,6 +343,8 @@ namespace
 
 void RestoreSectionsOnGameThread() { RestoreSections(); }
 
+bool InNewChapter() { return g_chapterGame != 0; }      // a new chapter's map is loaded (ChapterKeeper, every 2 s)
+
 void Start()
 {
     if (getenv("GOW3_NO_CAMPAIGN_CHAPTERS")) return;

@@ -5,7 +5,7 @@ GOW3_NAVMESH_BUILD + GOW3_NAVMESH_DUMP); this adds what the passes do not make (
 cover: tools/navmesh.py from_dump, tools/navedges.py) and writes both meshes into the pylon's NavigationMeshBase
 exports (the path mesh is the one with edges in the original, the obstacle mesh the other).
 usage: python -P navinject.py <package in> <dump> <package out> [pylon name or 'all', default Pylon_1]
-       [--starts-at=x,y,z,yaw] [--no-special]"""
+       [--starts-at=x,y,z,yaw] [--no-special] [--no-merge: the generated polygons as they are]"""
 import os, struct, sys
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -20,6 +20,10 @@ def main():
     p = upk.Package(src)
     w = upkwrite.Rewriter(p)
     dump = navmesh.read_dump(dump_path)
+    if 'no-merge' not in opts:          # the generator's slivers merged into wider polygons (tools/navmerge.py)
+        import navmerge
+        for k in dump:
+            if k.endswith('.path'): dump[k] = navmerge.merge(dump[k], lambda s: print(f'{k}: {s}'))
     pylons = sorted({k.rsplit('.', 1)[0] for k in dump}) if pylon == 'all' else [pylon]
     # a pylon whose exploration found no walkable ground (an empty dump) is disabled: a clone (tools/pylons.py) still
     # holds the copied mesh of the pylon it was cloned from

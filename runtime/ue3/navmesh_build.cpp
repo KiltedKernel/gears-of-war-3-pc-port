@@ -303,18 +303,24 @@ PPC_FUNC(sub_8256F2A0)
           flags, ctx.r3.u32, hits.substr(0, 120));
 }
 
-// GOW3_NAV_NO_CORRIDOR=1 (diagnostic): the path search's corridor check between a polygon's entry and exit edges
-// (sub_8259D540, called from FNavMeshEdgeBase::Supports sub_825C25B0 on the predecessor edge: room for the entity's
-// extent from one edge to the next inside the polygon) always passes; each rejection it overrides is counted
+// The path search's corridor check between a polygon's entry and exit edges (sub_8259D540, called from
+// FNavMeshEdgeBase::Supports sub_825C25B0 on the predecessor edge: room for the entity's extent from one edge to the next
+// inside the polygon) passes in a new campaign chapter's map. Its navmesh comes from Gears 3's in-game generator over a
+// converted level, whose polygons are mostly slivers (the prison's cell block: 163 of 257 narrower than a pawn; the
+// stairs are reached through a 30-wide strip, and Dom found no path); its edges (tools/navedges.py) are only placed
+// where the pawn's width clears the walls, which is what the check stands for. Stock maps keep the check.
+// GOW3_NAV_CORRIDOR=0: overridden everywhere (a diagnostic); =1: kept everywhere.
+namespace campaign_chapters { bool InNewChapter(); }   // ue3/campaign_chapters.cpp
 extern "C" PPC_FUNC(__imp__sub_8259D540);
 PPC_FUNC(sub_8259D540)
 {
-    static const bool off = getenv("GOW3_NAV_NO_CORRIDOR") != nullptr;
+    static const char* env = getenv("GOW3_NAV_CORRIDOR");
     static uint64_t overridden = 0;
     __imp__sub_8259D540(ctx, base);
-    if (off && !ctx.r3.u32)
+    if (ctx.r3.u32 || (env && *env == '1')) return;
+    if ((env && *env == '0') || campaign_chapters::InNewChapter())
     {
-        if (++overridden % 50 == 1) LOGFN("navmesh: corridor check overridden ({} so far)", overridden);
+        if (++overridden % 200 == 1) LOGFN("navmesh: corridor check passed in a new chapter ({} so far)", overridden);
         ctx.r3.u64 = 1;
     }
 }

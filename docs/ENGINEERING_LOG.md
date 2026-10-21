@@ -2040,3 +2040,16 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   fell to 54. Recipe light_scale (objcopy.LIGHT_SCALE, also on InterpTrackFloatProp keys of a ...Brightness): at 0.25
   the frame is 40, the armour dark with highlights as in Gears 1. Gameplay at the cell door: 8.6 (Gears 1) against
   11. Gears 1 also aims its cutscene lights by channel (Cinematic_1, Unnamed_1 on the matching characters).
+- **Masked materials work** (fences, razor wire, grass; the translucent chain-link fences too, cut by their diffuse's
+  alpha: materialconv.g1_mask also takes a translucent, non-volumetric material's Opacity). The earlier attempts made
+  the masked Gears 1 materials child instances of a masked instance; the copy (clone_static_mic, references kept when
+  the instance is in the package being written) draws S02_Meshes' chain-link fence cut out, the stairs behind it
+  showing. 2-10 masked materials per geometry section. The cutscene sections must not take the masked template: cloned
+  from SP_Azura2_02_S the opening drew no characters (recipe masked_sections lists the geometry sections).
+- **Open: the left route's first Drones crash the game** (null + 0xEC in sub_822C3C20, from the factory's "Last
+  Spawned" write, as hardHallwayCombat's SeqAct_AIFactory_1 spawns; also on the build before these changes; earlier
+  tests stopped just short of it). The spawn points are fine: with Pawn_GeistLocust mapped to the classic Marcus the
+  two spawned at them and nothing crashed. The Drone class (GearPawn_LocustDroneSavage, from the carrier
+  SP_Airfield_02_S) is what fails. Unlinking the factory's empty CoverGroups variable changed nothing. Loading the
+  carrier as a content package (load_packages) stopped the crash but also stopped S04's towerFalls touch from firing
+  (its World rooted): reverted.

@@ -162,8 +162,12 @@ def g1_mask(p, mat):
     except ValueError:
         return None
     a = {n: v for n, t, k, v in pr}
-    if a.get('BlendMode') != 1 or 'OpacityMask' not in a: return None
-    inp = {n: v for n, t, k, v in p.properties(a['OpacityMask'][1], 0)[0]}
+    # (translucent, lit or not, with a normal map -- the prison's chain-link fences, their opacity the diffuse's alpha
+    # faded with distance -- cut by that alpha as well: Gears 3 has no translucent template)
+    if a.get('BlendMode') == 1 and 'OpacityMask' in a: src_ = 'OpacityMask'
+    elif a.get('BlendMode') == 2 and 'Opacity' in a and not g1_volumetric(p, mat + 1): src_ = 'Opacity'
+    else: return None
+    inp = {n: v for n, t, k, v in p.properties(a[src_][1], 0)[0]}
     queue, seen, channel = [inp.get('Expression', 0)], set(), 'A' if inp.get('MaskA') else 'R' if inp.get('MaskR') else None
     while queue:
         ref = queue.pop(0)
@@ -476,7 +480,8 @@ def clone_static_mic(w, p3, pk, mic, textures, cache):
     the static parameters, whose switch entries (FName, value, override, GUID) name parameters"""
     d = pk.export_data(mic)
     recs, end = raw_props(pk, d, 4)
-    ref = lambda r: (import_object(w, p3, pk, r - 1, cache) if r > 0 else copy_import(w, p3, pk, r, cache) if r < 0 else 0)
+    if pk is p3: ref = lambda r: r                          # (an instance of the package being written: as it is)
+    else: ref = lambda r: (import_object(w, p3, pk, r - 1, cache) if r > 0 else copy_import(w, p3, pk, r, cache) if r < 0 else 0)
     nm = lambda b: struct.pack('>ii', *w.name(pk.fname(*struct.unpack('>ii', b))))
     def elements(raw, texture):
         n, o, out = struct.unpack_from('>i', raw, 0)[0], 4, []

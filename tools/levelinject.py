@@ -340,8 +340,9 @@ def main():
         if key_of(a) not in see_through:
             try:
                 els_ = element_materials(a[0], a[1], a[5])
-                see_through[key_of(a)] = materialconv.g1_see_through(srcs[a[0]], [{'material': x} for x in els_]) and not (
-                    fog_index is not None and all(materialconv.g1_volumetric(srcs[a[0]], x) for x in els_))
+                see_through[key_of(a)] = materialconv.g1_see_through(srcs[a[0]], [{'material': x} for x in els_]) and not all(
+                    (fog_index is not None and materialconv.g1_volumetric(srcs[a[0]], x))
+                    or (args.masked_material and x > 0 and materialconv.g1_mask(srcs[a[0]], x - 1) is not None) for x in els_)
             except Exception: see_through[key_of(a)] = False
     n_before = len(actors)
     actors = [a for a in actors if not see_through[key_of(a)]]
@@ -592,7 +593,9 @@ def main():
                     tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1].replace('#mask', '_Mask'), 0), data, flags=tflags_, fixups=fix)
                 refs[masked_param] = tex_ref[tkey]
-                data = materialconv.child_mic(w, p3, p3, masked_mic, masked_mic + 1, refs)
+                # a copy of the masked instance with its static permutation (a child of it draws the base material's
+                # default permutation: the fence drew uncut, or untextured)
+                data = materialconv.clone_static_mic(w, p3, p3, masked_mic, refs, {})
                 mflags_m = struct.unpack_from('>Q', p3.data, p3.exports[masked_mic]['entry'] + 24)[0]
                 mic_of[(si, gm + 1)] = by_name[name] = w.add_export(p3.exports[masked_mic]['class'], 0, ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_m)
                 n_masked += 1

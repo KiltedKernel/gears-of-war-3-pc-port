@@ -324,6 +324,10 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     if ch.get('skin_material'):                       # (package: MIC path) the skeletal meshes' material parent
         pkg_, mic_ = (x.strip() for x in ch['skin_material'].split(':', 1))
         common += ['--skin-material', os.path.join(g3cooked, pkg_ + '.xxx') + ':' + mic_]
+    if ch.get('max_texture'): common += ['--max-texture', ch['max_texture']]
+    if ch.get('hair_material'):                       # (package: MIC path) masked skeletal materials' parent (hair)
+        pkg_, mic_ = (x.strip() for x in ch['hair_material'].split(':', 1))
+        common += ['--hair-material', os.path.join(g3cooked, pkg_ + '.xxx') + ':' + mic_]
     # the persistent level: the kit
     kit_target = os.path.join(work, prefix + persistent + '.xxx')
     kept, removed = levelpkg.clone(os.path.join(g3cooked, ch['kit'] + '.xxx'), kit_target)
@@ -383,6 +387,8 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         levelinject(folder, target, [src(s)] + [src(x.strip()) for x in opts.get('extra_sources', '').split(',') if x.strip()],
                     ['--kit', kit, '--named-vars', src(persistent)] + materials + options + common + tex_options, g3cooked)
     if shared_tex:
+        import materialconv
+        materialconv.MAX_TEXTURE_SIZE = int(ch.get('max_texture', 0))
         n_tex = shared_textures_into(manifest, os.path.join(out_dir, shared_tex + '.xxx'))
         import modpack
         modpack.update_toc(folder, g3cooked)

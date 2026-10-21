@@ -2017,3 +2017,16 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   with the edge falloff off the beams drew, hard at opacity 1; the values above give the cell block's faint window
   beams and the upper floor's skylight shaft. Gears 1 reuses the fog sheet mesh for decal cards (dirt, moss, stains,
   blood: modulated) -- still left out, with the chain-link fences (translucent, normal-mapped).
+- **Muddy classic Marcus and Dom** (playtest: their models switched between detailed and muddy). Gears 3's texture
+  pool is 145 MB (Coalesced [TextureStreaming] PoolSize; the guest has the 360's 512 MB) and streaming textures share it
+  with resident ones; the chapter's converted textures are resident (NeverStream, every mip inline), 105 MB of them, so
+  the classic characters' mips (CharTextures.tfc) were mostly dropped. Measured on Marcus's back standing still
+  (Laplacian variance): ~270 at full size, ~1320 steady with the converted textures' mips over 512 left out (recipe
+  max_texture = 512, levelinject --max-texture; the persistent package 137 -> 93 MB); the level looks the same at the
+  game's resolution. (Streaming the converted textures from a texture file cache of the mod's own is the real fix.)
+- **Dom's white hair** (opening cutscene). Gears 1's hair is masked (cards cut by the diffuse's alpha, and the diffuse
+  times 0.1), drawn solid and light with the skin material. Masked skeletal materials become child instances of the
+  classic Dom's masked hair (MPCH_COGDomG2MP_SF, loaded by the recipe: COG_Dom.Game.M_Classic_Dom_Hair_Masked; its
+  'Diffuse And Alpha' the converted diffuse, its DiffuseColor 0.2 kept): the hair draws as strands. The cutscene's
+  characters are lit too brightly as a whole (the copied lights reach the converted actors' light environments), so
+  it still reads light.

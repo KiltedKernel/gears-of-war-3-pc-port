@@ -15,6 +15,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import upk, levelinject, texture2d
 
 FORMATS_374 = {2: 'PF_A8R8G8B8', 3: 'PF_G8', 5: 'PF_DXT1', 6: 'PF_DXT3', 7: 'PF_DXT5'}
+# converted textures' mips larger than this left out (0: all kept; levelinject --max-texture, a recipe's max_texture). The
+# converted textures stay resident (NeverStream) in Gears 3's 145 MB texture pool (Coalesced [TextureStreaming] PoolSize),
+# which the streaming textures share: the prison's 105 MB left the classic Marcus and Dom at their low mips (muddy) most
+# of the time; at 512 (the persistent package 137 -> 93 MB) they stream in full and the level looks the same at the game's resolution
+MAX_TEXTURE_SIZE = 0
 
 
 # ---- tagged properties as raw records, for editing and re-encoding ----
@@ -275,6 +280,9 @@ def texture_828(w, p3, template, src, mask=None):
     # the cook dropped the top mip(s) (empty entries): the texture starts at the first stored mip, so a texture
     # loaded whole (NeverStream) has its mips where the engine expects them
     first = next(k for k, mm in enumerate(src.mips) if not mm['flags'] & 0x20)
+    while MAX_TEXTURE_SIZE and max(src.mips[first]['w'], src.mips[first]['h']) > MAX_TEXTURE_SIZE and \
+            first + 1 < int(src.props.get('MipTailBaseIdx', len(src.mips) - 1)):
+        first += 1
     mips = src.mips[first:]
     sx, sy = mips[0]['w'], mips[0]['h']
     tail = int(src.props.get('MipTailBaseIdx', len(src.mips) - 1)) - first

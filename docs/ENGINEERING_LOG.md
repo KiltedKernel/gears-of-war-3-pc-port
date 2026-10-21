@@ -2024,9 +2024,19 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (Laplacian variance): ~270 at full size, ~1320 steady with the converted textures' mips over 512 left out (recipe
   max_texture = 512, levelinject --max-texture; the persistent package 137 -> 93 MB); the level looks the same at the
   game's resolution. (Streaming the converted textures from a texture file cache of the mod's own is the real fix.)
-- **Dom's white hair** (opening cutscene). Gears 1's hair is masked (cards cut by the diffuse's alpha, and the diffuse
-  times 0.1), drawn solid and light with the skin material. Masked skeletal materials become child instances of the
-  classic Dom's masked hair (MPCH_COGDomG2MP_SF, loaded by the recipe: COG_Dom.Game.M_Classic_Dom_Hair_Masked; its
-  'Diffuse And Alpha' the converted diffuse, its DiffuseColor 0.2 kept): the hair draws as strands. The cutscene's
-  characters are lit too brightly as a whole (the copied lights reach the converted actors' light environments), so
-  it still reads light.
+- **Dom's white hair** (opening cutscene). Two causes. The cutscene's Dom overrode his hair element with a
+  per-component Gears 1 instance (SkeletalMeshComponent.Materials) copied as it was: its Gears 1 parent never
+  resolved and it drew the default material, a white cap (now dropped, as for static mesh components: the mesh's
+  converted materials draw). And Gears 1's hair is masked (cards cut by the diffuse's alpha; the diffuse times 0.1):
+  masked skeletal materials become copies of the classic Dom's masked hair (recipe hair_material:
+  MPCH_COGDomG2MP_SF's COG_Dom.Game.M_Classic_Dom_Hair_Masked) WITH its static permutation
+  (materialconv.clone_static_mic: names and references re-made, 'Diffuse And Alpha' the converted texture). A child
+  instance of a static-permutation instance draws with the base material's default permutation -- the white default
+  material here, and very likely why the masked fences (children of a masked instance) drew uncut.
+- **Cutscene lighting against Gears 1** (reference: Gears 1 in Xenia canary, started straight into the level with
+  `--cl="SP_Prison_P"`: no menus, no profile). Gears 1's opening averages 17 of 255 at the moment Marcus faces Dom;
+  ours averaged 107, the characters white. Its three spotlights are animated by Matinee (Brightness 9.5, 20, 13 on
+  SpotLight03_DomBacklight...) and composited into Gears 3's light environments; without the copied lights the frame
+  fell to 54. Recipe light_scale (objcopy.LIGHT_SCALE, also on InterpTrackFloatProp keys of a ...Brightness): at 0.25
+  the frame is 40, the armour dark with highlights as in Gears 1. Gameplay at the cell door: 8.6 (Gears 1) against
+  11. Gears 1 also aims its cutscene lights by channel (Cinematic_1, Unnamed_1 on the matching characters).

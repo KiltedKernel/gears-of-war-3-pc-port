@@ -325,6 +325,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         pkg_, mic_ = (x.strip() for x in ch['skin_material'].split(':', 1))
         common += ['--skin-material', os.path.join(g3cooked, pkg_ + '.xxx') + ':' + mic_]
     if ch.get('max_texture'): common += ['--max-texture', ch['max_texture']]
+    if ch.get('light_scale'): common += ['--light-scale', ch['light_scale']]
     if ch.get('hair_material'):                       # (package: MIC path) masked skeletal materials' parent (hair)
         pkg_, mic_ = (x.strip() for x in ch['hair_material'].split(':', 1))
         common += ['--hair-material', os.path.join(g3cooked, pkg_ + '.xxx') + ':' + mic_]

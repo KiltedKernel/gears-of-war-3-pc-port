@@ -204,11 +204,13 @@ def main():
                     "child instances the converted skeletal meshes' materials become (its Diffuse / Normal / Specular "
                     "set, its other texture parameters neutral); the package must be loaded where the level is (e.g. "
                     "GEARGAMESP_SF in the campaign: COG_Dom_Summer.Materials.M_COG_Dom_Summer_Game)")
+    ap.add_argument('--light-scale', type=float, default=1.0, help="the copied lights' brightness (and Matinee tracks "
+                    "animating it) times this (objcopy.LIGHT_SCALE)")
     ap.add_argument('--max-texture', type=int, default=0, help="converted textures' mips larger than this are left out "
                     "(they stay resident in Gears 3's texture pool, which streaming textures share; 0: all kept)")
     ap.add_argument('--hair-material', default=None, help="<Gears 3 package>:<MIC path>: a masked skinned hair material "
-                    "(its texture parameter 'Diffuse And Alpha': colour and cutout) whose child instances masked Gears 1 "
-                    "materials of skeletal meshes become (Dom's and Marcus's hair cards drew solid and light with the skin "
+                    "(its texture parameter 'Diffuse And Alpha': colour and cutout) whose copies (materialconv.clone_static_mic) "
+                    "masked Gears 1 materials of skeletal meshes become (Dom's and Marcus's hair cards drew solid and light with the skin "
                     "material); the package must be loaded where the level is (a recipe's load_packages)")
     ap.add_argument('--content', default=None, help="a chapter of its own: the Gears 3 packages (comma-separated) whose "
                     "GearGameContent classes are loaded with it (AI pawn classes; default: by the target's map name)")
@@ -236,6 +238,8 @@ def main():
                     "chapter's persistent level: the campaign starts there)")
     args = ap.parse_args()
     materialconv.MAX_TEXTURE_SIZE = args.max_texture
+    import objcopy
+    objcopy.LIGHT_SCALE = args.light_scale
     offset = np.array([float(x) for x in args.offset.split(',')])
     if args.streaming_prefix is not None:
         import objcopy
@@ -673,22 +677,24 @@ def main():
             for name in params:
                 skin_fill[name] = flat if name == skin_roles['Normal'] else black
             print(f'skin material: {sp_.path(skel_tmic)} ({len(skin_fill)} texture parameters)')
-        hair_tmic = hair_parent = None
+        hair_tmic = None
         if args.hair_material:
             hf_, hpath = args.hair_material.rsplit(':', 1)
             hp_ = upk.Package(hf_)
             hair_tmic = next(i for i in range(len(hp_.exports)) if hp_.path(i).endswith(hpath.strip())
                              and hp_.class_name(hp_.exports[i]['class']) == 'MaterialInstanceConstant')
-            hair_parent = materialconv.import_object(w, p3, hp_, hair_tmic, {})
+            hair_imports = {}
             print(f'hair material: {hp_.path(hair_tmic)}')
         skel_cache = {}
         def skel_mic(si_, x_):
             key = srcs[si_].path(x_ - 1)
             if skel_tmic is None or key not in mic_refs: return mic_of.get((si_, x_), tmat)
-            if key not in skel_cache and hair_tmic is not None and materialconv.g1_blend(srcs[si_], x_) == 1                     and 'Diffuse_01' in mic_refs[key]:
-                # masked (hair cards: the cutout in the diffuse's alpha): a child of the hair material, its other
-                # values (DiffuseColor 0.2: Gears 1 darkens the hair texture, x 0.1) the template's
-                data_ = materialconv.child_mic(w, p3, hp_, hair_tmic, hair_parent, {'Diffuse And Alpha': mic_refs[key]['Diffuse_01']})
+            if key not in skel_cache and hair_tmic is not None and materialconv.g1_blend(srcs[si_], x_) == 1 \
+                    and 'Diffuse_01' in mic_refs[key]:
+                # masked (hair cards: the cutout in the diffuse's alpha): a copy of the hair material with its static
+                # permutation (a child of it drew the default material), its other values (DiffuseColor 0.2: Gears 1
+                # darkens the hair texture, x 0.1) the template's
+                data_ = materialconv.clone_static_mic(w, p3, hp_, hair_tmic, {'Diffuse And Alpha': mic_refs[key]['Diffuse_01']}, hair_imports)
                 fl_ = struct.unpack_from('>Q', hp_.data, hp_.exports[hair_tmic]['entry'] + 24)[0]
                 skel_cache[key] = w.add_export(mic_cls, 0, ('Trilogy_Hair_' + key.split('.')[-1], 0), data_, flags=fl_)
             if key not in skel_cache:

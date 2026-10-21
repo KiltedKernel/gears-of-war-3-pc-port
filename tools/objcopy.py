@@ -1164,8 +1164,10 @@ LIGHT_CLASSES = {"PointLight", "SpotLight", "PointLightToggleable", "SpotLightTo
 if not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= LIGHT_CLASSES
 SOUND_ACTORS = {'AmbientSoundSimple', 'AmbientSoundNonLoop', 'AmbientSound'}
 # per component class: properties left out (a StaticMeshComponent's Materials override would point at Gears 1
-# materials: the converted mesh carries converted ones) and the native tail written (LODData: empty, no light map)
-COMPONENT_DROP = {'StaticMeshComponent': {'Materials'}}
+# materials: the converted mesh carries converted ones; a SkeletalMeshComponent's too: the prison opening's Dom
+# overrode his hair with a Gears 1 instance whose parent did not resolve, drawn as the default material, a white cap)
+# and the native tail written (LODData: empty, no light map)
+COMPONENT_DROP = {'StaticMeshComponent': {'Materials'}, 'SkeletalMeshComponent': {'Materials'}}
 COMPONENT_TAIL = {'StaticMeshComponent': bytes(4),
                   # a light component ends with its InclusionConvexVolumes / ExclusionConvexVolumes (empty arrays): written
                   # without them, Gears 3 read past the component and the campaign load crashed or hung
@@ -1451,6 +1453,38 @@ def object_var_override(c, props):
 # track_offsets; Gears 1's opening swings the cell door, its base at the cell floor's height, through the corridor's
 # 8-12 units higher floor: lifted as it starts to open)
 TRACK_OFFSETS = {}
+
+# the copied lights' brightness times this, and Matinee tracks animating a light's Brightness (recipe light_scale):
+# Gears 1's cutscene lights (brightness 9-20 on the prison opening's spotlights) composited into Gears 3's light
+# environments lit the characters white, and their bloom washed out the frame
+LIGHT_SCALE = 1.0
+
+
+def float_prop_brightness(c, props):
+    """InterpTrackFloatProp of a light's Brightness: its keys (values and tangents) times LIGHT_SCALE"""
+    if LIGHT_SCALE == 1.0: return props
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    pn = next((wname(*struct.unpack('>ii', r[4])) for r in recs if r[0] == 'PropertyName'), '')
+    if not pn.endswith('Brightness'): return props
+    for r in recs:
+        if r[0] != 'FloatTrack': continue
+        sub, _ = parse828(r[4], 0, wname)
+        for s_ in sub:
+            if s_[0] != 'Points': continue
+            n = struct.unpack_from('>i', s_[4], 0)[0]; o = 4; els = []
+            for _ in range(n):
+                el, o = parse828(s_[4], o, wname)
+                for x in el:
+                    if x[0] in ('OutVal', 'ArriveTangent', 'LeaveTangent') and len(x[4]) == 4:
+                        x[4] = struct.pack('>f', struct.unpack('>f', x[4])[0] * LIGHT_SCALE)
+                els.append(encode(c.w, el))
+            s_[4] = struct.pack('>i', n) + b''.join(els)
+        r[4] = encode(c.w, sub)
+    return encode(c.w, recs)
+
+
+FIXUPS['InterpTrackFloatProp'] = float_prop_brightness
 
 
 # Gears 1 assets copied when something copied refers to them (animation sets: Matinee groups, components)
@@ -2286,6 +2320,10 @@ def light_component(c, props):
     ch = encode(c.w, [[k, 'BoolProperty', 0, b'', b'\x01'] for k in channels])
     if os.environ.get('OBJCOPY_LIGHTS_MINIMAL'):       # (debugging the load crash: only the light's look)
         recs = [r for r in recs if r[0] in ('Radius', 'Brightness', 'LightColor', 'FalloffExponent', 'InnerConeAngle', 'OuterConeAngle')]
+    if LIGHT_SCALE != 1.0:
+        b = next((r for r in recs if r[0] == 'Brightness'), None)
+        if b is None: recs.append(['Brightness', 'FloatProperty', 0, b'', struct.pack('>f', LIGHT_SCALE)])
+        else: b[4] = struct.pack('>f', struct.unpack('>f', b[4])[0] * LIGHT_SCALE)
     recs = [r for r in recs if r[0] not in drop] + [
         ['LightingChannels', 'StructProperty', 0, struct.pack('>ii', *c.w.name('LightingChannelContainer')), ch],
         ['CastShadows', 'BoolProperty', 0, b'', b'\x00'], ['CastDynamicShadows', 'BoolProperty', 0, b'', b'\x00']]

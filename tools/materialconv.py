@@ -465,6 +465,56 @@ def child_mic(w, p3, pk, kit_mic, parent_ref, textures, scalars=None):
     return d[:o] + encode_props(w, props)
 
 
+def clone_static_mic(w, p3, pk, mic, textures, cache):
+    """serial data for a copy of MaterialInstanceConstant `mic` of package pk WITH its static permutation (a child
+    instance of a static-permutation instance draws with the base material's default permutation instead: Dom's hair
+    as a child of the classic Dom's masked hair drew the default material, white): its texture parameters in textures
+    ({name: ref in w}) replaced, its names and object references (Parent, texture values; the permutation's
+    uniform-expression textures) re-made as imports in w (the game finds the permutation's compiled shaders by its
+    id, in pk's shader cache, which must be loaded). The permutation (Gears 3, 828): ... CompileErrors, a map, max
+    texture dependency length, Id (GUID), user texcoords, uniform-expression textures (count + refs at 32); then
+    the static parameters, whose switch entries (FName, value, override, GUID) name parameters"""
+    d = pk.export_data(mic)
+    recs, end = raw_props(pk, d, 4)
+    ref = lambda r: (import_object(w, p3, pk, r - 1, cache) if r > 0 else copy_import(w, p3, pk, r, cache) if r < 0 else 0)
+    nm = lambda b: struct.pack('>ii', *w.name(pk.fname(*struct.unpack('>ii', b))))
+    def elements(raw, texture):
+        n, o, out = struct.unpack_from('>i', raw, 0)[0], 4, []
+        for _ in range(n):
+            el, o = raw_props(pk, raw, o)
+            pname = next(pk.fname(*struct.unpack('>ii', x[4])) for x in el if x[0] == 'ParameterName')
+            new = []
+            for name, typ, index, extra, val in el:
+                if extra: extra = nm(extra)
+                if typ == 'NameProperty': val = nm(val)
+                elif name == 'ParameterValue' and texture:
+                    val = struct.pack('>i', textures[pname] if pname in textures else ref(struct.unpack('>i', val)[0]))
+                new.append([name, typ, index, extra, val])
+            out.append(encode_props(w, new))
+        return struct.pack('>i', n) + b''.join(out)
+    props = []
+    for name, typ, index, extra, val in recs:
+        if extra: extra = nm(extra)
+        if name in ('ScalarParameterValues', 'VectorParameterValues', 'TextureParameterValues'):
+            val = elements(val, name == 'TextureParameterValues')
+        elif typ == 'ObjectProperty': val = struct.pack('>i', ref(struct.unpack('>i', val)[0]))
+        elif typ == 'NameProperty': val = nm(val)
+        props.append([name, typ, index, extra, val])
+    tail = bytearray(d[end:])
+    n = struct.unpack_from('>i', tail, 32)[0]
+    for k in range(n):
+        struct.pack_into('>i', tail, 36 + 4 * k, ref(struct.unpack_from('>i', tail, 36 + 4 * k)[0]))
+    valid = lambda o: 0 < struct.unpack_from('>i', tail, o)[0] < len(pk.names) and struct.unpack_from('>i', tail, o + 4)[0] == 0
+    for k in range(36 + 4 * n, len(tail) - 4, 4):                   # the static switch entries: count, then 32 bytes each
+        c = struct.unpack_from('>i', tail, k)[0]
+        if 0 < c < 32 and k + 4 + 32 * c <= len(tail) and all(valid(k + 4 + 32 * j) for j in range(c)):
+            for j in range(c):
+                o = k + 4 + 32 * j
+                tail[o:o + 8] = nm(bytes(tail[o:o + 8]))
+            break
+    return d[:4] + encode_props(w, props) + bytes(tail)
+
+
 def material_param_guids(p, mat):
     """{parameter name: ExpressionGUID bytes} of a Gears 3 Material export's parameter expressions (kept by the cook)"""
     out = {}

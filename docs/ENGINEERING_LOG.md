@@ -2053,3 +2053,9 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   SP_Airfield_02_S) is what fails. Unlinking the factory's empty CoverGroups variable changed nothing. Loading the
   carrier as a content package (load_packages) stopped the crash but also stopped S04's towerFalls touch from firing
   (its World rooted): reverted.
+- **Fixed: the left route's Drone crash.** The carrier's level is blanked (its Kismet emptied), so nothing referred
+  to GearPawn_LocustDroneSavage: the first garbage collection freed the class, and the hallway section, streamed in
+  minutes later, resolved its factory's class import to None (the null + 0xEC). Loading the carrier as a content
+  package had only worked because that roots it. Carriers now keep their classes in a Kismet object list in their
+  Main_Sequence (levelpkg.hold_classes, as the persistent level holds the shared textures). Hard route test: both
+  hallway Drones spawn (GearPawn_LocustDroneSavage_0/_1 near y 6400-6500) and the game runs on to 720 s.

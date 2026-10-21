@@ -197,13 +197,35 @@ def set_post_process(p, w, g1_pp, base_package):
     return len(out)
 
 
-def clone(template, out, name=None, keep=KEEP_SECTION):
-    """a blanked clone of a Gears 3 level package with its own GUID, written to out; returns (kept, removed)"""
+def hold_classes(p, w):
+    """a carrier's classes held by a Kismet object list in its emptied Main_Sequence: with nothing in the level
+    referring to them, the first garbage collection freed them, and a section streamed in later resolved its factory's
+    pawn class import to None (the left route's Drones: null + 0xEC in the factory's "Last Spawned" write). Returns
+    the count held"""
+    m = next(i for i in range(len(p.exports)) if p.path(i) == 'TheWorld.PersistentLevel.Main_Sequence')
+    refs = [i + 1 for i, e in enumerate(p.exports) if p.class_name(e['class']) == 'Class']
+    if not refs: return 0
+    lst = w.add_export(class_import(p, w, 'SeqVar_ObjectList'), m + 1, ('TrilogyCarrierClasses', 0), b'',
+                       flags=0x0007000100000000)
+    w.replace(lst - 1, struct.pack('>i', -1) + objcopy.encode(w, [
+        ['ObjList', 'ArrayProperty', 0, b'', struct.pack(f'>i{len(refs)}i', len(refs), *refs)],
+        ['ParentSequence', 'ObjectProperty', 0, b'', struct.pack('>i', m + 1)]]))
+    sd = bytearray(w.current(m))
+    o, pr, end = levelinject.props_at(p, bytes(sd), (4,))
+    sd = levelinject.set_property(p, w, sd, o, 'SequenceObjects', struct.pack('>ii', 1, lst), 'ArrayProperty')
+    w.replace(m, bytes(sd))
+    return len(refs)
+
+
+def clone(template, out, name=None, keep=KEEP_SECTION, hold=False):
+    """a blanked clone of a Gears 3 level package with its own GUID, written to out; returns (kept, removed);
+    hold: its classes held (a carrier)"""
     p = upk.Package(template)
     upk.E = '>'
     w = upkwrite.Rewriter(p)
     w.guid = package_guid(name or os.path.splitext(os.path.basename(out))[0])
     kept, removed = blank(p, w, keep)
+    if hold: hold_classes(p, w)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     open(out, 'wb').write(w.build())
     return kept, removed

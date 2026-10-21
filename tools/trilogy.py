@@ -308,7 +308,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     for name in [x.strip() for x in ch.get('carriers', '').split(',') if x.strip()]:
         out = os.path.join(out_dir, f'{prefix}Carrier_{name}.xxx')
         os.makedirs(out_dir, exist_ok=True)
-        levelpkg.clone(os.path.join(g3cooked, name + '.xxx'), out, keep=('WorldInfo',))
+        levelpkg.clone(os.path.join(g3cooked, name + '.xxx'), out, keep=('WorldInfo',), hold=True)
         carriers.append(out)
         print(f'  {prefix}Carrier_{name}: the characters cooked into {name}', flush=True)
     content = ','.join([ch.get('content', 'GEARGAMESP_SF')] + carriers)

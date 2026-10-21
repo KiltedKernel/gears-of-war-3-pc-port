@@ -1057,7 +1057,9 @@ def light_environments(up, made):
 # sequence output -> the Matinee's sequence, Play: a paused Matinee plays on to its end) and the view comes back on
 # "Completed". Gears 1's prison never resumed it, and on Gears 3 the view stayed on the held shot for the rest of the
 # level. Every Matinee holding itself so in the sequence of a SeqAct_DisplayPathChoice is played on from each of the
-# choice's outputs.
+# choice's outputs. A choice made before the shot reached its pause key found it still playing (Play did nothing), then
+# the key paused it for good: the camera stayed on the shot while the player walked on. The self-pause goes through a
+# new SeqAct_Gate, and the choice closes that gate as it plays the Matinee on.
 def resume_held_matinees(up, made):
     c, s, w = up.c, up.c.s, up.w
     def outputs(ref):
@@ -1071,6 +1073,22 @@ def resume_held_matinees(up, made):
             out.append((struct.unpack('>i', a['LinkedOp'])[0] if 'LinkedOp' in a else 0,
                         struct.unpack('>i', a['InputLinkIdx'])[0] if 'InputLinkIdx' in a else 0))
         return out
+    def link(op, idx):
+        return up.enc([['LinkedOp', 'ObjectProperty', 0, b'', struct.pack('>i', op)],
+                       ['InputLinkIdx', 'IntProperty', 0, b'', struct.pack('>i', idx)]])
+    def set_links(e, pairs):
+        e[:] = [x for x in e if x[0] != 'Links']
+        if pairs: e.append(['Links', 'ArrayProperty', 0, b'', struct.pack('>i', len(pairs)) + b''.join(link(*t) for t in pairs)])
+    def rewrite_outputs(ref, fn):
+        recs, end, _ = outputs(ref)
+        for r_ in recs:
+            if r_[0] != 'OutputLinks': continue
+            els = up.elements(r_[4], up.wname)
+            for e in els: fn(e)
+            r_[4] = struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)
+        d = w.current(ref - 1)
+        w.replace(ref - 1, d[:4] + up.enc(recs) + d[end:])
+    gate_cls = c.class_ref('SeqAct_Gate')
     n = 0
     for i, ref in made.items():
         if s.class_name(s.exports[i]['class']) != 'SeqAct_DisplayPathChoice': continue
@@ -1078,19 +1096,37 @@ def resume_held_matinees(up, made):
         held = [r for j, r in made.items() if s.exports[j]['outer'] == seq and s.class_name(s.exports[j]['class']) == 'SeqAct_Interp'
                 and any((r, 3) in targets(e) for e in outputs(r)[2])]
         if not held: continue
-        recs, end, _ = outputs(ref)
-        for r_ in recs:
-            if r_[0] != 'OutputLinks': continue
-            els = up.elements(r_[4], up.wname)
-            for e in els:
-                add = b''.join(up.enc([['LinkedOp', 'ObjectProperty', 0, b'', struct.pack('>i', h)],
-                                       ['InputLinkIdx', 'IntProperty', 0, b'', struct.pack('>i', 0)]]) for h in held)
-                lr = next((x for x in e if x[0] == 'Links'), None)
-                if lr is None: e.append(['Links', 'ArrayProperty', 0, b'', struct.pack('>i', len(held)) + add])
-                else: lr[4] = struct.pack('>i', struct.unpack_from('>i', lr[4], 0)[0] + len(held)) + lr[4][4:] + add
-            r_[4] = struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)
-        d = w.current(ref - 1)
-        w.replace(ref - 1, d[:4] + up.enc(recs) + d[end:])
+        plays = [(h, 0) for h in held]
+        seq_ref = struct.unpack_from('>i', w.exports[ref - 1], 8)[0]
+        gates = []
+        dflt = {prop: up.g3.default_array('SeqAct_Gate', prop) for prop, _ in LINK_ARRAYS[:3]} if gate_cls and seq_ref > 0 else {}
+        if dflt and all(dflt.values()):
+            ins = [next((str_value(x[4]) for x in e if x[0] == 'LinkDesc'), '').lower()
+                   for e in up.elements(dflt['InputLinks'][1], dflt['InputLinks'][0].fname)]
+            close = ins.index('close') if 'close' in ins else None
+            for h in held:
+                if close is None: break
+                parent = ['ParentSequence', 'ObjectProperty', 0, b'', struct.pack('>i', seq_ref)]
+                g = w.add_export(gate_cls, seq_ref, c.unique_name('G1HoldGate', 0), b'', flags=0x0007000100000000)
+                arrays = []
+                for prop, _ in LINK_ARRAYS[:3]:
+                    els = [up.retag(e, dflt[prop][0]) for e in up.elements(dflt[prop][1], dflt[prop][0].fname)]
+                    if prop == 'OutputLinks':
+                        for e in els: set_links(e, [(h, 3)])
+                    arrays.append([prop, 'ArrayProperty', 0, b'', struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)])
+                w.replace(g - 1, struct.pack('>i', -1) + up.enc(arrays + [parent]))
+                # the Matinee's self-pause through the gate
+                rewrite_outputs(h, lambda e, h=h, g=g: set_links(e, [(g, 0) if t == (h, 3) else t for t in targets(e)])
+                                if (h, 3) in targets(e) else None)
+                gates.append(g); plays.insert(0, (g, close))
+            if gates:
+                sd = w.current(seq_ref - 1)
+                srecs, send = parse828(sd, 4, up.wname)
+                for r in srecs:
+                    if r[0] == 'SequenceObjects':
+                        r[4] = struct.pack('>i', struct.unpack_from('>i', r[4], 0)[0] + len(gates)) + r[4][4:] + b''.join(struct.pack('>i', g) for g in gates)
+                w.replace(seq_ref - 1, sd[:4] + up.enc(srecs) + sd[send:])
+        rewrite_outputs(ref, lambda e: set_links(e, targets(e) + plays))
         n += len(held)
     return n
 

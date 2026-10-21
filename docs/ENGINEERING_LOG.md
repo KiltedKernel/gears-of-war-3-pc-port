@@ -2059,3 +2059,32 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   package had only worked because that roots it. Carriers now keep their classes in a Kismet object list in their
   Main_Sequence (levelpkg.hold_classes, as the persistent level holds the shared textures). Hard route test: both
   hallway Drones spawn (GearPawn_LocustDroneSavage_0/_1 near y 6400-6500) and the game runs on to 720 s.
+
+## 2026-10-21: playtest fixes: the cell doorway at high frame rates, the held shot over the path choice, cutscene culling
+- **Stuck on the cell doorway's lip (walking; rolling got over it).** Reproduced only at the user's 240 fps
+  (frame_rate 240; tests run at 60 by default: `playtest.ps1 -Settings <ini>` with frame_rate = 240): walking out
+  stopped at y 782, walking in at y 893, both ways through at 60 fps. The threshold is Gears 1 BSP steps (cell floor z
+  112, 120, 124) plus the corridor's floor tile mesh (RB_Prison_Floors_Tiles_Segment_01) at z 128. That mesh has no
+  BodySetup and keeps UseSimpleBoxCollision (the default): in UE3 a box (pawn) check against it finds nothing, so in
+  Gears 1 pawns walked on the BSP under it. Converted, it collided by its triangles: a 4-unit edge that UE3's stepUp
+  does not climb at high frame rates (it retries a step only when the frame's move is over 12 units: Hit.Time *
+  Delta.SizeSquared() > 144). levelinject now gives such meshes BlockNonZeroExtent off (pawns pass, traces and bullets
+  still hit): 2-5 components per section. Both directions pass at 240 fps.
+- **The camera stayed put after choosing the right path.** ChoosePath's held shot (SeqAct_Interp_0) pauses itself from
+  its event track ("Pause" output -> its own Pause input); the choice's outputs resume it with Play. A choice made
+  before the shot reached its pause key found it playing (Play did nothing), then the key paused it for good: the
+  view stayed on the shot while the player walked on. objcopy.resume_held_matinees routes the self-pause through a new
+  SeqAct_Gate (G1HoldGate), which the choice's outputs close as they play the shot on. Test at 240 fps: view back on
+  Marcus after an immediate right choice (in that run the pause still came first; the race itself was not forced).
+- **The bag vanishing as Dom drops it (opening).** Gears 1's cutscene characters and the bag had physics assets
+  (UE3 then bounds a skeletal mesh by its bodies); converted components get none, so the mesh is culled by its own
+  bounds at the actor's origin while the animation carries it elsewhere. Converted skeletal meshes get bounds of at
+  least 1024 units each way (levelinject SKEL_MIN_EXTENT). Not yet watched in game.
+- **FaceFX (no facial animation or lip sync), findings.** Gears 1's opening drives faces with two InterpTrackFaceFX
+  tracks playing FaceFXAnimSets (COG_Dom / COG_MarcusFenix .1_1_Prison_Intro; .Prison for in-game lines), and its
+  cutscene Marcus mesh has a FaceFXAsset. FaceFX archives in both games start "FACB" + version: Gears 1 1600, Gears 3
+  1740 (the SDK reads older versions). Gears 3's classic Marcus (MPCH_COGMarcusG2MP_SF marcus_FaceFX) and Dom
+  (Dom_FaceFX) face graphs have nearly every node Gears 1's curves drive (Jaw_open, Mouth_*, the eyebrow set, blinks,
+  head moves; missing: Blink_Left/Right, Gaze_Eye_Yaw, Emphasis/Orientation_Head_Roll/Yaw). Plan: carry the anim sets'
+  raw archives over, convert the tracks and the SoundCues' FaceFX references, and play them on Gears 3's classic
+  character actors (cutscene and gameplay alike), the same for Gears 2.

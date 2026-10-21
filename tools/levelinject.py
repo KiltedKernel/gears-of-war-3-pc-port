@@ -55,6 +55,8 @@ def g1_import(srcs, si, ref, want_class):
 # cones have none, and with the master's default of 3 the converted beams did not draw at all)
 FOG_SCALARS = {'Density': 1.0, 'DepthBasedDensity': 0.004, 'FalloffExponent': 0.0}
 FOG_OPACITY = 1.5
+# converted skeletal meshes' least bounds extent (no physics asset: their bounds stand for the animated travel)
+SKEL_MIN_EXTENT = 1024.0
 UNLIT_LIGHT = 1.0           # their light map: constant (diffuse x 1 = the texture as it is)
 
 
@@ -720,6 +722,13 @@ def main():
             path = srcs[si].path(mi)
             if path in mesh_by_name: new_mesh[(si, mi)] = mesh_by_name[path]; continue
             mats_ = [skel_mic(si, x) if x > 0 else tmat for x in sk['materials']]
+            # Gears 1's physics assets are not converted (components get None), and without one a skeletal mesh is
+            # culled by its mesh bounds at the actor's origin, not where its bones carry it: the opening's bag
+            # vanished as Dom's animation dropped it away from its actor. Bounds cover the animated travel
+            b_ = list(sk['bounds'])
+            b_[3:6] = [max(x, SKEL_MIN_EXTENT) for x in b_[3:6]]
+            b_[6] = max(b_[6], float(np.linalg.norm(b_[3:6])))
+            sk = dict(sk, bounds=tuple(b_))
             data, fix = skelmesh.to_828(w, sk, mats_, ttail)
             new_mesh[(si, mi)] = mesh_by_name[path] = w.add_export(p3.exports[tsk]['class'], 0, ('Trilogy_' + path.split('.')[-1], 0), data, flags=skflags, fixups=fix)
         print(f'{len(skel_meshes)} skeletal meshes converted (template tail: {p3.path(tsk)})')
@@ -757,7 +766,8 @@ def main():
         Nw /= np.linalg.norm(Nw, axis=1, keepdims=True) + 1e-9
         return (P * scale) @ R + loc, Nw
     refs, mats, lit, all_samples = [], [], 0, []
-    n_unlit = n_noncolliding = 0
+    n_unlit = n_noncolliding = n_pawn_through = 0
+    simple_box_cache = {}
     # --merge: the level's mesh actors joined into one mesh per 4096-unit cell and collision class (each a component
     # of its own: thousands of components were thousands of draws, the render thread held the frame rate down where
     # the view took in much of a section). Vertex light maps join with them (light per vertex).
@@ -834,6 +844,19 @@ def main():
                 cflags = {n_: v_ for n_, t_, k_, v_ in props_at(sp, sp.export_data(ci), (8, 4, 12))[1]}
             except ValueError:
                 cflags = {}
+            # a mesh with no simple collision (BodySetup) that keeps UseSimpleBoxCollision (the default) never blocked
+            # a pawn in Gears 1: box checks found nothing, the pawn walked on the BSP or volumes under it (bullets
+            # hit its triangles). Converted meshes collide by their triangles, and such a mesh blocked as a new edge:
+            # the prison's corridor floor tiles, 4 units over the BSP floor at the cell door, stopped the player
+            # walking out at high frame rates (UE3's stepUp retries a step only for a move over 12 units a frame)
+            if mi not in simple_box_cache:            # (mi: the mesh's (source, export) key)
+                try:
+                    mp_ = {n_: v_ for n_, t_, k_, v_ in props_at(srcs[mi[0]], srcs[mi[0]].export_data(mi[1]))[1]}
+                except ValueError:
+                    mp_ = {'BodySetup': 1}
+                simple_box_cache[mi] = not mp_.get('BodySetup') and mp_.get('UseSimpleBoxCollision', True) is not False
+            if simple_box_cache[mi] and cflags.get('BlockNonZeroExtent') is not False:
+                cflags['BlockNonZeroExtent'] = False; n_pawn_through += 1
             for prop in ('CollideActors', 'BlockActors', 'BlockNonZeroExtent', 'BlockZeroExtent', 'BlockRigidBody'):
                 if cflags.get(prop) is False: d = set_property(p3, w, d, to, prop, b'\x00', 'BoolProperty')
             if cflags.get('CollideActors') is False: n_noncolliding += 1
@@ -1136,7 +1159,7 @@ def main():
     qd = q.export_data(coll); qo, qpr, qend = props_at(q, qd)
     arr = {n: v for n, t, k, v in qpr}['StaticMeshComponents']
     print(f'{lit} of {len(actors)} components lit from the source level ({n_unlit} unlit: a constant light map)')
-    print(f'{n_noncolliding} components without collision (as in Gears 1)')
+    print(f'{n_noncolliding} components without collision, {n_pawn_through} not blocking pawns (as in Gears 1)')
     print(f'{len(img)} bytes; collection: {struct.unpack_from(">i", arr, 0)[0]} components, '
           f'{(len(qd) - qend) // 64} matrices; {len(q.exports)} exports')
 

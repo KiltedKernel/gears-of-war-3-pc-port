@@ -2142,3 +2142,56 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   06HoffmanPardoned), Marcus's at 54 s (Prison_AnimSet Marcus_Prison_03Shit). A 0.1 s burst over Dom's "Not anymore"
   (~147 s into a fresh run): his mouth opens and changes shape, closed throughout without FaceFX. The same model for
   every later chapter: Gears 1/2 animation sets on Gears 3's classic character actors.
+
+## 2026-10-22 (later): the user's round 19 screenshots: the right route's shot door, flicker, texture tiling, the chopper
+- **The easy route's door never opened when shot.** Gears 1 opens it when the player shoots two wall panels
+  (StaticMeshActor_558 and _600, COG_City_EBA_techbox_01jj: easyCoverRoom's SeqEvent_TakeDamage Originators).
+  Static mesh actors were placed as components of the collection (merged), so the events' Originator was None.
+  Static mesh actors the Kismet refers to are now copied as actors with it (objcopy.scripted_mesh_actors; their meshes
+  converted like movers', left out of the placed and merged ones). A Gears 3 event registers itself with its
+  Originator (GeneratedEvents) when play begins.
+- **The far panel takes damage only while the player aims.** Gears 1's SeqEvt_Input {ButtonName L2, ButtonAction}
+  turns the event on while the left trigger is held. Gears 3's SeqEvt_Input is {ButtonNames (EGameButtons),
+  bTrapInput} with outputs Pressed and Released (objcopy.input_event: L2 is GB_LeftTrigger, the one output named
+  for its action, not trapped: Gears 3's default traps the button, so the player could not aim). Gears 1's input
+  events in every level: X, Y, B, L2.
+- **An enum array's items are names.** Written as a byte, ButtonNames threw off the loader's reading of the event,
+  and the chapter's load stopped at GOW1_SP_Prison_S02_Scripting (loading screen forever: bisected by switching off
+  the round's changes one at a time, OBJCOPY_NO_SCRIPTED_MESH_ACTORS / OBJCOPY_NO_INPUT_EVENTS / LEVELINJECT_NO_UV).
+  Stock Gears 3 levels store each item as a name (SP_Airfield_P: GB_B, 12 bytes). The copier's generic enum-array
+  conversion already does this; a fixup writing raw values has to as well.
+- **Texture tiling.** Gears 1's materials scale and pick their texture coordinates (TextureCoordinate
+  CoordinateIndex/Tiling, times and plus constants): the trim floors at (1, 0.5), the ruined brick walls on UV set
+  1, the cell concrete 5 times, a tile floor at 0.1, the mossline BSP at (1, 2) - (0, 1). The converted materials
+  sample UV set 0 as it is: the mapping of each element's diffuse now goes into the meshes' UV set 0
+  (materialconv.g1_uv_transform, g1_apply_uv_transforms) and into the BSP polygons' UVs. About 10% of the prison's
+  mesh elements (473 of 5200) had one. Not when the light map reads UV set 0.
+- **Flicker: z-fighting.** Gears 1 laid meshes flush on its BSP (pillars and trims on walls, plates on floors): the
+  same plane facing the same way, each with its own light (light map against vertex light), so a lit patch flickered
+  in and out of a dark wall as the camera moved. The merged meshes' faces on a BSP face are moved 0.4 units off it
+  (levelinject coplanar_nudge; GOW3_NO_COPLANAR_NUDGE=1 to compare). The same mesh placed twice at one spot (11 in
+  S02_Meshes and S05_Meshes) is drawn once.
+- **The copied panels' collision.** A copied static mesh actor's triangles block shots only; pawns collide with its
+  Gears 1 hulls, made with the level's like any placed mesh's (one of them is the cell door's sunken pipe, hidden but
+  referenced by the opening: by its triangles the player would stick there at 240 fps again; the 12 doorway lanes pass
+  at 240 fps).
+- **Converted textures drew at a half or a quarter of their size.** Every one kept its Gears 3 template's LODBias
+  (T_COG_Hanover_shelf_D and the others: 1 or 2). Gears 1's cook already left out the mips its own LODBias dropped
+  (the conversion starts at the first one stored), so colour textures and cutout masks now have none
+  (materialconv.SLOT_LOD_BIAS); normal and specular maps keep the template's. The prison's resident textures: about
+  17 MB before, 45 MB now (65 MB with every map at 0).
+- **The green sheets in the hard route's outdoor hallway: not identified.** Tall light-green sheets with dark holes
+  behind the pillars, unchanged by the texture LOD fix and by giving the converted sun beams (Gears 1's
+  LightBeam_Green_01_MI, drawn with the kit's fog-sheet master and its cloud-noise multiply textures) their Gears 1
+  falloff and dust textures (left as a test switch, LEVELINJECT_FOG_G1_TEXTURES=1). The only green Gears 1 colour
+  textures near the hallway are the grass clumps' (192 units tall at most). Not the kit level's own meshes (its
+  collection actors are emptied), not the moss decal cards (modulated: left out).
+- **The hallway's entrance is half blocked in Gears 1 too.** BlockingVolume_17 (S02: x -1480..-992, y 2672..2776, z
+  128..576) closes its right part; the way in is the gap to its left (x -1864..-1480). A walker straight up the middle
+  stops at y 2638. Pillar at (-1040, 2736) stands inside it.
+- **Falling through the hallway: not reproduced.** The floor there is all BSP (a map of pawn-blocking surfaces over
+  the visible ones, x -2000..-800, y 2600..4400: no gaps), the pillars' hulls are closed boxes, and five scripted rolls
+  into pillars from several sides kept the player at floor height (a scripted test through the jammed door).
+- **The debris in the sky over the right route's catwalk: not identified.** easyCoverRoom's InterpActor_4 is the King
+  Raven of the ceiling collapse's flyby (hidden until then, destroyed after); InterpActor_0, a hidden block Dom looks at,
+  stays hidden. Gears 1's KActors (the collapse's falling cover blocks) are not converted.

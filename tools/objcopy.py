@@ -582,7 +582,9 @@ class Copier:
                                  and self.s.exports[i]['outer'] > 0
                                  and self.s.exports[self.s.exports[i]['outer'] - 1]['name'] in NO_COLLISION):
                 props = no_collision(self, props, kind)
-            elif kind == 'component' and cn == 'StaticMeshComponent' and pawns_pass(self.s, i):
+            elif kind == 'component' and cn == 'StaticMeshComponent' and (pawns_pass(self.s, i) or self.s.exports[i]['outer'] > 0
+                    and self.s.class_name(self.s.exports[self.s.exports[i]['outer'] - 1]['class']) == 'StaticMeshActor'):
+                # (a static mesh actor copied with the Kismet: pawns collide with its Gears 1 hulls, made with the level's)
                 props = not_blocking_pawns(self, props)
             if i in getattr(self, 'current_named', {}): props = named_squad_var(self, props)
             elif cn in FIXUPS and i not in getattr(self, 'passthrough_src', ()): props = FIXUPS[cn](self, props)
@@ -1328,11 +1330,35 @@ def mover_materials(src):
     return out
 
 
+def scripted_mesh_actors(src):
+    """the level's StaticMeshActors its Kismet refers to (a SeqEvent_TakeDamage's Originator: the prison's easy route
+    opens its jammed door when the player shoots the wall panels StaticMeshActor_558 and _600). Copied as actors, not
+    placed as static mesh components (or merged): placed, the events' Originator was None and the shots did nothing"""
+    import materialconv
+    if os.environ.get('OBJCOPY_NO_SCRIPTED_MESH_ACTORS'): return set()    # (testing: placed as before)
+    sma = {i for i, e in enumerate(src.exports) if src.class_name(e['class']) == 'StaticMeshActor'}
+    out = set()
+    if not sma: return out
+    for i in range(len(src.exports)):
+        if not src.path(i).startswith('TheWorld.PersistentLevel.Main_Sequence'): continue
+        try: recs, _ = materialconv.raw_props(src, src.export_data(i), 4)
+        except Exception: continue
+        for r in recs:
+            refs = []
+            if r[1] == 'ObjectProperty' and len(r[4]) == 4: refs = [struct.unpack('>i', r[4])[0]]
+            elif r[1] == 'ArrayProperty' and len(r[4]) >= 4:
+                n = struct.unpack_from('>i', r[4], 0)[0]
+                if len(r[4]) == 4 + 4 * n: refs = struct.unpack_from(f'>{n}i', r[4], 4)
+            out |= {v - 1 for v in refs if v > 0 and v - 1 in sma}
+    return out
+
+
 def mover_meshes(src):
-    """export indices of the static meshes the level's InterpActors show"""
+    """export indices of the static meshes the level's InterpActors (and the StaticMeshActors its Kismet refers to)
+    show"""
     import materialconv
     out = set()
-    for i in movers(src):
+    for i in movers(src) + sorted(scripted_mesh_actors(src)):
         for j, e in enumerate(src.exports):
             if e['outer'] != i + 1 or src.class_name(e['class']) != 'StaticMeshComponent': continue
             try: recs, _ = materialconv.raw_props(src, src.export_data(j), 8)
@@ -1342,6 +1368,9 @@ def mover_meshes(src):
                     m = struct.unpack('>i', r[4])[0]
                     if m > 0: out.add(m - 1)
     return out
+
+
+SCRIPTED_MESH_ACTOR_CLASSES = set() if os.environ.get('OBJCOPY_NO_SCRIPTED_MESH_ACTORS') else {'StaticMeshActor'}
 
 
 def kismet_actors(src, kismet_exports, extra=()):
@@ -1361,7 +1390,7 @@ def kismet_actors(src, kismet_exports, extra=()):
                 n = struct.unpack_from('>i', r[4], 0)[0]
                 if len(r[4]) == 4 + 4 * n: refs = struct.unpack_from(f'>{n}i', r[4], 4)
             for v in refs:
-                if v > 0 and v - 1 not in out and src.class_name(src.exports[v - 1]['class']) in ACTOR_CLASSES:
+                if v > 0 and v - 1 not in out and src.class_name(src.exports[v - 1]['class']) in ACTOR_CLASSES | SCRIPTED_MESH_ACTOR_CLASSES:
                     out.add(v - 1); todo.append((v - 1, 32))
     return sorted(out)
 
@@ -1800,6 +1829,50 @@ def cause_damage(c, props):
 if not os.environ.get('OBJCOPY_NO_RENAME'):
     CLASS_RENAME['SeqAct_CauseDamage'] = 'SeqAct_ModifyHealth'
     FIXUPS['SeqAct_CauseDamage'] = cause_damage
+
+
+# ---- input events ----
+# Gears 1's SeqEvt_Input {ButtonName (a name: L2...), ButtonAction (0 pressed, 1 released)} with one output "Out" is
+# Gears 3's {ButtonNames (EGameButtons), bTrapInput} with outputs "Pressed" and "Released". Unconverted, no button
+# matched and the event never fired: the prison's easy route enables the far door panel's SeqEvent_TakeDamage only
+# while the player aims (L2 held), and shooting it did nothing. Not trapped (Gears 3's default traps the button:
+# the player could not aim while it listened)
+G1_BUTTONS = {'A': 'GB_A', 'B': 'GB_B', 'X': 'GB_X', 'Y': 'GB_Y', 'Start': 'GB_Start', 'Back': 'GB_Back',
+              'L2': 'GB_LeftTrigger', 'LeftTrigger': 'GB_LeftTrigger', 'L1': 'GB_LeftBumper', 'LeftBumper': 'GB_LeftBumper',
+              'R2': 'GB_RightTrigger', 'RightTrigger': 'GB_RightTrigger', 'R1': 'GB_RightBumper', 'RightBumper': 'GB_RightBumper',
+              'DPad_Up': 'GB_DPad_Up', 'DPad_Down': 'GB_DPad_Down', 'DPad_Left': 'GB_DPad_Left', 'DPad_Right': 'GB_DPad_Right',
+              'L3': 'GB_LeftStick_Push', 'R3': 'GB_RightStick_Push'}
+
+
+def input_event(c, props):
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    a = {r[0]: r for r in recs}
+    button = wname(*struct.unpack('>ii', a['ButtonName'][4])) if 'ButtonName' in a and len(a['ButtonName'][4]) == 8 else None
+    action = a['ButtonAction'][4][0] if 'ButtonAction' in a and len(a['ButtonAction'][4]) == 1 else 0
+    out = [r for r in recs if r[0] not in ('ButtonName', 'ButtonAction', 'bTrapInput', 'ButtonNames')]
+    g3 = G1_BUTTONS.get(button)
+    if g3 is None:
+        c.unconvertible[f'SeqEvt_Input button {button}'] = c.unconvertible.get(f'SeqEvt_Input button {button}', 0) + 1
+    else:
+        # (an enum array's items are names in Gears 3's packages, as an enum ByteProperty's value is: written as a
+        # byte, the loader read past the property and the level's load never finished)
+        out.append(['ButtonNames', 'ArrayProperty', 0, b'', struct.pack('>i', 1) + struct.pack('>ii', *c.w.name(g3))])
+    out.append(['bTrapInput', 'BoolProperty', 0, b'', b'\x00'])
+    # its one output named for the action, which the link upgrade maps onto Gears 3's "Pressed" / "Released"
+    for k, r in enumerate(out):
+        if r[0] != 'OutputLinks': continue
+        n = struct.unpack_from('>i', r[4], 0)[0]; o = 4; els = []
+        for _ in range(n):
+            el, o = parse828(r[4], o, wname); els.append(el)
+        if not els: break
+        word = b'Released\x00' if action == 1 else b'Pressed\x00'
+        els[0] = [x for x in els[0] if x[0] != 'LinkDesc'] + [['LinkDesc', 'StrProperty', 0, b'', struct.pack('>i', len(word)) + word]]
+        out[k] = [r[0], r[1], r[2], r[3], struct.pack('>i', len(els)) + b''.join(encode(c.w, el) for el in els)]
+    return encode(c.w, out)
+
+
+if not os.environ.get('OBJCOPY_NO_INPUT_EVENTS'): FIXUPS['SeqEvt_Input'] = input_event
 
 
 # ---- the chapter's end ----

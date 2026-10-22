@@ -90,6 +90,92 @@ def g1_textures(p, mat):
     return out
 
 
+def g1_uv_transform(p, ref):
+    """the UV mapping of a Gears 1 material reference's diffuse sample as (UV set, (scale u, v), (offset u, v)), or None
+    when it reads UV set 0 as it is (or through expressions not followed: panners, bump offsets, parameters). Gears 1
+    scaled and picked texture coordinates in its materials (TextureCoordinate's CoordinateIndex and Tiling, times and
+    plus constants: the prison's trim floors at (1, 0.5), its ruined brick walls on UV set 1, cell concrete 5 times);
+    the converted materials sample UV set 0 as it is, and the converted meshes' UVs carry the mapping instead"""
+    if ref <= 0: return None
+    mat = ref - 1
+    try:
+        for _ in range(8):
+            if p.class_name(p.exports[mat]['class']) != 'MaterialInstanceConstant': break
+            recs, _ = raw_props(p, p.export_data(mat), 4)
+            par = next((struct.unpack('>i', r[4][:4])[0] for r in recs if r[0] == 'Parent'), 0)
+            if par <= 0: return None
+            mat = par - 1
+        if p.class_name(p.exports[mat]['class']) != 'Material': return None
+        tex = g1_textures(p, mat).get('diffuse')
+    except Exception:
+        return None
+    if tex is None: return None
+    def props(r):
+        return {n: v for n, t, k, v in levelinject.props_at(p, p.export_data(r - 1))[1]}
+    def inp(v): return {n: x for n, t, k, x in p.properties(v[1], 0)[0]}.get('Expression', 0)
+    def ev(r, depth=0):
+        """('uv', set, su, sv, ou, ov) or ('c', x, y), None when not followed"""
+        if depth > 12: return None
+        if r <= 0: return ('uv', 0, 1.0, 1.0, 0.0, 0.0)
+        cn = p.class_name(p.exports[r - 1]['class'])
+        a = props(r)
+        if cn == 'MaterialExpressionTextureCoordinate':
+            t = a.get('Tiling', 1.0)
+            return ('uv', a.get('CoordinateIndex', 0), t * a.get('UTiling', 1.0), t * a.get('VTiling', 1.0), 0.0, 0.0)
+        if cn == 'MaterialExpressionConstant': return ('c', a.get('R', 0.0), a.get('R', 0.0))
+        if cn == 'MaterialExpressionConstant2Vector': return ('c', a.get('R', 0.0), a.get('G', 0.0))
+        if cn in ('MaterialExpressionMultiply', 'MaterialExpressionAdd') and 'A' in a and 'B' in a:
+            x, y = ev(inp(a['A']), depth + 1), ev(inp(a['B']), depth + 1)
+            if x is None or y is None: return None
+            if x[0] == 'c' and y[0] == 'uv': x, y = y, x
+            if cn == 'MaterialExpressionMultiply':
+                if x[0] == 'c' and y[0] == 'c': return ('c', x[1] * y[1], x[2] * y[2])
+                if y[0] != 'c': return None
+                return ('uv', x[1], x[2] * y[1], x[3] * y[2], x[4] * y[1], x[5] * y[2])
+            if x[0] == 'c' and y[0] == 'c': return ('c', x[1] + y[1], x[2] + y[2])
+            if y[0] != 'c': return None
+            return ('uv', x[1], x[2], x[3], x[4] + y[1], x[5] + y[2])
+        return None
+    for j, e in enumerate(p.exports):
+        if e['outer'] != mat + 1 or p.class_name(e['class']) != 'MaterialExpressionTextureSample': continue
+        try:
+            a = props(j + 1)
+            if a.get('Texture') != tex + 1: continue
+            t = ev(inp(a['Coordinates'])) if 'Coordinates' in a else ('uv', 0, 1.0, 1.0, 0.0, 0.0)
+        except Exception:
+            return None
+        if t is None or t[0] != 'uv' or t[1:] == (0, 1.0, 1.0, 0.0, 0.0): return None
+        return (t[1], (t[2], t[3]), (t[4], t[5]))
+    return None
+
+
+def g1_apply_uv_transforms(p, m, transform_of):
+    """a Gears 1 static mesh (staticmesh.read_374) with each element's UV set 0 replaced by its material's mapping
+    (transform_of(material ref): g1_uv_transform's result or None), in place; returns the number of elements changed"""
+    import numpy as np
+    lod = m['lods'][0]
+    if 'interleaved' not in lod: return 0
+    uvs, stride, n, data = lod['interleaved']
+    a = np.frombuffer(data, dtype=np.uint8).reshape(n, stride).copy()
+    uv = np.frombuffer(a[:, 28:28 + 8 * uvs].tobytes(), dtype='>f4').reshape(n, uvs, 2).astype(np.float64)
+    idx = np.frombuffer(lod['indices'][2], dtype='>u2')
+    out, done, changed = uv[:, 0].copy(), np.zeros(n, bool), 0
+    for el in lod['elements']:
+        t = transform_of(el['material'])
+        if t is None: continue
+        ch, sc, off = t
+        if ch >= uvs: continue
+        vs = np.unique(idx[el['first_index']:el['first_index'] + 3 * el['triangles']])
+        vs = vs[(vs < n) & ~done[vs]]
+        out[vs] = uv[vs, ch] * np.array(sc) + np.array(off); done[vs] = True
+        changed += 1
+    if not changed: return 0
+    uv[:, 0] = out
+    a[:, 28:28 + 8 * uvs] = np.frombuffer(uv.astype('>f4').tobytes(), dtype=np.uint8).reshape(n, 8 * uvs)
+    lod['interleaved'] = (uvs, stride, n, a.tobytes())
+    return changed
+
+
 def g1_instance_textures(p, mic, depth=0):
     """g1_textures for a Gears 1 MaterialInstanceConstant: its texture parameters by name (Gears 1's character
     shaders: COG_Dom_Shader on Dom's gameplay mesh), then its parent's for the slots it leaves (before, its mesh drew
@@ -274,10 +360,19 @@ def g1_volumetric(p, ref):
 
 # ---- Gears 1 texture -> Gears 3 Texture2D serial data ----
 
-def texture_828(w, p3, template, src, mask=None):
+# a converted texture's LODBias by its use (None: the template's). The templates are Gears 3 textures with their own
+# memory settings (T_COG_Hanover_shelf_D: 1 or 2), which drew every converted texture at a half or a quarter of its
+# size: muddy walls, and the grass's cutout from a 64-texel alpha in blobs (the hard route's outdoor hallway). Gears
+# 1's cook already left out the mips its own LODBias dropped (texture_828 starts at the first one stored): colour
+# and cutouts at that size, as Gears 1 drew them; normal and specular maps keep the template's (memory: all at 0, the
+# prison's resident textures went from about 17 to 65 MB)
+SLOT_LOD_BIAS = {'diffuse': 0, 'mask': 0}
+
+
+def texture_828(w, p3, template, src, mask=None, lod_bias=None):
     """(data, fixups) for a Gears 3 Texture2D export: template = a Gears 3 texture export index (its properties),
     src = texture2d.Texture of a Gears 1 texture; mask: 'A' (its alpha as grey too: alpha_to_grey) or 'R' (a DXT1
-    mask's red as its alpha: red_to_alpha)"""
+    mask's red as its alpha: red_to_alpha); lod_bias: its LODBias (None: the template's)"""
     d3 = p3.export_data(template)
     props, end = raw_props(p3, d3, 4)
     fmt = src.format if isinstance(src.format, str) else FORMATS_374.get(src.format, 'PF_DXT1')
@@ -294,12 +389,14 @@ def texture_828(w, p3, template, src, mask=None):
     for rec in props:
         name = rec[0]
         if name in ('TextureFileCacheName', 'FirstResourceMemMip', 'NeverStream'): continue
+        if name == 'LODBias' and lod_bias is not None: continue
         if name in ('SizeX', 'OriginalSizeX'): rec[4] = struct.pack('>i', sx)
         elif name in ('SizeY', 'OriginalSizeY'): rec[4] = struct.pack('>i', sy)
         elif name == 'Format': rec[4] = fname_bytes(w, fmt)
         elif name == 'MipTailBaseIdx': rec[4] = struct.pack('>i', max(tail, 0))
         keep.append(rec)
     keep.append(['NeverStream', 'BoolProperty', 0, b'', b'\x01'])
+    if lod_bias: keep.append(['LODBias', 'IntProperty', 0, b'', struct.pack('>i', lod_bias)])
     out = bytearray(d3[:4]) + encode_props(w, keep)
     fixups = []
     out += struct.pack('>iiii', 0, 0, 0, 0)                               # SourceArt: empty (offset fixed below)
@@ -547,7 +644,7 @@ def material_param_guids(p, mat):
     return out
 
 
-def param_mic(w, header, parent_ref, guids, scalars=None, vectors=None):
+def param_mic(w, header, parent_ref, guids, scalars=None, vectors=None, textures=None):
     """serial data for a new MaterialInstanceConstant of a Gears 3 Material (parent_ref) setting scalar ({name: float})
     and vector ({name: (r, g, b, a)}) parameters, each with its ExpressionGUID from guids (material_param_guids);
     header: the bytes before the properties (a MaterialInstanceConstant's NetIndex). Properties only: the game draws
@@ -559,9 +656,31 @@ def param_mic(w, header, parent_ref, guids, scalars=None, vectors=None):
     props = [['Parent', 'ObjectProperty', 0, b'', struct.pack('>i', parent_ref)]]
     sc = [element(n, 'FloatProperty', b'', struct.pack('>f', v)) for n, v in (scalars or {}).items() if n in guids]
     vc = [element(n, 'StructProperty', fname_bytes(w, 'LinearColor'), struct.pack('>4f', *v)) for n, v in (vectors or {}).items() if n in guids]
+    tc = [element(n, 'ObjectProperty', b'', struct.pack('>i', v)) for n, v in (textures or {}).items() if n in guids and v]
     if sc: props.append(['ScalarParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(sc)) + b''.join(sc)])
     if vc: props.append(['VectorParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(vc)) + b''.join(vc)])
+    if tc: props.append(['TextureParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(tc)) + b''.join(tc)])
     return bytes(header) + encode_props(w, props)
+
+
+def g1_referenced_textures(p, ref):
+    """export indices of the textures a Gears 1 material reference's base Material lists (ReferencedTextures)"""
+    if ref <= 0: return []
+    mat = ref - 1
+    try:
+        for _ in range(8):
+            if p.class_name(p.exports[mat]['class']) != 'MaterialInstanceConstant': break
+            recs, _ = raw_props(p, p.export_data(mat), 4)
+            par = next((struct.unpack('>i', r[4][:4])[0] for r in recs if r[0] == 'Parent'), 0)
+            if par <= 0: return []
+            mat = par - 1
+        a = {n: v for n, t, k, v in levelinject.props_at(p, p.export_data(mat))[1]}
+    except Exception:
+        return []
+    raw = a.get('ReferencedTextures')
+    if not isinstance(raw, (bytes, bytearray)) or len(raw) < 4: return []
+    n = struct.unpack_from('>i', raw, 0)[0]
+    return [r - 1 for r in struct.unpack_from(f'>{n}i', raw, 4) if r > 0 and p.class_name(p.exports[r - 1]['class']) == 'Texture2D']
 
 
 def g1_vector_params(p, ref, depth=0):

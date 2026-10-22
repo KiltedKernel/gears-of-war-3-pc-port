@@ -65,6 +65,7 @@ FOG_SCALARS = {'Density': 1.0, 'DepthBasedDensity': 0.004, 'FalloffExponent': 0.
 FOG_OPACITY = 1.5
 # converted skeletal meshes' least bounds extent (no physics asset: their bounds stand for the animated travel)
 SKEL_MIN_EXTENT = 1024.0
+COPLANAR_NUDGE = 0.4      # units a merged mesh face lying on a BSP face is moved off it
 # vector parameters set on the masked template's copies (a pickup material: no glint)
 MASKED_VECTORS = {'ShimmerColor': (0.0, 0.0, 0.0, 0.0)}
 UNLIT_LIGHT = 1.0           # their light map: constant (diffuse x 1 = the texture as it is)
@@ -178,6 +179,7 @@ def main():
     ap.add_argument('--texture-manifest', default=None)
     ap.add_argument('--facefx-assets', default='', help='"G1 FaceFX asset name=package.xxx:object path;...": the cutscene meshes take these Gears 3 FaceFX actors')
     ap.add_argument('--no-simple-collision', action='store_true', help='Gears 1 meshes block pawns by their triangles, not by their simple collision (BodySetup hulls)')
+    ap.add_argument('--no-uv-transforms', action='store_true', help="Gears 1 materials' UV set and tiling not carried into the meshes' UVs")
     ap.add_argument('--merge', action='store_true', help='mesh actors joined into one mesh per 4096-unit cell and collision class (fewer draws)')
     ap.add_argument('--no-point-lights', action='store_true', help="do not bake the source level's dynamic point lights")
     ap.add_argument('--no-collision', action='store_true', help="keep the template's collision flags")
@@ -315,6 +317,15 @@ def main():
     actors = []                                        # (source index, mesh, location, rotation, scale, component)
     for si, sp in enumerate(srcs):
         actors += [(si,) + a for a in source_actors(sp)]
+    # the same mesh placed twice at the same spot (Gears 1's S02_Meshes and S05_Meshes have 11): drawn once (twice
+    # they z-fought)
+    seen_, unique_ = set(), []
+    for a in actors:
+        k_ = (srcs[a[0]].path(a[1]), tuple(np.round(a[2], 1)), tuple(int(r) % 65536 for r in a[3]), tuple(np.round(a[4], 3)))
+        if k_ in seen_: continue
+        seen_.add(k_); unique_.append(a)
+    if len(unique_) != len(actors): print(f'{len(actors) - len(unique_)} mesh actors placed twice at the same spot: once')
+    actors = unique_
     if args.center:
         c = np.array([float(x) for x in args.center.split(',')])
         actors = [a for a in actors if np.linalg.norm(a[2] - c) <= args.radius]
@@ -375,11 +386,21 @@ def main():
             if args.center:
                 sp_polys = [x for x in sp_polys if np.linalg.norm(x[1].mean(0) - c) <= args.radius]
             if not sp_polys: continue
+            # the surfaces' materials' texture mapping (materialconv.g1_uv_transform; BSP has UV set 0 only)
+            if not args.no_uv_transforms and not os.environ.get('LEVELINJECT_NO_UV'):
+                tc_ = {}
+                for k_, poly in enumerate(sp_polys):
+                    mat_ = model['surfs'][poly[0]]['material']
+                    if mat_ not in tc_: tc_[mat_] = materialconv.g1_uv_transform(sp, mat_)
+                    t_ = tc_[mat_]
+                    if t_ and t_[0] == 0:
+                        sp_polys[k_] = (poly[0], poly[1], np.asarray(poly[2]) * np.array(t_[1]) + np.array(t_[2])) + tuple(poly[3:])
             polys += sp_polys
             bsp_chunks += [(si,) + ch for ch in bspconv.chunk_meshes(model, sp_polys)]
         print(f'BSP: {len(polys)} polygons in {len(bsp_chunks)} chunks')
     # with --kismet: the meshes of the sources' InterpActors (doors, movers: copied as actors) are converted too
     mover_meshes, skel_meshes = set(), {}
+    scripted_components = set()                        # (source, component) of mesh actors copied with the Kismet
     if args.kismet and src.version == 374:
         import objcopy, skelmesh
         for si, sp in enumerate(srcs):
@@ -403,6 +424,12 @@ def main():
                     imported_skel[(si, ref)] = found
                     print(f'skeletal mesh {path}: imported, read from {os.path.basename(srcs[found[0]].filename)}')
                 except Exception as ex: print(f'skeletal mesh {path} not converted: {ex}')
+        # StaticMeshActors the Kismet refers to (shootable panels): copied as actors with it (objcopy), not drawn here;
+        # their pawn collision (Gears 1's hulls) still made here (the copies block shots only: the cell door's sunken
+        # pipe, hidden but referenced by the opening, blocked by its triangles stuck the player at 240 fps again)
+        scripted = {si: objcopy.scripted_mesh_actors(sp) for si, sp in enumerate(srcs)}
+        scripted_components.update((a[0], a[5]) for a in actors if srcs[a[0]].exports[a[5]]['outer'] - 1 in scripted[a[0]])
+        if scripted_components: print(f'{len(scripted_components)} mesh actors the Kismet refers to: copied as actors')
     mesh_keys = set(a[:2] for a in actors) | mover_meshes
     print(f'{len(actors)} source actors, {len(set(a[:2] for a in actors))} meshes ({len(mover_meshes)} more for movers), from {len(srcs)} packages')
 
@@ -487,7 +514,7 @@ def main():
             manifest['names'][tkey] = name
             kt = kit_tex_template.get(slot)            # (the persistent level is a clone of the kit)
             template = pk.path(kt) if pk is not None and kt is not None and kt >= 0 else p3.path(tt)
-            manifest['entries'][name] = {'source': os.path.abspath(sp.filename), 'index': ti, 'template': template}
+            manifest['entries'][name] = {'source': os.path.abspath(sp.filename), 'index': ti, 'template': template, 'slot': slot}
             if mask: manifest['entries'][name]['mask'] = mask
         if not shared_pkg: shared_pkg.append(w.add_import('Core', 'Package', 0, args.shared_textures))
         return w.add_import('Engine', 'Texture2D', shared_pkg[0], name)
@@ -564,9 +591,30 @@ def main():
                 g1v = materialconv.g1_vector_params(sp, gm + 1)
                 colour = g1v.get('FogColor') or g1v.get('LightColor') or (1.0, 1.0, 1.0, 1.0)
                 opacity = (g1v.get('Brightness') or g1v.get('BeamOpacity') or (1.0,))[0]
+                # (testing, LEVELINJECT_FOG_G1_TEXTURES=1) its shape from Gears 1's own falloff (the beam's gradient)
+                # and dust textures in the master's two multiply textures instead of the master's cloud noise. Tried
+                # for the hard route's green sheets ("grass blown up"): no change there, so they are not these
+                fog_textures = {}
+                if os.environ.get('LEVELINJECT_FOG_G1_TEXTURES') and tex_template.get('diffuse') is not None:
+                    rt_ = materialconv.g1_referenced_textures(sp, gm + 1)
+                    pick = lambda keys: next((t_ for t_ in rt_ if any(k_ in sp.path(t_).lower() for k_ in keys)), None)
+                    for pname, ti in (('MultiplyTexture1', pick(('falloff',))), ('MultiplyTexture2', pick(('dust', 'cloud', 'noise')))):
+                        if ti is None: continue
+                        tkey = sp.path(ti)
+                        if tkey not in tex_ref and args.shared_textures:
+                            tex_ref[tkey] = shared_texture(sp, ti, tex_template['diffuse'], tkey, 'diffuse')
+                        if tkey not in tex_ref:
+                            upk.E = '>'
+                            tt = tex_template['diffuse']
+                            data_, fix_ = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti), lod_bias=0)
+                            tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
+                            tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1], 0), data_, flags=tflags_, fixups=fix_)
+                        fog_textures[pname] = tex_ref[tkey]
+                    if 'MultiplyTexture1' in fog_textures and 'MultiplyTexture2' not in fog_textures:
+                        fog_textures['MultiplyTexture2'] = fog_textures['MultiplyTexture1']
                 data = materialconv.param_mic(w, md[:mo], fog_ref[0], fog_ref[1],
                                               dict(FOG_SCALARS, Opacity=opacity * FOG_OPACITY),
-                                              {'Color': tuple(colour[:3]) + (1.0,)})
+                                              {'Color': tuple(colour[:3]) + (1.0,)}, fog_textures)
                 mic_of[(si, gm + 1)] = by_name[name] = w.add_export(mic_cls if pk is not None else tp.exports[tmic]['class'], 0,
                                                                     ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_)
                 unlit_mats.add((si, gm + 1)); by_name[('unlit', name)] = True
@@ -587,7 +635,7 @@ def main():
                     tex_ref[tkey] = shared_texture(sp, ti, tt, tkey, slot)
                 if tkey not in tex_ref:
                     upk.E = '>'
-                    data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti))
+                    data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti), lod_bias=materialconv.SLOT_LOD_BIAS.get(slot))
                     tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1], 0), data, flags=tflags_, fixups=fix)
                 refs[{'diffuse': 'Diffuse_01', 'normal': 'Normal_01', 'specular': 'Specular_01'}[slot]] = tex_ref[tkey]
@@ -603,7 +651,7 @@ def main():
                     tex_ref[tkey] = shared_texture(sp, ti, tt, tkey, 'diffuse', mask=channel)
                 if tkey not in tex_ref:
                     upk.E = '>'
-                    data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti), mask=channel)
+                    data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti), mask=channel, lod_bias=materialconv.SLOT_LOD_BIAS.get('mask'))
                     tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1].replace('#mask', '_Mask'), 0), data, flags=tflags_, fixups=fix)
                 refs[masked_param] = tex_ref[tkey]
@@ -636,9 +684,19 @@ def main():
         return bytes(data)
     # meshes
     new_mesh, parsed, mesh_by_name = {}, {}, {}
+    uv_transform_cache, n_uv_mapped = {}, 0
     for k, (si, mi) in enumerate(sorted(mesh_keys)):
         sp = srcs[si]
         m = parsed[(si, mi)] = staticmesh.read(sp, mi)
+        # Gears 1's texture mapping per material (UV set, tiling): into the mesh's UV set 0, which the converted
+        # materials sample as it is (not when the light map reads UV set 0: its samples are taken from the same UVs)
+        if sp.version == 374 and not args.no_uv_transforms and not os.environ.get('LEVELINJECT_NO_UV') and int(m['props'].get('LightMapCoordinateIndex', 1)) != 0:
+            if si not in uv_transform_cache: uv_transform_cache[si] = {}
+            tc = uv_transform_cache[si]
+            def transform_of(ref, sp=sp, tc=tc):
+                if ref not in tc: tc[ref] = materialconv.g1_uv_transform(sp, ref)
+                return tc[ref]
+            n_uv_mapped += bool(materialconv.g1_apply_uv_transforms(sp, m, transform_of))
         path = sp.path(mi)
         if args.merge and (si, mi) not in set(mover_meshes): continue     # (only merged: no mesh of its own)
         if path in mesh_by_name:                       # the same mesh in another sublevel package
@@ -647,6 +705,7 @@ def main():
         data = per_poly_collision(meshconv.to_828(p3, tmesh, m, [mic_of.get((si, el['material'])) for el in m['lods'][0]['elements']]))
         name = 'Trilogy_' + path.split('.')[-1]
         new_mesh[(si, mi)] = mesh_by_name[path] = w.add_export(p3.exports[tmesh]['class'], 0, (name, 0), data, flags=mflags)
+    if n_uv_mapped: print(f"{n_uv_mapped} meshes with Gears 1's texture mapping (UV set, tiling) in their UVs")
     if skel_meshes and not any(cls(i) == 'SkeletalMesh' and not p3.exports[i]['name'].startswith('Default__') for i in range(len(p3.exports))):
         print(f'{len(skel_meshes)} skeletal meshes not converted: the target has no skeletal mesh to take as a template')
         skel_meshes = {}
@@ -831,6 +890,55 @@ def main():
     # the view took in much of a section). Vertex light maps join with them (light per vertex).
     mover_keys = set(mover_meshes)
     buckets = {}                                       # key -> {'P','TX','TZ','UV','L','idx': {mic: [indices]}, 'n'}
+    # Gears 1 laid meshes flush on its BSP (pillars and trims against walls, plates on floors): the same plane, facing
+    # the same way, each with its own light (the BSP's light map, the mesh's vertex light). Drawn as separate meshes
+    # they z-fought, a lit patch flickering in and out of a dark wall as the camera moved (the prison's first room
+    # outside the cell, the hard route's hallway). The mesh wins: its faces on a BSP face are moved off it by
+    # COPLANAR_NUDGE along their normal (GOW3_NO_COPLANAR_NUDGE=1: as they were)
+    bsp_planes = {}
+    if polys and not os.environ.get('GOW3_NO_COPLANAR_NUDGE'):
+        for poly in polys:
+            V_ = np.asarray(poly[1], np.float64)
+            if len(V_) < 3: continue
+            n_ = np.zeros(3)
+            for k_ in range(len(V_)):                  # Newell's normal
+                a_, b_ = V_[k_], V_[(k_ + 1) % len(V_)]
+                n_ += [(a_[1] - b_[1]) * (a_[2] + b_[2]), (a_[2] - b_[2]) * (a_[0] + b_[0]), (a_[0] - b_[0]) * (a_[1] + b_[1])]
+            ln_ = np.linalg.norm(n_)
+            if ln_ < 1e-6: continue
+            n_ /= ln_
+            if np.dot(n_, np.asarray(poly[3], np.float64)) < 0: n_ = -n_      # (the surface's own normal: its front)
+            d_ = float(np.dot(n_, V_[0]))
+            ax_ = int(np.argmax(np.abs(n_)))
+            bsp_planes.setdefault((tuple(np.round(n_ * 20).astype(int)), int(round(d_))), []).append((n_, d_, V_, ax_))
+    n_nudged = [0]
+    def coplanar_nudge(P, T, VN):
+        """P moved where its triangles T (k, 3) lie on a BSP face facing the same way (VN: vertex normals, world)"""
+        if not bsp_planes or not len(T): return P
+        A, B, C = P[T[:, 0]], P[T[:, 1]], P[T[:, 2]]
+        N = np.cross(B - A, C - A); L = np.linalg.norm(N, axis=1)
+        ok = L > 1e-3
+        N[ok] /= L[ok, None]
+        flip = np.einsum('ij,ij->i', N, VN[T[:, 0]] + VN[T[:, 1]] + VN[T[:, 2]]) < 0
+        N[flip] *= -1
+        D = np.einsum('ij,ij->i', N, A)
+        move = np.zeros_like(P)
+        for t in np.nonzero(ok)[0]:
+            nk = tuple(np.round(N[t] * 20).astype(int)); dk = int(round(D[t]))
+            hit = False
+            for dd in (0, -1, 1):
+                for n_, d_, V_, ax_ in bsp_planes.get((nk, dk + dd), ()):
+                    if np.dot(n_, N[t]) < 0.999 or abs(d_ - D[t]) > 0.5: continue
+                    c_ = (A[t] + B[t] + C[t]) / 3
+                    keep = [k for k in range(3) if k != ax_]
+                    q = V_[:, keep]; pt = c_[keep]
+                    e = np.roll(q, -1, 0) - q
+                    cr = e[:, 0] * (pt[1] - q[:, 1]) - e[:, 1] * (pt[0] - q[:, 0])
+                    if (cr >= -1e-3).all() or (cr <= 1e-3).all(): hit = True; break
+                if hit: break
+            if hit:
+                move[T[t]] = N[t] * COPLANAR_NUDGE; n_nudged[0] += 1
+        return P + move
     MERGE_CELL, MERGE_MAX = 4096.0, 60000
     def merge_add(si, mi, loc, rot, scale, mics, samples, flags_key):
         m_ = parsed[mi]; lod = m_['lods'][0]
@@ -846,6 +954,10 @@ def main():
         TX, TZ = turn(tx, False), turn(tz, True)
         mirrored = np.prod(scale) < 0
         if mirrored: TZ[:, 0] = np.where(TZ[:, 0] > 127, 0, 255)
+        if bsp_planes:
+            idx_all = np.frombuffer(lod['indices'][2], '>u2').reshape(-1, 3).astype(np.int64)
+            VN = TZ[:, [3, 2, 1]].astype(np.float64) / 127.5 - 1
+            P = coplanar_nudge(P, idx_all[(idx_all < nv).all(1)], VN)
         centre = P.mean(0)
         # (and by brightness: a vertex light map is 8 bits per vertex scaled to its brightest, so a dim piece in a
         # chunk with a bright one went black, and the bright one white)
@@ -929,6 +1041,7 @@ def main():
             for prop in ('CollideActors', 'BlockActors', 'BlockNonZeroExtent', 'BlockZeroExtent', 'BlockRigidBody'):
                 if cflags.get(prop) is False: d = set_property(p3, w, d, to, prop, b'\x00', 'BoolProperty')
             if cflags.get('CollideActors') is False: n_noncolliding += 1
+        if (si, ci) in scripted_components: continue  # (drawn by its copy: objcopy.scripted_mesh_actors)
         if args.merge and mi not in mover_keys:
             # merged into its cell's chunk (below): its triangles in world space, its light, its collision class
             flags_key = tuple(cflags.get(k_) is False for k_ in ('CollideActors', 'BlockActors', 'BlockNonZeroExtent', 'BlockZeroExtent', 'BlockRigidBody')) \
@@ -979,6 +1092,7 @@ def main():
         refs.append(w.add_export(p3.exports[tcomp]['class'], coll + 1, ('TrilogyMerged', k + 1), bytes(d) + tail, flags=tflags, archetype=tarch))
         m = np.eye(4); m[3, :3] = offset
         mats.append(struct.pack('>16f', *m.flatten()))
+    if n_nudged[0]: print(f'{n_nudged[0]} mesh triangles on BSP faces moved {COPLANAR_NUDGE} off them (no z-fighting)')
     if buckets: print(f'merged: {sum(len(b["P"]) for b in buckets.values())} mesh actors into {len(buckets)} chunks')
     for k, (si, bmats, bmesh) in enumerate(bsp_chunks):
         upk.E = '>'
@@ -1325,7 +1439,7 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
         starts_ = objcopy.player_starts(sp) if with_starts else []
         routes = objcopy.route_ends(sp)                 # (Routes: their last points, copied, stand for them)
         ends = [n for n in set(routes.values()) if sp.class_name(sp.exports[n]['class']) in objcopy.ACTOR_CLASSES]
-        wanted = objcopy.kismet_actors(sp, todo, objcopy.movers(sp) + objcopy.skeletal_actors(sp) + objcopy.sound_actors(sp) + lights_ + starts_ + ends)
+        wanted = objcopy.kismet_actors(sp, todo, objcopy.movers(sp) + sorted(objcopy.scripted_mesh_actors(sp)) + objcopy.skeletal_actors(sp) + objcopy.sound_actors(sp) + lights_ + starts_ + ends)
         copied = []
         for ai in wanted:
             cn = sp.class_name(sp.exports[ai]['class'])

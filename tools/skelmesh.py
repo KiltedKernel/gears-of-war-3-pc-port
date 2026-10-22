@@ -168,8 +168,9 @@ def _det_sign(x, y, z):
     return x[0] * cx[0] + x[1] * cx[1] + x[2] * cx[2]
 
 
-def lod_info(w, sections):
-    """LODInfo (one LOD) for a mesh with that many sections, as Gears 3's own meshes"""
+def lod_info(w, sections, extra=()):
+    """LODInfo (one LOD) for a mesh with that many sections, as Gears 3's own meshes; extra: more property records
+    (FaceFXAsset)"""
     import objcopy
     none = struct.pack('>ii', *w.name('None'))
     el = objcopy.encode(w, [
@@ -179,17 +180,17 @@ def lod_info(w, sections):
         ['bEnableShadowCasting', 'ArrayProperty', 0, b'', struct.pack('>i', sections) + b'\x01' * sections],
         ['TriangleSortSettings', 'ArrayProperty', 0, b'', struct.pack('>i', sections) + none * sections],
         ['bDisableCompressions', 'BoolProperty', 0, b'', b'\x00']])
-    return objcopy.encode(w, [['LODInfo', 'ArrayProperty', 0, b'', struct.pack('>i', 1) + el]])
+    return objcopy.encode(w, [['LODInfo', 'ArrayProperty', 0, b'', struct.pack('>i', 1) + el]] + list(extra))
 
 
-def to_828(w, m, materials, template_tail):
+def to_828(w, m, materials, template_tail, facefx=0):
     """Gears 3 SkeletalMesh serial data for a Gears 1 mesh (read_374; its first LOD), materials: destination refs
     (one per source material slot), template_tail: a Gears 3 mesh's read_828 'tail' (its constant part after the
     name map is reused). Returns (data, fixups) for upkwrite.add_export."""
     import numpy as np
     L = m['lods'][0]
     out = bytearray(struct.pack('>i', -1))              # NetIndex
-    out += lod_info(w, len(L['sections']))
+    out += lod_info(w, len(L['sections']), [['FaceFXAsset', 'ObjectProperty', 0, b'', struct.pack('>i', facefx)]] if facefx else ())
     out += struct.pack('>7f', *m['bounds'])
     out += struct.pack('>i', len(materials)) + b''.join(struct.pack('>i', r) for r in materials)
     out += struct.pack('>3f', *m['origin']) + struct.pack('>3i', *m['rot_origin'])

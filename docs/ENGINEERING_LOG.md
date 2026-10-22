@@ -2108,3 +2108,37 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   removed. A trace hook at stepUp's entry (GOW3_TRACE_STEP=1: the player's FCheckResult, Actor +4, Normal +20, Time
   +32, Component +40) shows stepUp is not called while the player is stuck; the few hits it logs are a walkable slope
   (normal 0, +-0.35, 0.94). Next: trace physWalking / the floor checks at small time steps. Workaround: frame_rate 120.
+
+## 2026-10-22: the cell doorway at 240 fps fixed: Gears 1's simple collision for pawns
+- **Cause.** Gears 1's pawns collided with a static mesh's simple collision (its RB_BodySetup AggGeom: convex hulls,
+  boxes; StaticMesh.UseSimpleBoxCollision, the default), never with its triangles. Converted meshes blocked pawns by
+  their triangles: the round pipes sunk in the cell threshold (COG_City_EBA_Pipe04, tops 2-4 units over the BSP
+  steps) became 20-degree slopes (stepUp's logged hit normal 0, +-0.35, 0.94) the player stuck on at 240 fps, where a
+  frame's move (~2 units) is the size of UE3's floor-distance adjustments; at 60 and 120 fps he crossed them.
+- **Fix.** bspconv.body_hulls reads a Gears 1 mesh's hulls (ConvexElems VertexData / FaceTriData; BoxElems TM + X, Y,
+  Z); levelinject puts every pawn-blocking mesh's hulls, in world space, into hidden collision meshes for pawns (one
+  per 4096-unit cell, both windings, BlockZeroExtent off: like the blocking volumes), and the mesh's own triangles stop
+  shots only (BlockNonZeroExtent off). --no-simple-collision: the old way. Prison: 1-459 meshes per section, ~2,700
+  hulls in all.
+- **Verified at 240 fps:** 16 lanes across the doorway (x 85-170, out and in) all pass in 0.9-1.4 s (before: almost
+  all stuck, varying between runs); the outer lanes stop at the jambs as at 60 fps. Easy route test passes (button,
+  Dom up both flights).
+
+## 2026-10-22: facial animation (FaceFX) in the converted cutscenes
+- **Gears 1's FaceFX animation sets load in Gears 3.** FaceFXAnimSet objects are copied with the deep copy (objcopy
+  DEEP_COPY): properties, then the FaceFX archive ("FACB", version 1600; Gears 3's are 1740) as a byte array and a
+  trailing int, the same layout in both games. Their ReferencedSoundCues are not copied (objcopy PROP_SKIP: set -> cue
+  -> set recursed without end; Gears 3's cooked sets have none). Copies are named after their owner
+  (Trilogy_COG_Dom_1_1_Prison_Intro: Dom's and Marcus's sets share names). In game each has an
+  InternalFaceFXAnimSet, as Gears 3's own (GOW3_LOG_PROPS="FaceFXAnimSet:InternalFaceFXAnimSet").
+- **Gears 1's FaceFX actors do not.** Marcus's and Dom's FaceFXAssets (cooked into WarfareGame.xxx; the levels'
+  imports of them name a broken outer, found by name) copied the same way keep FaceFXActor None, and the cutscene
+  components get no FaceFXActorInstance, even with Gears 3's own archive put inside (so not the version; cause open).
+- **Gears 3's classic actors do.** The converted cutscene meshes' FaceFXAsset is an import of Gears 3's
+  MPCH_COGMarcusG2MP_SF COG_MarcusFenix.marcus_FaceFX / MPCH_COGDomG2MP_SF COG_Dom.Dom_FaceFX (loaded with the chapter;
+  recipe facefx_assets, levelinject --facefx-assets): the components get a FaceFXActorInstance, and the opening's
+  InterpTrackFaceFX tracks play Gears 1's sets on them (their curves name the same nodes: Jaw_open, Mouth_*, the
+  eyebrows...). Dom's lines in the opening start 18.8-52 s in (1_1_Prison_Intro: Dom_Prison_01JackRipDoor ...
+  06HoffmanPardoned), Marcus's at 54 s (Prison_AnimSet Marcus_Prison_03Shit). A 0.1 s burst over Dom's "Not anymore"
+  (~147 s into a fresh run): his mouth opens and changes shape, closed throughout without FaceFX. The same model for
+  every later chapter: Gears 1/2 animation sets on Gears 3's classic character actors.

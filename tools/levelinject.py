@@ -29,6 +29,14 @@ imported_skel = {}          # (source index, import ref) -> (source index, expor
 _aux = {}
 
 
+def _aux_package(sp, name):
+    """a Gears 1 package beside source sp, by name (cached with g1_import's), or None"""
+    if name not in _aux:
+        f = os.path.join(os.path.dirname(os.path.abspath(sp.filename)), name + '.xxx')
+        _aux[name] = upk.Package(f) if os.path.isfile(f) else None
+    return _aux[name]
+
+
 def g1_import(srcs, si, ref, want_class):
     """an import of source si, as (source index, export index) in the Gears 1 package that has it: the package named
     after the import's outer, else WarfareGame.xxx (Gears 1's always-loaded content); that package joins the sources
@@ -168,6 +176,8 @@ def main():
     ap.add_argument('--shared-textures', default=None, help="a chapter's texture package: converted textures are imports of "
                     "it, recorded in --texture-manifest for trilogy.py to write")
     ap.add_argument('--texture-manifest', default=None)
+    ap.add_argument('--facefx-assets', default='', help='"G1 FaceFX asset name=package.xxx:object path;...": the cutscene meshes take these Gears 3 FaceFX actors')
+    ap.add_argument('--no-simple-collision', action='store_true', help='Gears 1 meshes block pawns by their triangles, not by their simple collision (BodySetup hulls)')
     ap.add_argument('--merge', action='store_true', help='mesh actors joined into one mesh per 4096-unit cell and collision class (fewer draws)')
     ap.add_argument('--no-point-lights', action='store_true', help="do not bake the source level's dynamic point lights")
     ap.add_argument('--no-collision', action='store_true', help="keep the template's collision flags")
@@ -721,6 +731,51 @@ def main():
             return skel_cache[key]
         print('skeletal material template:', sp_.path(skel_tmic) if skel_tmic is not None else None, '(kit)' if pk is not None else '')
         skflags = struct.unpack_from('>Q', p3.data, p3.exports[tsk]['entry'] + 24)[0]
+        # the mesh's FaceFX actor (facial animation, lip sync): Gears 1's FaceFXAsset copied as it is (both games
+        # serialize properties, then the FaceFX archive "FACB" + version, Gears 1 1600, Gears 3 1740, as a byte
+        # array and a trailing int). Marcus's and Dom's are cooked into WarfareGame.xxx; the levels' imports of them
+        # name a broken outer, so they are found by name
+        facefx_cache = {}
+        # --facefx-assets "G1 asset name=package.xxx:object path;...": Gears 3's own FaceFX actors for those (Gears 1's
+        # copied assets load no FaceFX actor in Gears 3: FaceFXActor stays None, no instance on the component; the
+        # Gears 1 animation sets do load, and their curves name the same face graph nodes as Gears 3's classic
+        # Marcus and Dom)
+        facefx_map = {}
+        for part in filter(None, (args.facefx_assets or '').split(';')):
+            k_, v_ = part.split('=', 1); f_, o_ = v_.rsplit(':', 1)
+            facefx_map[k_.strip()] = (f_.strip(), o_.strip())
+        def facefx_asset(si_, mi_):
+            sp_ = srcs[si_]
+            try: ref_ = {n_: v_ for n_, t_, k_, v_ in props_at(sp_, sp_.export_data(mi_))[1]}.get('FaceFXAsset', 0)
+            except ValueError: return 0
+            if not ref_: return 0
+            if ref_ > 0: fsp, fi = sp_, ref_ - 1
+            else:
+                name_ = sp_.imports[-ref_ - 1]['name']
+                fsp = fi = None
+                for cand in [sp_] + [x for x in srcs if x is not sp_] + [_aux_package(sp_, 'WarfareGame')]:
+                    if cand is None: continue
+                    fi = next((i_ for i_, e_ in enumerate(cand.exports) if e_['name'] == name_ and cand.class_name(e_['class']) == 'FaceFXAsset'), None)
+                    if fi is not None: fsp = cand; break
+                if fsp is None: print(f'FaceFX asset {name_}: not found'); return 0
+            name_ = fsp.exports[fi]['name']
+            if name_ in facefx_map:                   # a Gears 3 asset instead (--facefx-assets): an import of it
+                if name_ not in facefx_cache:
+                    f_, opath = facefx_map[name_]
+                    gp = upk.Package(f_)
+                    gi = next(k for k in range(len(gp.exports)) if gp.path(k) == opath and gp.class_name(gp.exports[k]['class']) == 'FaceFXAsset')
+                    facefx_cache[name_] = materialconv.import_object(w, p3, gp, gi, {})
+                    print(f'FaceFX asset for {sp_.path(mi_)}: Gears 3 {opath} ({os.path.basename(f_)})')
+                return facefx_cache[name_]
+            key_ = (fsp.filename, fi)
+            if key_ not in facefx_cache:
+                d_ = fsp.export_data(fi)
+                end_ = fsp.properties(d_, 4)[1]
+                import levelpkg
+                facefx_cache[key_] = w.add_export(levelpkg.class_import(p3, w, 'FaceFXAsset'), 0, ('Trilogy_' + fsp.exports[fi]['name'], 0),
+                                                  struct.pack('>i', -1) + objcopy.encode(w, []) + d_[end_:], flags=mflags)
+                print(f'FaceFX asset {fsp.path(fi)} ({len(d_) - end_} bytes) for {sp_.path(mi_)}')
+            return facefx_cache[key_]
         for (si, mi), sk in skel_meshes.items():
             path = srcs[si].path(mi)
             if path in mesh_by_name: new_mesh[(si, mi)] = mesh_by_name[path]; continue
@@ -732,7 +787,7 @@ def main():
             b_[3:6] = [max(x, SKEL_MIN_EXTENT) for x in b_[3:6]]
             b_[6] = max(b_[6], float(np.linalg.norm(b_[3:6])))
             sk = dict(sk, bounds=tuple(b_))
-            data, fix = skelmesh.to_828(w, sk, mats_, ttail)
+            data, fix = skelmesh.to_828(w, sk, mats_, ttail, facefx_asset(si, mi))
             new_mesh[(si, mi)] = mesh_by_name[path] = w.add_export(p3.exports[tsk]['class'], 0, ('Trilogy_' + path.split('.')[-1], 0), data, flags=skflags, fixups=fix)
         print(f'{len(skel_meshes)} skeletal meshes converted (template tail: {p3.path(tsk)})')
     # components
@@ -769,8 +824,8 @@ def main():
         Nw /= np.linalg.norm(Nw, axis=1, keepdims=True) + 1e-9
         return (P * scale) @ R + loc, Nw
     refs, mats, lit, all_samples = [], [], 0, []
-    n_unlit = n_noncolliding = n_pawn_through = 0
-    simple_box_cache = {}
+    n_unlit = n_noncolliding = n_pawn_through = n_simple = 0
+    simple_box_cache, hull_cache, body_parts = {}, {}, []
     # --merge: the level's mesh actors joined into one mesh per 4096-unit cell and collision class (each a component
     # of its own: thousands of components were thousands of draws, the render thread held the frame rate down where
     # the view took in much of a section). Vertex light maps join with them (light per vertex).
@@ -860,6 +915,17 @@ def main():
                 simple_box_cache[mi] = not mp_.get('BodySetup') and mp_.get('UseSimpleBoxCollision', True) is not False
             if simple_box_cache[mi] and cflags.get('BlockNonZeroExtent') is not False:
                 cflags['BlockNonZeroExtent'] = False; n_pawn_through += 1
+            # a mesh with simple collision blocked Gears 1's pawns by it (boxes, convex hulls), not by its triangles:
+            # pawns collide with a hidden mesh of those hulls (below), the mesh's own triangles stop shots only. By
+            # the triangles, the round pipes sunk in the prison's cell threshold were 20-degree slopes 2-4 units high
+            # that the player stuck on walking at 240 fps
+            elif not args.no_simple_collision and all(cflags.get(k_) is not False for k_ in ('CollideActors', 'BlockActors', 'BlockNonZeroExtent')):
+                if mi not in hull_cache: hull_cache[mi] = bspconv.body_hulls(srcs[mi[0]], mi[1])
+                if hull_cache[mi]:
+                    R_ = rotation_matrix(*rot)
+                    for V_, T_ in hull_cache[mi]:
+                        body_parts.append(((V_ * scale) @ R_ + loc, T_))
+                    cflags['BlockNonZeroExtent'] = False; n_simple += 1
             for prop in ('CollideActors', 'BlockActors', 'BlockNonZeroExtent', 'BlockZeroExtent', 'BlockRigidBody'):
                 if cflags.get(prop) is False: d = set_property(p3, w, d, to, prop, b'\x00', 'BoolProperty')
             if cflags.get('CollideActors') is False: n_noncolliding += 1
@@ -954,6 +1020,39 @@ def main():
                 mats.append(struct.pack('>16f', *m.flatten()))
                 n_volumes += 1
         print(f'{n_volumes} blocking volumes as hidden collision meshes')
+    # the meshes' simple collision (bspconv.body_hulls, gathered above): hidden collision meshes for pawns, one per
+    # 4096-unit cell (up to 30000 vertices each), both windings as the volumes'
+    n_bodies = 0
+    if body_parts:
+        cells = {}
+        for P_, T_ in body_parts:
+            cells.setdefault(tuple(np.floor(P_.mean(0) / 4096.0).astype(int)), []).append((P_, T_))
+        for key in sorted(cells):
+            chunk, P_all, idx, nv = [], [], [], 0
+            for P_, T_ in cells[key] + [(None, None)]:
+                if P_ is None or nv + len(P_) > 30000:
+                    if idx: chunk.append(bspconv.collision_mesh(np.concatenate(P_all), idx))
+                    P_all, idx, nv = [], [], 0
+                    if P_ is None: break
+                for t in range(0, len(T_) - 2, 3):
+                    a_, b_, c_ = nv + T_[t], nv + T_[t + 1], nv + T_[t + 2]
+                    idx += [a_, b_, c_, a_, c_, b_]
+                P_all.append(P_); nv += len(P_)
+            for mesh_ in chunk:
+                upk.E = '>'
+                data = per_poly_collision(meshconv.to_828(p3, tmesh, mesh_, [None]))
+                mref = w.add_export(p3.exports[tmesh]['class'], 0, ('Trilogy_Body', n_bodies + 1), data, flags=mflags)
+                d = bytearray(td[:tend])
+                struct.pack_into('>i', d, sm_off, mref)
+                struct.pack_into('>3f', d, sc_off, 1.0, 1.0, 1.0)
+                if vis_off: struct.pack_into('>i', d, vis_off, -1)
+                for prop, value in (('HiddenGame', b'\x01'), ('CastShadow', b'\x00'), ('BlockZeroExtent', b'\x00')):
+                    d = set_property(p3, w, d, to, prop, value, 'BoolProperty')
+                refs.append(w.add_export(p3.exports[tcomp]['class'], coll + 1, ('TrilogyBody', n_bodies + 1), bytes(d) + bytes(4), flags=tflags, archetype=tarch))
+                m = np.eye(4); m[3, :3] = offset
+                mats.append(struct.pack('>16f', *m.flatten()))
+                n_bodies += 1
+        print(f'{n_simple} meshes collide with pawns by their Gears 1 simple collision: {len(body_parts)} hulls in {n_bodies} hidden meshes')
     # spawn points: a start whose capsule (half height about 90) would be in a converted floor is lifted above it
     if args.fix_starts and bsp_chunks:
         floors = [(pts, n) for surf, pts, uv, n, light in polys if n[2] > 0.7]

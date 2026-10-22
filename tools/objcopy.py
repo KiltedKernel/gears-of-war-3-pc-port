@@ -50,6 +50,9 @@ CLASS_RENAME = {} if os.environ.get('OBJCOPY_NO_RENAME') else {
 # ("Actor is static" logged through a null output device, sub_8243CDE8 from sub_82A5FBE0): enemies need their own mapping
 # ops that act on the player's controller: a SeqVar_Marcus linked only by these becomes Gears 3's GearSeqVar_Player
 PLAYER_CONTROL_OPS = {'SeqAct_ToggleCinematicMode', 'SeqAct_ToggleHUD', 'SeqAct_ToggleInput'}
+# Gears 1 properties not copied: a FaceFX animation set's ReferencedSoundCues (the cook's bookkeeping, absent from
+# Gears 3's cooked sets; copied, set -> cue -> set recursed without end)
+PROP_SKIP = {'ReferencedSoundCues'}
 SKIP_CLASSES = set(filter(None, os.environ.get('OBJCOPY_SKIP', '').split(',')))   # (debugging)
 EDITOR_COMPONENTS = {'DrawFrustumComponent', 'DrawLightConeComponent', 'DrawLightRadiusComponent', 'ArrowComponent',
                      'SpriteComponent', 'DrawBoxComponent', 'DrawSphereComponent', 'DrawCylinderComponent'}
@@ -150,7 +153,12 @@ class Copier:
     def deep_copy(self, i):
         """export i (an AnimSet...) and everything under it, copied when first referenced: a top-level object of the
         destination (its source outer is the asset's package), named Trilogy_<name>"""
-        made = self.copy(self.plan([i]), {self.s.exports[i]['outer']: 0}, rename={i: 'Trilogy_' + self.s.exports[i]['name']})
+        e = self.s.exports[i]
+        name = 'Trilogy_' + e['name']
+        if self.s.class_name(e['class']) == 'FaceFXAnimSet' and e['outer'] > 0:
+            # (Dom's and Marcus's sets share names: COG_Dom.Prison, COG_MarcusFenix.Prison; one shadowed the other)
+            name = 'Trilogy_' + self.s.exports[e['outer'] - 1]['name'] + '_' + e['name']
+        made = self.copy(self.plan([i]), {e['outer']: 0}, rename={i: name})
         return made.get(i, 0)
 
     def import_like(self, r):
@@ -204,6 +212,7 @@ class Copier:
                 value = bytes([1 if struct.unpack_from('>i', d, o)[0] else 0]); o += 4; size_out = 0
                 out += self.tag(name, typ, size_out, index) + value; continue
             raw = d[o:o + size]; o += size
+            if name in PROP_SKIP: continue
             if typ == 'ByteProperty':
                 # an enum (Gears 3's declaration): the enum's name in the tag, the value's name as the data, as
                 # Gears 3 writes them; other bytes as they are
@@ -517,7 +526,7 @@ class Copier:
                 # unless known as components): the object is dropped; written with empty properties and its raw
                 # native data, the load hung
                 try: self.props(self.s.export_data(i), self.PRELUDE_374[kind])
-                except Exception: cls = 0; self.unconvertible[cn] = self.unconvertible.get(cn, 0) + 1
+                except Exception as ex_: cls = 0; k_ = f'{cn} ({type(ex_).__name__}: {ex_})'; self.unconvertible[k_] = self.unconvertible.get(k_, 0) + 1
             if cls and cn == 'SeqAct_AIFactory':
                 before = set(getattr(self, 'missing_pawns', set()))
                 self.missing_pawns = set()                  # (the convertibility check above already ran it)
@@ -1553,7 +1562,9 @@ FIXUPS['InterpTrackFloatProp'] = float_prop_brightness
 
 
 # Gears 1 assets copied when something copied refers to them (animation sets: Matinee groups, components)
-DEEP_COPY = {'AnimSet', 'SoundCue', 'SoundNodeWave'}
+# FaceFX animation sets (InterpTrackFaceFX, SoundCues' FaceFXAnimSetRef): properties, then the FaceFX archive as
+# Gears 3's (copied as it is)
+DEEP_COPY = {'AnimSet', 'SoundCue', 'SoundNodeWave', 'FaceFXAnimSet'}
 # native data after the properties: an AnimSequence's raw animation (empty when cooked: a count of 0) comes before
 # the compressed byte stream in Gears 3 (Gears 1 serializes only the byte stream); the keys (ConstantKeyLerp:
 # CompressedTrackOffsets of 4 ints per track, translation ACF_None, rotation Float96NoW...) are Gears 3's defaults

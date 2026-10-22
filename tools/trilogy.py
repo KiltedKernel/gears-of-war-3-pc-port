@@ -326,6 +326,13 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         common += ['--skin-material', os.path.join(g3cooked, pkg_ + '.xxx') + ':' + mic_]
     if ch.get('max_texture'): common += ['--max-texture', ch['max_texture']]
     if ch.get('light_scale'): common += ['--light-scale', ch['light_scale']]
+    if ch.get('facefx_assets'):                       # (G1 name = package: object path, ...) Gears 3 FaceFX actors
+        parts_ = []
+        for x in ch['facefx_assets'].split(','):
+            if not x.strip(): continue
+            k_, v_ = x.split('=', 1); pkg_, obj_ = (y.strip() for y in v_.split(':', 1))
+            parts_.append(f"{k_.strip()}={os.path.join(g3cooked, pkg_ + '.xxx')}:{obj_}")
+        common += ['--facefx-assets', ';'.join(parts_)]
     if ch.get('hair_material'):                       # (package: MIC path) masked skeletal materials' parent (hair)
         pkg_, mic_ = (x.strip() for x in ch['hair_material'].split(':', 1))
         common += ['--hair-material', os.path.join(g3cooked, pkg_ + '.xxx') + ':' + mic_]

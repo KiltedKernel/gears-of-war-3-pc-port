@@ -132,6 +132,63 @@ def chunk_meshes(m, polys, cell=4096.0, max_vertices=60000):
 THIN_SLABS_KEEP = bool(os.environ.get('GOW3_THIN_SLABS_KEEP'))
 
 
+def collision_mesh(P, idx):
+    """a collision-only mesh (mesh dict like build_mesh's, no material) of world-space points P and triangle indices"""
+    n = len(P)
+    tx = pack_normal(np.repeat(np.array([[1.0, 0, 0]]), n, 0)); tz = pack_normal(np.repeat(np.array([[0, 0, 1.0]]), n, 0))
+    uvh = np.zeros((n, 1, 2), '>f2')
+    verts = np.concatenate([tx, tz, np.frombuffer(uvh.tobytes(), np.uint8).reshape(n, 4)], 1)
+    lo, hi = P.min(0), P.max(0)
+    centre, ext = (lo + hi) / 2, (hi - lo) / 2
+    return {'version': 828, 'props': {}, 'bounds': (*centre, *ext, float(np.linalg.norm(ext))),
+            'lods': [{'positions': (12, n, (12, n, np.asarray(P).astype('>f4').tobytes())),
+                      'vertices': (1, 12, n, 0, (12, n, verts.tobytes())),
+                      'indices': (2, len(idx), struct.pack(f'>{len(idx)}H', *idx)),
+                      'wireframe': (2, 0, b''),
+                      'elements': [{'first_index': 0, 'triangles': len(idx) // 3, 'min_vertex': 0, 'max_vertex': n - 1}],
+                      'materials_374': [0]}]}
+
+
+def body_hulls(p, mesh):
+    """a Gears 1 StaticMesh's simple collision (its RB_BodySetup's AggGeom: ConvexElems' VertexData / FaceTriData and
+    BoxElems' TM + X, Y, Z) as [(points (k, 3) in mesh space, triangle index list)], or None when it has none. Gears 1
+    pawns collided with these, never with the mesh's triangles (UseSimpleBoxCollision)"""
+    import levelinject, materialconv
+    try:
+        a = {n: v for n, t, k, v in levelinject.props_at(p, p.export_data(mesh))[1]}
+    except ValueError:
+        return None
+    bs = a.get('BodySetup', 0)
+    if not bs or bs <= 0 or a.get('UseSimpleBoxCollision', True) is False: return None
+    try:
+        recs, _ = materialconv.raw_props(p, p.export_data(bs - 1), 4)
+        agg = next((r[4] for r in recs if r[0] == 'AggGeom'), None)
+        if agg is None: return None
+        sub, _ = materialconv.raw_props(p, agg, 0)
+    except Exception:
+        return None
+    out = []
+    for name, typ, index, extra, raw in sub:
+        n_ = struct.unpack_from('>i', raw, 0)[0] if len(raw) >= 4 else 0
+        o_ = 4
+        for _ in range(n_):
+            el, o_ = materialconv.raw_props(p, raw, o_)
+            r_ = {x[0]: x[4] for x in el}
+            if name == 'ConvexElems' and 'VertexData' in r_ and 'FaceTriData' in r_:
+                nv = struct.unpack_from('>i', r_['VertexData'], 0)[0]
+                V = np.array(struct.unpack_from(f'>{3 * nv}f', r_['VertexData'], 4), np.float64).reshape(nv, 3)
+                nt = struct.unpack_from('>i', r_['FaceTriData'], 0)[0]
+                out.append((V, list(struct.unpack_from(f'>{nt}i', r_['FaceTriData'], 4))))
+            elif name == 'BoxElems' and 'X' in r_:
+                M = np.array(struct.unpack('>16f', r_['TM'][:64]), np.float64).reshape(4, 4) if 'TM' in r_ else np.eye(4)
+                h = np.array([struct.unpack('>f', r_[k][:4])[0] / 2 for k in ('X', 'Y', 'Z')])
+                C = np.array([[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)], np.float64) * h
+                V = C @ M[:3, :3] + M[3, :3]
+                quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+                out.append((V, [i for a_, b_, c_, d_ in quads for i in (a_, b_, c_, a_, c_, d_)]))
+    return out or None
+
+
 def blocking_volumes(p):
     """a Gears 1 level's BlockingVolumes as collision meshes ({'name', mesh dict like build_mesh's}): their brushes'
     convex elements (BrushComponent.BrushAggGeom.ConvexElems: VertexData, FaceTriData), placed in the world
@@ -181,18 +238,7 @@ def blocking_volumes(p):
         # cell's doorway: 26 units). (GOW3_THIN_SLABS_KEEP=1 keeps them: tried for the doorway's high-frame-rate
         # sticking, 2026-10-21, no better)
         if not THIN_SLABS_KEEP and P[:, 2].max() - P[:, 2].min() < 48: continue
-        tx = pack_normal(np.repeat(np.array([[1.0, 0, 0]]), n, 0)); tz = pack_normal(np.repeat(np.array([[0, 0, 1.0]]), n, 0))
-        uvh = np.zeros((n, 1, 2), '>f2')
-        verts = np.concatenate([tx, tz, np.frombuffer(uvh.tobytes(), np.uint8).reshape(n, 4)], 1)
-        lo, hi = P.min(0), P.max(0)
-        centre, ext = (lo + hi) / 2, (hi - lo) / 2
-        mesh = {'version': 828, 'props': {}, 'bounds': (*centre, *ext, float(np.linalg.norm(ext))),
-                'lods': [{'positions': (12, n, (12, n, P.astype('>f4').tobytes())),
-                          'vertices': (1, 12, n, 0, (12, n, verts.tobytes())),
-                          'indices': (2, len(idx), struct.pack(f'>{len(idx)}H', *idx)),
-                          'wireframe': (2, 0, b''),
-                          'elements': [{'first_index': 0, 'triangles': len(idx) // 3, 'min_vertex': 0, 'max_vertex': n - 1}],
-                          'materials_374': [0]}]}
+        mesh = collision_mesh(P, idx)
         out.append({'name': e['name'], 'mesh': mesh})
     return out
 

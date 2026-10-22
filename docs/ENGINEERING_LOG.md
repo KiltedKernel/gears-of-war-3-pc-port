@@ -2195,3 +2195,20 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - **The debris in the sky over the right route's catwalk: not identified.** easyCoverRoom's InterpActor_4 is the King
   Raven of the ceiling collapse's flyby (hidden until then, destroyed after); InterpActor_0, a hidden block Dom looks at,
   stays hidden. Gears 1's KActors (the collapse's falling cover blocks) are not converted.
+
+## 2026-10-22 (evening): Dom's flailing arms (round 19, shot 4), not solved
+
+- Seen in test: at the path choice Dom (GearPawn_COGDomG2MP, the multiplayer classic Dom) stands still, turning in
+  place, and between screenshots 0.25 s apart his arms switch between the rifle at his chest and both arms swung out
+  with the rifle low. Not seen in that run with the campaign class (GearPawn_COGDom, Summer Dom mesh; a test recipe
+  with pawn_classes Pawn_COGDom=GearPawn_COGDom), which held the rifle at the chest in every frame (fewer frames: the
+  game's screenshots at 2560x1440 land about every 0.25 s at best).
+- Ruled out: the anim sets (the multiplayer base adds only AnimSetMarcus_CamSkel_Multiplayer = one Leader_Shout), the
+  physics assets (same bodies, same flags), the controller (Gears 1's WarAI_Dom -> GearAI_Dom), Kismet (nothing acts on
+  Dom then), and bForceStretchToMarcusSkeleton (GearPawn_HumanBaseMPBase default True -> SetAnimRotationOnly gives the
+  mesh AnimRotationOnly 2, the campaign's GearPawn_Infantry 1): a runtime experiment cleared it and set 1 on both
+  classic pawns while the chapter was loaded (logged as applied) and the arms still switched. Reverted.
+- Left: the classic Dom mesh itself (COG_Dom.Game.COG_Dom_Game_CamSkel) under the campaign AI's animations; the
+  switch may also be an idle fidget rather than the user's flail while running. Needs a clip of the flail.
+- um win record failed on gow3 (h264_nvenc "Frame Dimension less than the minimum" with --exe and with the main
+  window's --hwnd: the capture sees a tiny frame).

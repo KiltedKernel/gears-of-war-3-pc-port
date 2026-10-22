@@ -2212,3 +2212,22 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   switch may also be an idle fidget rather than the user's flail while running. Needs a clip of the flail.
 - um win record failed on gow3 (h264_nvenc "Frame Dimension less than the minimum" with --exe and with the main
   window's --hwnd: the capture sees a tiny frame).
+
+### Dom's arms, continued (the user's clip, 2026-10-22 night)
+
+- The user's video (cell to the right path) shows the flail clearly: after the path choice Dom runs with his arms
+  pumping as if unarmed, the Lancer stuck in his right hand swinging with it, the left hand never on the gun. The
+  standing pose switch above was an idle fidget, not this.
+- Reproduced by script (scratch domrun.txt: g1_chapter1_easy.txt to `choose R`, then `face -1210 1227`, shots every
+  0.33 s from 256.5 s): the multiplayer Dom (GearPawn_COGDomG2MP) flails; the campaign Dom (GearPawn_COGDom) runs
+  with the rifle at his chest.
+- Ruled out with the running test: bForceStretchToMarcusSkeleton / AnimRotationOnly (runtime experiment again,
+  reverted), firing (AmmoUsedCount 0), melee (bDoingMeleeAttack 0), the AI (same GearAI_Dom state and commands,
+  both bIsInCombat 1), the comm-link special move (SM_UsingCommLink = 106 shows in a byte next to SpecialMove in both
+  runs, but bUsingCommLink stays 0), the skeleton (every body bone matches; only face bones differ), class script (the
+  classic Dom classes have none; the multiplayer base's five functions are rim shading, knockdown, anim rotation).
+  Both Doms re-equip their weapon at the choice (WeaponEquipping -> Active).
+- Not separated yet: the weapon. The campaign class adds its DefaultInventory and equips a Hammerburst
+  (GearWeap_LocustAssaultRifle); the multiplayer Dom has Gears 1's Lancer (GearWeap_AssaultRifle). Next: a variant
+  with the same weapon on both (or the classic Dom with a Hammerburst) to tell the class from the weapon.
+- Fallback that works now: pawn_classes Pawn_COGDom=GearPawn_COGDom (Gears 3's own Dom, not the classic look).

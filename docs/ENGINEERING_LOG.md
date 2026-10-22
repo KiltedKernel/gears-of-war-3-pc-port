@@ -2088,3 +2088,23 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   head moves; missing: Blink_Left/Right, Gaze_Eye_Yaw, Emphasis/Orientation_Head_Roll/Yaw). Plan: carry the anim sets'
   raw archives over, convert the tracks and the SoundCues' FaceFX references, and play them on Gears 3's classic
   character actors (cutscene and gameplay alike), the same for Gears 2.
+
+## 2026-10-21 (later): the user's screenshots: pickup glint on debris; the cell doorway at 240 fps, open
+- **Debris and rubble flashing like collectibles.** The masked materials are copies of SP_Azura2_02_S's
+  MI_COG_Collectibles_Azura (M_DiscoverPickups_MASTER_MASKED), whose vector parameter ShimmerColor defaults to
+  (70, 50, 40): the pickup glint. materialconv.clone_static_mic takes vector parameters (with the base material's
+  ExpressionGUIDs); the copies set ShimmerColor black (levelinject MASKED_VECTORS). Easy-route run: no flashes on the
+  corridor's paper (the pink-white left in shots is Gears 1's light shaft).
+- **Movers and props follow Gears 1's collision rule too** (objcopy.pawns_pass): a mesh with no BodySetup that keeps
+  UseSimpleBoxCollision never blocked pawns; the opening's door peephole, Hammerburst and wood props now let them pass.
+- **The cell doorway at 240 fps: still open.** The user still stuck on its lip at the doorway's sides. Lanes across
+  the doorway (teleport into the cell, walkto out, and back): at 60 and 120 fps x = 85 and 170 pass both ways; at
+  240 fps most lanes stop at y ~785 (out) and ~897 (in), and the outcome varies between runs (the centre line passed
+  in some, not others). Tried, no better: the threshold's thin Gears 1 blocking slab kept (BlockingVolume_1, flat at
+  z 128 over pipes sunk in the BSP steps; bspconv GOW3_THIN_SLABS_KEEP=1), the cutscene's skeletal actors and movers
+  without collision (patched copy), and stepUp's retry threshold scaled to the frame rate. UE3's stepUp is
+  sub_8260B988 (and sub_8260BF70): it reads 0.08 and 144 (Hit.Time * Delta.SizeSquared() > 144) from the constant
+  pool at 0x820CD470 (+2728, +2920); the threshold hook (0x8260BC48 f0, 0x8260C0A4 f13) changed nothing and was
+  removed. A trace hook at stepUp's entry (GOW3_TRACE_STEP=1: the player's FCheckResult, Actor +4, Normal +20, Time
+  +32, Component +40) shows stepUp is not called while the player is stuck; the few hits it logs are a walkable slope
+  (normal 0, +-0.35, 0.94). Next: trace physWalking / the floor checks at small time steps. Workaround: frame_rate 120.

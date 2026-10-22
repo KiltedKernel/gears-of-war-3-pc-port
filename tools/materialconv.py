@@ -469,7 +469,7 @@ def child_mic(w, p3, pk, kit_mic, parent_ref, textures, scalars=None):
     return d[:o] + encode_props(w, props)
 
 
-def clone_static_mic(w, p3, pk, mic, textures, cache):
+def clone_static_mic(w, p3, pk, mic, textures, cache, vectors=None):
     """serial data for a copy of MaterialInstanceConstant `mic` of package pk WITH its static permutation (a child
     instance of a static-permutation instance draws with the base material's default permutation instead: Dom's hair
     as a child of the classic Dom's masked hair drew the default material, white): its texture parameters in textures
@@ -477,7 +477,8 @@ def clone_static_mic(w, p3, pk, mic, textures, cache):
     uniform-expression textures) re-made as imports in w (the game finds the permutation's compiled shaders by its
     id, in pk's shader cache, which must be loaded). The permutation (Gears 3, 828): ... CompileErrors, a map, max
     texture dependency length, Id (GUID), user texcoords, uniform-expression textures (count + refs at 32); then
-    the static parameters, whose switch entries (FName, value, override, GUID) name parameters"""
+    the static parameters, whose switch entries (FName, value, override, GUID) name parameters. vectors: vector
+    parameters ({name: (r, g, b, a)}) set on the copy (with the base material's ExpressionGUIDs, when pk holds it)"""
     d = pk.export_data(mic)
     recs, end = raw_props(pk, d, 4)
     if pk is p3: ref = lambda r: r                          # (an instance of the package being written: as it is)
@@ -505,6 +506,20 @@ def clone_static_mic(w, p3, pk, mic, textures, cache):
         elif typ == 'ObjectProperty': val = struct.pack('>i', ref(struct.unpack('>i', val)[0]))
         elif typ == 'NameProperty': val = nm(val)
         props.append([name, typ, index, extra, val])
+    if vectors:
+        base = mic
+        while base >= 0 and pk.class_name(pk.exports[base]['class']) == 'MaterialInstanceConstant':
+            prs, _ = raw_props(pk, pk.export_data(base), 4)
+            base = next((struct.unpack('>i', r[4])[0] for r in prs if r[0] == 'Parent'), 0) - 1
+        guids = material_param_guids(pk, base) if base >= 0 else {}
+        els = [encode_props(w, [['ParameterName', 'NameProperty', 0, b'', fname_bytes(w, n_)],
+                                ['ParameterValue', 'StructProperty', 0, fname_bytes(w, 'LinearColor'), struct.pack('>4f', *v_)],
+                                ['ExpressionGUID', 'StructProperty', 0, fname_bytes(w, 'Guid'), guids[n_]]])
+               for n_, v_ in vectors.items() if n_ in guids]
+        if els:
+            old_ = next((r for r in props if r[0] == 'VectorParameterValues'), None)
+            if old_ is None: props.insert(0, ['VectorParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(els)) + b''.join(els)])
+            else: old_[4] = struct.pack('>i', struct.unpack_from('>i', old_[4], 0)[0] + len(els)) + old_[4][4:] + b''.join(els)
     tail = bytearray(d[end:])
     n = struct.unpack_from('>i', tail, 32)[0]
     for k in range(n):

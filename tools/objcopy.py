@@ -573,6 +573,8 @@ class Copier:
                                  and self.s.exports[i]['outer'] > 0
                                  and self.s.exports[self.s.exports[i]['outer'] - 1]['name'] in NO_COLLISION):
                 props = no_collision(self, props, kind)
+            elif kind == 'component' and cn == 'StaticMeshComponent' and pawns_pass(self.s, i):
+                props = not_blocking_pawns(self, props)
             if i in getattr(self, 'current_named', {}): props = named_squad_var(self, props)
             elif cn in FIXUPS and i not in getattr(self, 'passthrough_src', ()): props = FIXUPS[cn](self, props)
             if i in getattr(self, 'passthrough_src', ()):
@@ -1469,6 +1471,33 @@ def no_collision(c, props, kind):
     recs, _ = parse828(props, 0, wname)
     recs = [r for r in recs if r[0] not in names] + [[n, 'BoolProperty', 0, b'', b'\x00'] for n in names]
     print(f'no_collision: {c.s.path(c.current_src)}')
+    return encode(c.w, recs)
+
+
+# A Gears 1 static mesh with no simple collision (BodySetup) that keeps UseSimpleBoxCollision (the default) never
+# blocked a pawn (a box check against it finds nothing); converted, it blocks by its triangles. The movers' and props'
+# components follow Gears 1 (levelinject does the same for the level's meshes): the opening's cell door peephole and
+# Hammerburst props, left in the cell doorway, stopped the player walking out at high frame rates
+def pawns_pass(s, i):
+    if s.version != 374: return False
+    import levelinject
+    try:
+        c = {n: v for n, t, k, v in levelinject.props_at(s, s.export_data(i), (8, 4, 12))[1]}
+        if c.get('BlockNonZeroExtent') is False or c.get('CollideActors') is False: return False
+        mesh = c.get('StaticMesh', 0)
+        if not mesh or mesh <= 0: return False
+        try: m = {n: v for n, t, k, v in levelinject.props_at(s, s.export_data(mesh - 1))[1]}
+        except ValueError: m = {}                       # no properties: all defaults (no BodySetup)
+        return not m.get('BodySetup') and m.get('UseSimpleBoxCollision', True) is not False
+    except Exception:
+        return False
+
+
+def not_blocking_pawns(c, props):
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] != 'BlockNonZeroExtent'] + [['BlockNonZeroExtent', 'BoolProperty', 0, b'', b'\x00']]
+    c.pawns_pass = getattr(c, 'pawns_pass', 0) + 1
     return encode(c.w, recs)
 
 

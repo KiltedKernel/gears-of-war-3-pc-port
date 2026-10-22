@@ -61,3 +61,9 @@ name = "GoW3AmbientOcclusionHook"
 address = 0x827C9628
 registers = ["r11"]
 after_instruction = true
+
+# (debugging) GOW3_TRACE_STEP=1: what the player's walking ran into (stepUp's hit result)
+[[midasm_hook]]
+name = "GoW3StepUpTraceHook"
+address = 0x8260B988
+registers = ["r3", "r7"]

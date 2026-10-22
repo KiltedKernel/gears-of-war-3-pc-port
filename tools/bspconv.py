@@ -128,6 +128,10 @@ def chunk_meshes(m, polys, cell=4096.0, max_vertices=60000):
     return out
 
 
+# (testing) GOW3_THIN_SLABS_KEEP=1: thin blocking volumes kept
+THIN_SLABS_KEEP = bool(os.environ.get('GOW3_THIN_SLABS_KEEP'))
+
+
 def blocking_volumes(p):
     """a Gears 1 level's BlockingVolumes as collision meshes ({'name', mesh dict like build_mesh's}): their brushes'
     convex elements (BrushComponent.BrushAggGeom.ConvexElems: VertexData, FaceTriData), placed in the world
@@ -174,8 +178,9 @@ def blocking_volumes(p):
         P = np.concatenate(P); n = len(P)
         # thin horizontal slabs (under 48 units tall) left out: Gears 1 laid them over floors and thresholds the
         # level's geometry already has; as boxes their tops were steps Gears 3's pawns could not climb (the prison
-        # cell's doorway: 26 units)
-        if P[:, 2].max() - P[:, 2].min() < 48: continue
+        # cell's doorway: 26 units). (GOW3_THIN_SLABS_KEEP=1 keeps them: tried for the doorway's high-frame-rate
+        # sticking, 2026-10-21, no better)
+        if not THIN_SLABS_KEEP and P[:, 2].max() - P[:, 2].min() < 48: continue
         tx = pack_normal(np.repeat(np.array([[1.0, 0, 0]]), n, 0)); tz = pack_normal(np.repeat(np.array([[0, 0, 1.0]]), n, 0))
         uvh = np.zeros((n, 1, 2), '>f2')
         verts = np.concatenate([tx, tz, np.frombuffer(uvh.tobytes(), np.uint8).reshape(n, 4)], 1)

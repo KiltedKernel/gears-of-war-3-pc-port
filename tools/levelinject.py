@@ -57,6 +57,8 @@ FOG_SCALARS = {'Density': 1.0, 'DepthBasedDensity': 0.004, 'FalloffExponent': 0.
 FOG_OPACITY = 1.5
 # converted skeletal meshes' least bounds extent (no physics asset: their bounds stand for the animated travel)
 SKEL_MIN_EXTENT = 1024.0
+# vector parameters set on the masked template's copies (a pickup material: no glint)
+MASKED_VECTORS = {'ShimmerColor': (0.0, 0.0, 0.0, 0.0)}
 UNLIT_LIGHT = 1.0           # their light map: constant (diffuse x 1 = the texture as it is)
 
 
@@ -596,8 +598,9 @@ def main():
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1].replace('#mask', '_Mask'), 0), data, flags=tflags_, fixups=fix)
                 refs[masked_param] = tex_ref[tkey]
                 # a copy of the masked instance with its static permutation (a child of it draws the base material's
-                # default permutation: the fence drew uncut, or untextured)
-                data = materialconv.clone_static_mic(w, p3, p3, masked_mic, refs, {})
+                # default permutation: the fence drew uncut, or untextured). The template is a pickup's material:
+                # its ShimmerColor (70, 50, 40) pulsed a collectible's glint over the prison's paper and rubble, off
+                data = materialconv.clone_static_mic(w, p3, p3, masked_mic, refs, {}, vectors=MASKED_VECTORS)
                 mflags_m = struct.unpack_from('>Q', p3.data, p3.exports[masked_mic]['entry'] + 24)[0]
                 mic_of[(si, gm + 1)] = by_name[name] = w.add_export(p3.exports[masked_mic]['class'], 0, ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_m)
                 n_masked += 1

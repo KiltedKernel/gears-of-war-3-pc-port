@@ -21,6 +21,7 @@
 #include <atomic>
 #include <fstream>
 #include <map>
+#include <set>
 #include <mutex>
 #include <thread>
 
@@ -343,6 +344,60 @@ namespace
 
 void RestoreSectionsOnGameThread() { RestoreSections(); }
 
+namespace
+{
+    // A converted chapter keeps objects nothing else refers to in Kismet object lists named Trilogy*: the shared
+    // textures (TrilogySharedTextures, the persistent level) and each carrier's character classes
+    // (TrilogyCarrierClasses). That held over garbage collection while playing, but not over a checkpoint load: after
+    // Reload Last Checkpoint the replayed opening drew Marcus and Dom untextured and the flashback Dom's factory got a
+    // None class (null + 0xEC, sub_822C3C20 from sub_82A61AA8). So while the chapter is loaded, each listed object
+    // joins the root set (UObject flags, low word at +12: RF_RootSet 0x4000), and leaves it when the chapter ends.
+    // GOW3_NO_TRILOGY_ROOTS=1: off.
+    void TrilogyRoots()
+    {
+        if (getenv("GOW3_NO_TRILOGY_ROOTS")) return;
+        constexpr uint32_t kFlagsLow = 12, kRootSet = 0x4000;
+        std::set<uint32_t> rooted;
+        auto setRoot = [](uint32_t o, bool on)
+        {
+            if (!ue3::Readable(o + kFlagsLow, 4)) return;
+            uint32_t* flags = (uint32_t*)g_memory.Translate(o + kFlagsLow);
+            *flags = ByteSwap(on ? (ByteSwap(*flags) | kRootSet) : (ByteSwap(*flags) & ~kRootSet));
+        };
+        for (;;)
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (!g_chapterGame)
+            {
+                if (!rooted.empty())
+                {
+                    for (uint32_t o : rooted) setRoot(o, false);
+                    LOGFN("campaign chapters: {} trilogy objects out of the root set", rooted.size());
+                    rooted.clear();
+                }
+                continue;
+            }
+            static const uint32_t listClass = ue3::FindClass("SeqVar_ObjectList");
+            static const int listOff = listClass ? ue3::PropertyOffset(listClass, "ObjList") : -1;
+            if (!listClass || listOff < 0) continue;
+            const size_t before = rooted.size();
+            for (uint32_t list : ue3::FindInstancesOf(listClass))
+            {
+                if (ue3::ObjectName(list).rfind("Trilogy", 0) != 0) continue;
+                const uint32_t data = ue3::Read32(list + uint32_t(listOff)), count = ue3::Read32(list + uint32_t(listOff) + 4);
+                if (!data || count > 100000) continue;
+                for (uint32_t k = 0; k < count; k++)
+                {
+                    const uint32_t o = ue3::Read32(data + 4 * k);
+                    if (o && rooted.insert(o).second) setRoot(o, true);
+                }
+            }
+            if (rooted.size() != before)
+                LOGFN("campaign chapters: {} trilogy objects in the root set (+{})", rooted.size(), rooted.size() - before);
+        }
+    }
+}
+
 bool InNewChapter() { return g_chapterGame != 0; }      // a new chapter's map is loaded (ChapterKeeper, every 2 s)
 
 void Start()
@@ -351,5 +406,6 @@ void Start()
     std::thread(Worker).detach();
     std::thread(ChapterKeeper).detach();
     std::thread(CheckpointStreaming).detach();
+    std::thread(TrilogyRoots).detach();
 }
 }

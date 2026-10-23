@@ -2358,3 +2358,12 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - Verified (easy route, GOW3_LOG_POS + Kismet trace): from Dom's line before the choice the player stays put (the
   script keeps steering him after Dom: before, he walked on to -537,1110); Marcus's reply (Speak_14) plays (before,
   it and Dom's answer fired in the same frame).
+
+- **Fixed: Reload Last Checkpoint during the opening (crash, untextured characters).** One cause for both: the objects
+  only the Trilogy* Kismet object lists hold (the persistent level's 444 shared textures, each carrier's classes)
+  did not survive a checkpoint load (the lists themselves reported their old counts; the logger prints only changes,
+  so their contents were never seen). The runtime (campaign_chapters.cpp TrilogyRoots, a worker every 1 s while a
+  converted chapter is loaded) now puts every object of a SeqVar_ObjectList named Trilogy* into the root set
+  (RF_RootSet 0x4000 in the flags' low word, +12) and takes them out when the chapter ends (GOW3_NO_TRILOGY_ROOTS=1
+  off): 454 objects. Reload test: the opening replays with Marcus and Dom textured, their lines and subtitles play,
+  the flashback Dom spawns again (GearPawn_COGDomG2_1) and control returns in the cell, no crash.

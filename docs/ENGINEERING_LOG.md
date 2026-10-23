@@ -2231,3 +2231,25 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (GearWeap_LocustAssaultRifle); the multiplayer Dom has Gears 1's Lancer (GearWeap_AssaultRifle). Next: a variant
   with the same weapon on both (or the classic Dom with a Hammerburst) to tell the class from the weapon.
 - Fallback that works now: pawn_classes Pawn_COGDom=GearPawn_COGDom (Gears 3's own Dom, not the classic look).
+
+### Dom's arms, fixed: the flashback Dom (2026-10-22, late)
+
+- Weapon vs class separated: a variant whose Dom spawn set carried LoadoutClasses = GearWeap_LocustAssaultRifle with
+  bClearDefaultWeapons (a throwaway objcopy switch, not kept) gave the multiplayer classic Dom a Hammerburst: he still
+  flailed (the gun swinging one-handed at his side after the re-equip). The class, not the weapon.
+- The two classes' defaults differ in nothing animation-related (pawn defaults: bForceStretchToMarcusSkeleton and
+  cosmetics; mesh templates: the same AnimTree and anim sets, the same set objects; the multiplayer base's extra set
+  holds only Leader_Shout, used by multiplayer leader modes). Left: the classic mesh itself or the multiplayer base
+  under campaign AI. Not pursued further, because of the next point.
+- Gears 3 has a campaign classic Dom: GearPawn_COGDomG2, a direct subclass of GearPawn_COGDom with the classic
+  armour mesh (COG_Dom_Flashback.Game.COG_Dom_Game_CamSkel), cooked into SP_Nightmare_P only (its default object, mesh,
+  sockets and textures). Recipe: pawn_classes Pawn_COGDom=GearPawn_COGDomG2, SP_Nightmare_P added to `carriers`
+  (cloned with only its WorldInfo, as SP_Airfield_02_S for the Drone).
+- Verified with the running test on a variant and again on the rebuilt mod: GearPawn_COGDomG2_0 spawns and runs with
+  the Lancer two-handed at the chest through the whole run. load_packages keeps MPCH_COGDomG2MP_SF (the cutscene
+  meshes' hair material and FaceFX actor).
+- Test-harness note: playtest.ps1 -Mods needs the mod folder's path; a bare name loads 0 mods (the game sits at the
+  main menu and the run looks like a hang).
+- Seen in passing: Gears 1's time2Go SeqAct_GiveInventory (the player: Weap_COGPistol, Weap_LocustAssaultRifle)
+  converts with both entries 0 (the Weap_* classes are not mapped to GearWeap_*); harmless now (the classic Marcus
+  has his own loadout), worth mapping when loadouts matter.

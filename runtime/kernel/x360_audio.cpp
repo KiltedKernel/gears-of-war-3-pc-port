@@ -73,6 +73,7 @@ uint32_t XAudioSubmitRenderDriverFrame(uint32_t driver, uint32_t samples)
     const uint64_t now = GetTickCount64();
     if (now - windowStart >= 10000)
     {
+        // (the output plays 187.5 frames/s: fewer is a gap, heard as a crackle)
         LOGFN("audio: {:.1f} frames/s, peak {:.3f}", frames * 1000.0 / double(now - windowStart), peak);
         windowStart = now; frames = 0; peak = 0;
     }

@@ -1,5 +1,5 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 30febc4..deb61e4 100644
+index 30febc4b7..ea1b57676 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
 @@ -175,9 +175,11 @@ if(MSVC)
@@ -40,11 +40,33 @@ index 30febc4..deb61e4 100644
  
  set(CMAKE_FOLDER "")
  
+diff --git a/src/xenia/apu/audio_driver.h b/src/xenia/apu/audio_driver.h
+index c7a4101ef..de8924dbf 100644
+--- a/src/xenia/apu/audio_driver.h
++++ b/src/xenia/apu/audio_driver.h
+@@ -34,6 +34,8 @@ class AudioDriver {
+   virtual void Pause() = 0;
+   virtual void Resume() = 0;
+   virtual void SetVolume(float volume) = 0;
++  // frames submitted and not yet played (-1: unknown)
++  virtual int QueuedFrames() { return -1; }
+ };
+ 
+ }  // namespace apu
 diff --git a/src/xenia/apu/audio_system.cc b/src/xenia/apu/audio_system.cc
-index fb66ee9..61dfbb2 100644
+index fb66ee9ab..2daa7d8d6 100644
 --- a/src/xenia/apu/audio_system.cc
 +++ b/src/xenia/apu/audio_system.cc
-@@ -23,8 +23,10 @@
+@@ -9,6 +9,8 @@
+ 
+ #include "xenia/apu/audio_system.h"
+ 
++#include <cstdlib>
++
+ #include <limits>
+ 
+ #include "xenia/apu/apu_flags.h"
+@@ -23,8 +25,10 @@
  #include "xenia/base/ring_buffer.h"
  #include "xenia/base/string_buffer.h"
  #include "xenia/base/threading.h"
@@ -55,7 +77,7 @@ index fb66ee9..61dfbb2 100644
  
  // As with normal Microsoft, there are like twelve different ways to access
  // the audio APIs. Early games use XMA*() methods almost exclusively to touch
-@@ -42,10 +44,24 @@ namespace xe {
+@@ -42,10 +46,24 @@ namespace xe {
  namespace apu {
  
  AudioSystem::AudioSystem(cpu::Processor* processor)
@@ -80,7 +102,7 @@ index fb66ee9..61dfbb2 100644
  
    for (size_t i = 0; i < kMaximumClientCount; ++i) {
      client_semaphores_[i] =
-@@ -73,6 +89,14 @@ X_STATUS AudioSystem::Setup(kernel::KernelState* kernel_state) {
+@@ -73,6 +91,14 @@ X_STATUS AudioSystem::Setup(kernel::KernelState* kernel_state) {
    }
  
    worker_running_ = true;
@@ -95,7 +117,7 @@ index fb66ee9..61dfbb2 100644
    worker_thread_ =
        kernel::object_ref<kernel::XHostThread>(new kernel::XHostThread(
            kernel_state, 128 * 1024, 0,
-@@ -87,6 +111,7 @@ X_STATUS AudioSystem::Setup(kernel::KernelState* kernel_state) {
+@@ -87,6 +113,7 @@ X_STATUS AudioSystem::Setup(kernel::KernelState* kernel_state) {
    worker_thread_->Create();
    // Set high priority for this thread for better pacing.
    worker_thread_->SetPriority(24);
@@ -103,7 +125,58 @@ index fb66ee9..61dfbb2 100644
    return X_STATUS_SUCCESS;
  }
  
-@@ -184,8 +209,12 @@ void AudioSystem::WorkerThreadMain() {
+@@ -146,6 +173,40 @@ void AudioSystem::WorkerThreadMain() {
+       continue;
+     }
+ 
++#if XE_PORT
++    // The port: paced by the output's queue instead of a 5.333 ms timer. The timer slipped whenever the thread woke
++    // late (next = max(deadline, now) + interval: 186.5-187 frames/s against the device's 187.5) and never let the
++    // title render ahead, so the device held a frame or two (5-10 ms) and any hitch left it empty: crackling. Here a
++    // frame is rendered whenever fewer than kPortQueuedFrames (8, 43 ms) are queued.
++    bool paced_by_queue = false;
++    {
++      int queued = -1;
++      {
++        std::lock_guard<std::mutex> guard(clients_[client_index].lock);
++        if (clients_[client_index].driver) {
++          queued = clients_[client_index].driver->QueuedFrames();
++        }
++      }
++      if (queued >= 0) {
++        // GOW3_AUDIO_TIMER_PACING=1: Xenia's timer pacing (for comparison: the port's audio line's frames/s)
++        static const bool timer_pacing = std::getenv("GOW3_AUDIO_TIMER_PACING") != nullptr;
++        if (timer_pacing) queued = -1;
++      }
++      if (queued >= 0) {
++        if (paused_) {
++          pause_fence_.Signal();
++          xe::threading::Wait(resume_event_.get(), false);
++          continue;
++        }
++        if (queued >= kPortQueuedFrames) {
++          xe::threading::NanoSleepPrecise(1000 * 1000);
++          continue;
++        }
++        paced_by_queue = true;
++      }
++    }
++    if (!paced_by_queue) {
++#endif
+     // Pace to kAudioIntervalSlack ahead of the deadline.
+     const uint64_t wake_target_us = earliest_pump_us > kAudioIntervalSlack
+                                         ? earliest_pump_us - kAudioIntervalSlack
+@@ -170,6 +231,9 @@ void AudioSystem::WorkerThreadMain() {
+         xe::threading::NanoSleepPrecise((wake_target_us - now_precise) * 1000);
+       }
+     }
++#if XE_PORT
++    }
++#endif
+ 
+     // Submit only if the host has a free output slot;
+     if (client_callback &&
+@@ -184,8 +248,12 @@ void AudioSystem::WorkerThreadMain() {
  
        SCOPE_profile_cpu_i("apu", "xe::apu::AudioSystem->client_callback");
        uint64_t args[] = {client_callback_arg};
@@ -116,7 +189,7 @@ index fb66ee9..61dfbb2 100644
      }
    }
    worker_running_ = false;
-@@ -210,7 +239,11 @@ void AudioSystem::Shutdown() {
+@@ -210,7 +278,11 @@ void AudioSystem::Shutdown() {
    worker_running_ = false;
    pending_work_event_->Set();
    if (worker_thread_) {
@@ -129,7 +202,7 @@ index fb66ee9..61dfbb2 100644
    }
  
 diff --git a/src/xenia/apu/audio_system.h b/src/xenia/apu/audio_system.h
-index 1a715e4..4bf8cb8 100644
+index 1a715e4bb..dfeaf61a8 100644
 --- a/src/xenia/apu/audio_system.h
 +++ b/src/xenia/apu/audio_system.h
 @@ -14,8 +14,21 @@
@@ -154,7 +227,15 @@ index 1a715e4..4bf8cb8 100644
  #include "xenia/memory.h"
  #include "xenia/xbox.h"
  
-@@ -78,7 +91,11 @@ class AudioSystem {
+@@ -32,6 +45,7 @@ class AudioSystem {
+   static constexpr size_t kMaximumQueuedFrames = 64;
+   static constexpr uint32_t kAudioPumpInterval = 5333u;
+   static constexpr uint32_t kAudioIntervalSlack = 400u;
++  static constexpr int kPortQueuedFrames = 8;   // the port: frames kept queued at the output
+ 
+   virtual ~AudioSystem();
+ 
+@@ -78,7 +92,11 @@ class AudioSystem {
    std::unique_ptr<XmaDecoder> xma_decoder_;
  
    std::atomic<bool> worker_running_ = {false};
@@ -166,8 +247,42 @@ index 1a715e4..4bf8cb8 100644
  
    xe::global_critical_region global_critical_region_;
    static constexpr size_t kMaximumClientCount = 8;
+diff --git a/src/xenia/apu/xaudio2/xaudio2_audio_driver.cc b/src/xenia/apu/xaudio2/xaudio2_audio_driver.cc
+index 5332b1bd4..4ba995a85 100644
+--- a/src/xenia/apu/xaudio2/xaudio2_audio_driver.cc
++++ b/src/xenia/apu/xaudio2/xaudio2_audio_driver.cc
+@@ -202,6 +202,17 @@ bool XAudio2AudioDriver::InitializeObjects(Objects& objects) {
+   return true;
+ }
+ 
++int XAudio2AudioDriver::QueuedFrames() {
++  api::XAUDIO2_VOICE_STATE state;
++  if (api_minor_version_ >= 8) {
++    objects_.api_2_8.pcm_voice->GetState(&state,
++                                         api::XE_XAUDIO2_VOICE_NOSAMPLESPLAYED);
++  } else {
++    objects_.api_2_7.pcm_voice->GetState(&state);
++  }
++  return static_cast<int>(state.BuffersQueued);
++}
++
+ void XAudio2AudioDriver::SubmitFrame(float* frame) {
+   HRESULT hr;
+ 
+diff --git a/src/xenia/apu/xaudio2/xaudio2_audio_driver.h b/src/xenia/apu/xaudio2/xaudio2_audio_driver.h
+index f7382bddf..c4ba98366 100644
+--- a/src/xenia/apu/xaudio2/xaudio2_audio_driver.h
++++ b/src/xenia/apu/xaudio2/xaudio2_audio_driver.h
+@@ -43,6 +43,7 @@ class XAudio2AudioDriver : public AudioDriver {
+   // have initialized MTA).
+   // https://devblogs.microsoft.com/oldnewthing/?p=4613
+   void SubmitFrame(float* frame) override;
++  int QueuedFrames() override;
+   void Pause() override;
+   void Resume() override;
+   void SetVolume(float volume) override;
 diff --git a/src/xenia/apu/xma_decoder.cc b/src/xenia/apu/xma_decoder.cc
-index ca06f8c..2edcbad 100644
+index ca06f8c6c..de87025b3 100644
 --- a/src/xenia/apu/xma_decoder.cc
 +++ b/src/xenia/apu/xma_decoder.cc
 @@ -21,10 +21,12 @@
@@ -247,7 +362,7 @@ index ca06f8c..2edcbad 100644
    }
  
 diff --git a/src/xenia/apu/xma_decoder.h b/src/xenia/apu/xma_decoder.h
-index 9423b0f..bc580e4 100644
+index 9423b0fb6..3d32ff40e 100644
 --- a/src/xenia/apu/xma_decoder.h
 +++ b/src/xenia/apu/xma_decoder.h
 @@ -17,7 +17,20 @@
@@ -284,7 +399,7 @@ index 9423b0f..bc580e4 100644
  
    std::atomic<bool> paused_ = false;
 diff --git a/src/xenia/gpu/command_processor.cc b/src/xenia/gpu/command_processor.cc
-index eadd8f5..366ae4a 100644
+index eadd8f5d1..898e56bfd 100644
 --- a/src/xenia/gpu/command_processor.cc
 +++ b/src/xenia/gpu/command_processor.cc
 @@ -21,8 +21,16 @@
@@ -390,7 +505,7 @@ index eadd8f5..366ae4a 100644
  
  void CommandProcessor::UpdateWritePointer(uint32_t value) {
 diff --git a/src/xenia/gpu/command_processor.h b/src/xenia/gpu/command_processor.h
-index dfe4273..c1076bb 100644
+index dfe42737f..28561852a 100644
 --- a/src/xenia/gpu/command_processor.h
 +++ b/src/xenia/gpu/command_processor.h
 @@ -26,7 +26,15 @@
@@ -422,7 +537,7 @@ index dfe4273..c1076bb 100644
    std::queue<std::function<void()>> pending_fns_;
  
 diff --git a/src/xenia/gpu/d3d12/d3d12_command_processor.cc b/src/xenia/gpu/d3d12/d3d12_command_processor.cc
-index 7149982..fcc1ffc 100644
+index 7149982d6..ec9bba755 100644
 --- a/src/xenia/gpu/d3d12/d3d12_command_processor.cc
 +++ b/src/xenia/gpu/d3d12/d3d12_command_processor.cc
 @@ -16,7 +16,15 @@
@@ -465,7 +580,7 @@ index 7149982..fcc1ffc 100644
  }
  
 diff --git a/src/xenia/gpu/d3d12/d3d12_command_processor.h b/src/xenia/gpu/d3d12/d3d12_command_processor.h
-index 7c6324c..76c17e0 100644
+index 7c6324ce1..63126ff92 100644
 --- a/src/xenia/gpu/d3d12/d3d12_command_processor.h
 +++ b/src/xenia/gpu/d3d12/d3d12_command_processor.h
 @@ -35,8 +35,16 @@
@@ -495,7 +610,7 @@ index 7c6324c..76c17e0 100644
                                   kernel::KernelState* kernel_state);
    ~D3D12CommandProcessor();
 diff --git a/src/xenia/gpu/graphics_system.cc b/src/xenia/gpu/graphics_system.cc
-index f4f4a15..7b72088 100644
+index f4f4a157d..1431f345f 100644
 --- a/src/xenia/gpu/graphics_system.cc
 +++ b/src/xenia/gpu/graphics_system.cc
 @@ -18,7 +18,15 @@
@@ -634,7 +749,7 @@ index f4f4a15..7b72088 100644
  
  }  // namespace gpu
 diff --git a/src/xenia/gpu/graphics_system.h b/src/xenia/gpu/graphics_system.h
-index a393db7..34fe633 100644
+index a393db7ab..c933ee19f 100644
 --- a/src/xenia/gpu/graphics_system.h
 +++ b/src/xenia/gpu/graphics_system.h
 @@ -18,9 +18,17 @@
@@ -667,7 +782,7 @@ index a393db7..34fe633 100644
    RegisterFile* register_file_;
    std::unique_ptr<CommandProcessor> command_processor_;
 diff --git a/src/xenia/gpu/pm4_command_processor_implement.h b/src/xenia/gpu/pm4_command_processor_implement.h
-index 1311d5e..c770ab6 100644
+index 1311d5ec6..fd359fe39 100644
 --- a/src/xenia/gpu/pm4_command_processor_implement.h
 +++ b/src/xenia/gpu/pm4_command_processor_implement.h
 @@ -587,7 +587,11 @@ bool COMMAND_PROCESSOR::ExecutePacketType3(uint32_t packet) XE_RESTRICT {
@@ -697,7 +812,7 @@ index 1311d5e..c770ab6 100644
      auto path = trace_stream_path_ / file_name;
      trace_writer_.Open(path, title_id);
 diff --git a/src/xenia/gpu/texture_cache.cc b/src/xenia/gpu/texture_cache.cc
-index a76be1e..62b7e00 100644
+index a76be1ece..292fbb522 100644
 --- a/src/xenia/gpu/texture_cache.cc
 +++ b/src/xenia/gpu/texture_cache.cc
 @@ -66,6 +66,12 @@ DEFINE_bool(tiled_shared_memory, true,

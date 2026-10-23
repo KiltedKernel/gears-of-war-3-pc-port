@@ -2367,3 +2367,15 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (RF_RootSet 0x4000 in the flags' low word, +12) and takes them out when the chapter ends (GOW3_NO_TRILOGY_ROOTS=1
   off): 454 objects. Reload test: the opening replays with Marcus and Dom textured, their lines and subtitles play,
   the flashback Dom spawns again (GearPawn_COGDomG2_1) and control returns in the cell, no crash.
+
+## 2026-10-23 (night): audio crackling
+- **Cause.** Xenia's audio worker rendered the title's frames on a 5.333 ms timer (one 256-sample frame per tick,
+  `next = max(deadline, now) + interval`): a late wake-up slipped the schedule for good, and the title could never
+  render ahead, so the XAudio2 voice held one or two frames (5-10 ms) and any hitch emptied it. The runtime's
+  audio line (frames the title submits, every 10 s) read 186-187 frames/s on an idle machine and 152-178 under
+  load, against the output's 187.5: every missing frame a 5 ms gap, heard as a crackle.
+- **Fix (tools/xenia-gow3.patch, XE_PORT).** The worker renders a frame whenever fewer than 8 (43 ms) are queued at
+  the XAudio2 voice (AudioDriver::QueuedFrames, XAUDIO2_VOICE_STATE.BuffersQueued), else sleeps 1 ms: paced by the
+  device itself. Same build, opening cutscene: timer pacing 152-178 frames/s, queue pacing 187.3-187.6 throughout.
+  GOW3_AUDIO_TIMER_PACING=1 restores the timer (comparison). (Gears 2's port has the same worker: its own
+  xenia-gow2.patch, not changed yet.)

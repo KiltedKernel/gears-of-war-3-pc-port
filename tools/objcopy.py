@@ -53,6 +53,8 @@ PLAYER_CONTROL_OPS = {'SeqAct_ToggleCinematicMode', 'SeqAct_ToggleHUD', 'SeqAct_
 # Gears 1 properties not copied: a FaceFX animation set's ReferencedSoundCues (the cook's bookkeeping, absent from
 # Gears 3's cooked sets; copied, set -> cue -> set recursed without end)
 PROP_SKIP = {'ReferencedSoundCues'}
+# Gears 1's RawDistribution structs (particle modules): copied without their lookup tables (Copier.raw_distribution)
+RAW_DISTRIBUTIONS = {'RawDistributionFloat', 'RawDistributionVector'}
 SKIP_CLASSES = set(filter(None, os.environ.get('OBJCOPY_SKIP', '').split(',')))   # (debugging)
 EDITOR_COMPONENTS = {'DrawFrustumComponent', 'DrawLightConeComponent', 'DrawLightRadiusComponent', 'ArrowComponent',
                      'SpriteComponent', 'DrawBoxComponent', 'DrawSphereComponent', 'DrawCylinderComponent'}
@@ -268,12 +270,26 @@ class Copier:
                 value = struct.pack('>i', self.ref(struct.unpack_from('>i', raw, 0)[0])) + struct.pack('>ii', *self.name(*struct.unpack_from('>ii', raw, 4)))
             elif typ == 'StructProperty':
                 value = self.struct_value(raw)
+                if sname in RAW_DISTRIBUTIONS: value = self.raw_distribution(value)
             elif typ == 'ArrayProperty':
                 value = self.array_value(name, raw)
             else:
                 value = raw
             out += self.tag(name, typ, len(value), index) + extra + value
         return bytes(out + struct.pack('>ii', *self.w.name('None'))), o
+
+    def raw_distribution(self, value):
+        """a converted RawDistributionFloat/Vector without Gears 1's baked lookup table: Gears 3 reads its tables in a
+        later layout (time scale and bias in the first two entries, a stride from Op / LookupTableNumElements /
+        LookupTableChunkSize, which Gears 1's structs lack), so a copied table drew the prison's bag dust as black
+        squares; with none, Gears 3 evaluates the distribution object (as its own cooked modules do for some)"""
+        if os.environ.get('OBJCOPY_KEEP_LOOKUP_TABLES'): return value
+        wname = lambda i, n: (self.w.names[i] if n == 0 else f'{self.w.names[i]}_{n - 1}')
+        try: recs, end = parse828(value, 0, wname)
+        except Exception: return value
+        if end != len(value): return value
+        recs = [r for r in recs if r[0] not in ('LookupTable', 'LookupTableTimeScale', 'LookupTableStartTime')]
+        return encode(self.w, recs)
 
     def tag(self, name, typ, size, index):
         return struct.pack('>ii', *self.w.name(name)) + struct.pack('>ii', *self.w.name(typ)) + struct.pack('>ii', size, index)
@@ -1749,6 +1765,132 @@ def anim_sequence_tail(c, props, tail):
 
 
 TAIL_FIXUPS = {'AnimSequence': anim_sequence_tail}
+
+
+# ---- particle effects ----
+# Gears 1's ParticleSystems (the opening's bag dust, drool, falling debris, Jack's torch...) are copied with the emitters
+# Kismet toggles (Emitter actors, their ParticleSystemComponent's Template): the system, its emitters, LOD levels,
+# modules and distributions (components in both games, the same RawDistribution structs). Gears 3 differs in two places:
+#  - spawning moved out of ParticleModuleRequired (SpawnRate, BurstList) into a ParticleModuleSpawn per LOD level
+#    (Rate, RateScale, BurstList): particle_lod_level makes one from the level's required module;
+#  - materials: Gears 1's sprite materials are not converted; each becomes a Gears 3 material loaded with every map:
+#    Gears 3's own copy under the same name where GearGame.xxx carries one (War_Level_Effects...), else by blend mode
+#    (PARTICLE_MATERIAL_FALLBACK). OBJCOPY_NO_PARTICLES=1: no emitters, no systems.
+PARTICLES = not os.environ.get('OBJCOPY_NO_PARTICLES')
+if PARTICLES:
+    DEEP_COPY.add('ParticleSystem')
+    ACTOR_CLASSES.add('Emitter')
+# Gears 1 material name -> the Gears 3 material's object path: copies or stand-ins loaded with every campaign map
+# (GearGame.xxx, GEARGAMESP_SF)
+PARTICLE_MATERIALS = {
+    'M_Steam_smoke': 'War_Level_Effects.Materials.M_Steam_smoke',
+    'M_Steam_Burst_Flair': 'War_Level_Effects.Materials.M_Steam_Burst_Flair',
+    # Jack's torch sparks: Gears 3's flamethrower spark (GEARGAMESP_SF, loaded with every campaign map)
+    'Mat_Sparks': 'FX_Flamethrower.Materials.M_FX_FlameThrower_SimpleSpark_01',
+}
+# by Gears 1 BlendMode (2 translucent, 3 additive): the same two
+PARTICLE_MATERIAL_FALLBACK = {2: 'War_Level_Effects.Materials.M_Steam_smoke', 3: 'War_Level_Effects.Materials.M_Steam_Burst_Flair'}
+
+
+def g3_object_import(c, path, cls='Material', cls_package='Engine'):
+    """an import of a Gears 3 object by its path (outer groups as Core.Package imports)"""
+    parts = path.split('.')
+    outer = 0
+    for part in parts[:-1]:
+        outer = c.find_import('Core', 'Package', outer, part)
+    return c.find_import(cls_package, cls, outer, parts[-1])
+
+
+def particle_material_ref(c, ref):
+    """a Gears 1 particle material reference -> an import of the Gears 3 material standing for it (0: none)"""
+    import materialconv
+    s = c.s
+    if ref == 0: return 0
+    name = s.imports[-ref - 1]['name'] if ref < 0 else s.exports[ref - 1]['name']
+    path = PARTICLE_MATERIALS.get(name)
+    if path is None:
+        blend = 2
+        if ref > 0:
+            try:
+                r = {x[0]: x[4] for x in materialconv.raw_props(s, s.export_data(ref - 1), 4)[0]}
+                if 'BlendMode' in r and len(r['BlendMode']) == 1: blend = r['BlendMode'][0]
+            except Exception:
+                pass
+        path = PARTICLE_MATERIAL_FALLBACK.get(blend, PARTICLE_MATERIAL_FALLBACK[2])
+    c.particle_materials = getattr(c, 'particle_materials', {})
+    c.particle_materials[name] = path
+    return g3_object_import(c, path)
+
+
+def emitter_materials(c):
+    """{source required module ref: its emitter's Material ref} (Gears 1 keeps the material on the emitter,
+    Gears 3 reads it from each LOD level's ParticleModuleRequired)"""
+    import materialconv
+    if getattr(c, '_emitter_materials', None) is not None: return c._emitter_materials
+    s, out = c.s, {}
+    raw = lambda i, st=4: {r[0]: r[4] for r in materialconv.raw_props(s, s.export_data(i), st)[0]}
+    for i, e in enumerate(s.exports):
+        if not s.class_name(e['class']).startswith('Particle') or not s.class_name(e['class']).endswith('Emitter'): continue
+        try:
+            r = raw(i)
+            mat = struct.unpack('>i', r['Material'])[0] if 'Material' in r else 0
+            v = r.get('LODLevels', b'\0\0\0\0'); n = struct.unpack_from('>i', v, 0)[0]
+            for lod in struct.unpack_from(f'>{n}i', v, 4):
+                if lod <= 0: continue
+                req = struct.unpack('>i', raw(lod - 1).get('RequiredModule', b'\0\0\0\0'))[0]
+                if req > 0 and mat: out.setdefault(req, mat)
+        except Exception:
+            continue
+    c._emitter_materials = out
+    return out
+
+
+def particle_material(c, props):
+    """ParticleModuleRequired / ParticleSpriteEmitter: Material -> a Gears 3 particle material (a required module
+    without one of its own takes its emitter's)"""
+    import materialconv
+    src = {r[0]: r[4] for r in materialconv.raw_props(c.s, c.s.export_data(c.current_src), 4)[0]}
+    g1 = struct.unpack('>i', src['Material'])[0] if 'Material' in src else emitter_materials(c).get(c.current_src + 1, 0)
+    if not g1: return props
+    ref = particle_material_ref(c, g1)
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] != 'Material'] + [['Material', 'ObjectProperty', 0, b'', struct.pack('>i', ref)]]
+    return encode(c.w, recs)
+
+
+def particle_lod_level(c, props):
+    """a Gears 1 ParticleLODLevel -> Gears 3's, with a ParticleModuleSpawn (SpawnModule) carrying its required module's
+    SpawnRate (as Rate) and BurstList"""
+    import materialconv
+    s = c.s
+    src = {r[0]: r[4] for r in materialconv.raw_props(s, s.export_data(c.current_src), 4)[0]}
+    req = struct.unpack('>i', src['RequiredModule'])[0] if 'RequiredModule' in src else 0
+    if req <= 0: return props
+    rq = {r[0]: r for r in materialconv.raw_props(s, s.export_data(req - 1), 4)[0]}
+    lod_src = c.current_src
+    recs3 = []
+    if 'SpawnRate' in rq:
+        recs3.append(['Rate', 'StructProperty', 0, struct.pack('>ii', *c.w.name('RawDistributionFloat')), c.raw_distribution(c.struct_value(rq['SpawnRate'][4]))])
+    if 'BurstList' in rq:
+        recs3.append(['BurstList', 'ArrayProperty', 0, b'', c.array_value('BurstList', rq['BurstList'][4])])
+    c.current_src = lod_src
+    cls = c.class_ref('ParticleModuleSpawn')
+    # the spawn module beside the level's other modules (their outer: the particle system)
+    outer = c.obj_map.get(s.exports[req - 1]['outer'], 0)
+    name = c.unique_name('G1ParticleModuleSpawn', 0)
+    spawn = c.w.add_export(cls, outer, name, c.prelude_828('object', cls) + encode(c.w, recs3), flags=0x0007000100000000)
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] != 'SpawnModule'] + [['SpawnModule', 'ObjectProperty', 0, b'', struct.pack('>i', spawn)]]
+    c.particle_spawn_modules = getattr(c, 'particle_spawn_modules', 0) + 1
+    return encode(c.w, recs)
+
+
+if PARTICLES:
+    FIXUPS['ParticleModuleRequired'] = particle_material
+    FIXUPS['ParticleSpriteEmitter'] = particle_material
+    FIXUPS['ParticleLODLevel'] = particle_lod_level
 
 
 # ---- sounds ----

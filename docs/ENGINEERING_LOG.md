@@ -2379,3 +2379,32 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   device itself. Same build, opening cutscene: timer pacing 152-178 frames/s, queue pacing 187.3-187.6 throughout.
   GOW3_AUDIO_TIMER_PACING=1 restores the timer (comparison). (Gears 2's port has the same worker: its own
   xenia-gow2.patch, not changed yet.)
+
+## 2026-10-24: Gears 1's particle effects (the opening's sparks, Jack's jets and cloak, bag dust, drool, debris)
+- **What carries over.** Gears 1's ParticleSystems use the same building blocks as Gears 3's: emitters, LOD levels,
+  modules, RawDistributionFloat/Vector structs pointing at distribution objects (components: 8-byte prelude), every
+  class present in Gears 3. objcopy copies them whole (DEEP_COPY ParticleSystem) with the Emitter actors Kismet
+  toggles (ACTOR_CLASSES Emitter; their ParticleSystemComponent's Template). OBJCOPY_NO_PARTICLES=1 off.
+- **Three differences, each found in game:**
+  1. Lookup tables: Gears 1 bakes them in its own layout (separate LookupTableTimeScale / StartTime; no Op /
+     LookupTableNumElements / ChunkSize); Gears 3 reads time scale and bias from the table's first entries and a
+     stride from those fields, so copied tables gave garbage. Copier.raw_distribution drops them
+     (OBJCOPY_KEEP_LOOKUP_TABLES=1 keeps): Gears 3 then evaluates the distribution objects, as its own cooked
+     modules do for some (SpawnRate, AlphaOverLife with an empty table).
+  2. Spawning: Gears 3's LOD levels spawn through a ParticleModuleSpawn (Rate, RateScale, BurstList);
+     particle_lod_level makes one from the level's required module's SpawnRate and BurstList.
+  3. Materials: Gears 1 keeps the sprite material on the emitter, Gears 3 reads ParticleModuleRequired.Material
+     (all were None: the default material, lit, drew dark opaque squares). Each required module takes its
+     emitter's material (emitter_materials), mapped to a Gears 3 particle material loaded with every campaign map:
+     PARTICLE_MATERIALS by name (Mat_Sparks -> GEARGAMESP_SF's FX_Flamethrower M_FX_FlameThrower_SimpleSpark_01),
+     else by blend mode (translucent -> GearGame.xxx War_Level_Effects M_Steam_smoke, additive -> M_Steam_Burst_Flair).
+     Gears 3's particle materials are plain Materials with their textures compiled in (no texture parameters), so
+     Gears 1's own sprite textures cannot be swapped in yet.
+- **Verified** (GOW3_LOG_PROPS ParticleSystemComponent: bIsActive, EmitterInstances#, Template@; bursts): the
+  opening's 8 emitters load with their converted systems (1-9 emitter instances), activate on Gears 1's Matinee
+  events and complete; the torch's sparks and smoke spray from the cell door's edge, Jack's jets/cloak glow blue
+  around him. The bag dust (smoke stand-in) is not visible in the dark frame. Frame rate as without particles.
+  Easy route to the path choice: no change. Build time 7 -> 13 min (every section's toggled emitters).
+- **Gears 3 has some of these assets itself**: COG_BOT.Effects.P_Jack_ResOUT / P_Jack_Jets (SP_Airfield_03B_S, the
+  Azura levels, GEARGAMESIEGE_SF), War_Level_Effects M_Steam_smoke_thick (bag dust: SP_Bridge_01_S...), M_Vapors_2
+  (drool: the kit SP_Nightmare_02_S, so also in the converted persistent level, unreferenced). Next: hold/carry them.

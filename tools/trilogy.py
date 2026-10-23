@@ -80,7 +80,8 @@ def shared_textures_into(manifest, package):
         tt = by_path[e['template']]
         upk.E = '>'
         data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, e['index']), e.get('mask'),
-                                             lod_bias=materialconv.SLOT_LOD_BIAS.get('mask' if e.get('mask') else e.get('slot')))
+                                             lod_bias=materialconv.SLOT_LOD_BIAS.get('mask' if e.get('mask') else e.get('slot')),
+                                             max_size=materialconv.MAX_CHARACTER_TEXTURE_SIZE if e.get('character') else None)
         flags = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
         refs.append(w.add_export(p3.exports[tt]['class'], 0, (name, 0), data, flags=flags, fixups=fix))
     # nothing in the level referred to them: the first garbage collection freed them before the sections resolved
@@ -326,6 +327,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         pkg_, mic_ = (x.strip() for x in ch['skin_material'].split(':', 1))
         common += ['--skin-material', os.path.join(g3cooked, pkg_ + '.xxx') + ':' + mic_]
     if ch.get('max_texture'): common += ['--max-texture', ch['max_texture']]
+    if ch.get('max_character_texture'): common += ['--max-character-texture', ch['max_character_texture']]
     if ch.get('light_scale'): common += ['--light-scale', ch['light_scale']]
     if ch.get('facefx_assets'):                       # (G1 name = package: object path, ...) Gears 3 FaceFX actors
         parts_ = []
@@ -398,6 +400,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     if shared_tex:
         import materialconv
         materialconv.MAX_TEXTURE_SIZE = int(ch.get('max_texture', 0))
+        materialconv.MAX_CHARACTER_TEXTURE_SIZE = int(ch['max_character_texture']) if ch.get('max_character_texture') else None
         n_tex = shared_textures_into(manifest, os.path.join(out_dir, shared_tex + '.xxx'))
         import modpack
         modpack.update_toc(folder, g3cooked)

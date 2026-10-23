@@ -20,9 +20,22 @@ FORMATS_374 = {2: 'PF_A8R8G8B8', 3: 'PF_G8', 5: 'PF_DXT1', 6: 'PF_DXT3', 7: 'PF_
 # which the streaming textures share: the prison's 105 MB left the classic Marcus and Dom at their low mips (muddy) most
 # of the time; at 512 (the persistent package 137 -> 93 MB) they stream in full and the level looks the same at the game's resolution
 MAX_TEXTURE_SIZE = 0
+# the same for the textures of skeletal meshes' materials (the cutscene's Marcus, Dom, bag, Wretches: a few MB more at
+# 1024; at 512 their armour and faces drew muddy beside Gears 1's); None: MAX_TEXTURE_SIZE
+MAX_CHARACTER_TEXTURE_SIZE = None
 
 
 # ---- tagged properties as raw records, for editing and re-encoding ----
+
+
+def g1_post_process_value(name, value):
+    """a Gears 1 post-process setting's bytes as Gears 3 reads the same look. Scene_HighLights: Gears 1 scales the
+    scene by it, Gears 3 divides by it (measured: the prison's (0.8, 0.8, 0.7) taken as it is drew the opening 1.5x too
+    bright and neutral, blue 33% of the colour where Gears 1's is 27%; as (1/0.8, 1/0.8, 1/0.7), 36.6/33.1/28.4 against
+    Gears 1's 42.4/39.3/30.2 on the Xbox 360, Xenia). GEARS1_PP_RAW=1: every value as it is"""
+    if name == 'Scene_HighLights' and len(value) == 12 and not os.environ.get('GEARS1_PP_RAW'):
+        return struct.pack('>3f', *(1.0 / max(x, 1e-3) for x in struct.unpack('>3f', value)))
+    return value
 
 def raw_props(p, d, o):
     """[(name, type, array index, extra bytes (struct/enum name), value bytes)], offset after None"""
@@ -369,7 +382,7 @@ def g1_volumetric(p, ref):
 SLOT_LOD_BIAS = {'diffuse': 0, 'mask': 0}
 
 
-def texture_828(w, p3, template, src, mask=None, lod_bias=None):
+def texture_828(w, p3, template, src, mask=None, lod_bias=None, max_size=None):
     """(data, fixups) for a Gears 3 Texture2D export: template = a Gears 3 texture export index (its properties),
     src = texture2d.Texture of a Gears 1 texture; mask: 'A' (its alpha as grey too: alpha_to_grey) or 'R' (a DXT1
     mask's red as its alpha: red_to_alpha); lod_bias: its LODBias (None: the template's)"""
@@ -379,7 +392,8 @@ def texture_828(w, p3, template, src, mask=None, lod_bias=None):
     # the cook dropped the top mip(s) (empty entries): the texture starts at the first stored mip, so a texture
     # loaded whole (NeverStream) has its mips where the engine expects them
     first = next(k for k, mm in enumerate(src.mips) if not mm['flags'] & 0x20)
-    while MAX_TEXTURE_SIZE and max(src.mips[first]['w'], src.mips[first]['h']) > MAX_TEXTURE_SIZE and \
+    cap = MAX_TEXTURE_SIZE if max_size is None else max_size
+    while cap and max(src.mips[first]['w'], src.mips[first]['h']) > cap and \
             first + 1 < int(src.props.get('MipTailBaseIdx', len(src.mips) - 1)):
         first += 1
     mips = src.mips[first:]

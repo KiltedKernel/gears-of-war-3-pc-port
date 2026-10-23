@@ -2290,3 +2290,31 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   lighting (no contact darkening under the feet). Tried: copied lights keeping Gears 1's shadow flags (they are
   written CastShadows 0): the opening's frames already showed the characters' shadows on the floor before (from the
   light environments), no visible change; reverted. Needs a screenshot of a moment where it shows.
+
+## 2026-10-23 (later): the user's side-by-side with a Gears 1 let's play: dialogue, colour, character textures
+- **Spoken lines were silent (Dom's "two options" before the path choice; Marcus's replies; every Speak).** Gears 1
+  cooks a line's SoundCue into the level package and its SoundNodeWave into the package's localized companion
+  (SP_Prison_S02_Scripting_LOC_int.xxx); the cue imports it. The converter never read the companions: the cues
+  copied without waves, and Gears 3's SeqAct_Speak finished at once (the choice appeared immediately). Now
+  objcopy.Copier.from_loc deep-copies an import the source's <package>_LOC_int exports (levelinject sets
+  Copier.loc; LEVELINJECT_NO_LOC=1 off). An import's path can pass through an export (Dom's waves sit in the
+  exported group Human_Dom_Dialog.Prison): Copier.import_path follows both. 0 -> 47 spoken lines. Verified: the
+  easy route's Speak_4 plays with its subtitle ("We've got two options...") and the choice comes after it; Speak_14
+  and Speak_1 run after the choice.
+- **The whole port drew neutral grey and too bright beside Gears 1's warm green-brown** (blue 33% of the average
+  colour in every pair of the user's screenshots; Gears 1 27%, the same in Xenia, so not the video). Gears 1's
+  lightmaps are only slightly warm (blue 31.7%); the cast is the grade: its WorldInfo's Scene_HighLights (0.8, 0.8,
+  0.7). Gears 1 scales the scene by it; Gears 3 divides by it. Copied as it was, it brightened 1.25x and lifted
+  blue. materialconv.g1_post_process_value writes its reciprocal (levelpkg.set_post_process, levelinject
+  --environment for Gears 1 sources; GEARS1_PP_RAW=1 off). Opening cutscene average: 54.3/48.8/51.3 -> 36.6/33.1/
+  28.4; Gears 1 (Xenia) 42.4/39.3/30.2. Shadows/MidTones left as they are (not measured).
+- **Muddy cutscene characters**: recipe max_character_texture (1024) for skeletal meshes' textures (shared texture
+  manifest "character"); Dom's and Marcus's head and body maps 512 -> 1024.
+- Found, not done: Gears 1 lists most of its point and spot lights in its light maps' LightGuids (S02: 255 of 288
+  point, 73 of 83 spot lights), so lighting.g1_point_lights' extra bake (said "Gears 1 bakes only directional and
+  sky lights") may count them twice; a *_Meshes section bakes only its own package's lights (S02_Meshes: 2 of the
+  cell block's 288). Effects: the opening's six ParticleSystems (debris, drool, bag dust, Jack's jets, cloak
+  P_Jack_ResOUT, torch) and Emitters are not converted; every module/distribution class exists in Gears 3.
+- The "floating" characters: Gears 1's data matches (measured earlier); the user now reads it as the sliding plus
+  missing contact shadows. Key timing: Gears 1 keeps every second key (934 for 1868 frames), spread evenly as the
+  converter does.

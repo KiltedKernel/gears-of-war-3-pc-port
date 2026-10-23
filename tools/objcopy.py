@@ -133,6 +133,7 @@ class Copier:
         self.class_imports = {}
         self.unconvertible = {}                             # class -> objects dropped because their data did not convert
         self.kinds = {}                                     # destination ref -> (kind, class ref)
+        self.loc, self.loc_index, self.loc_copier = None, None, None   # the source's _LOC_int package (from_loc)
 
     # ---- references ----
     def name(self, index, number):
@@ -145,7 +146,9 @@ class Copier:
             im = self.s.imports[-r - 1]                     # imported from its script package), else the same name
             if im['class'] == 'Class':
                 return self.class_ref(CLASS_RENAME.get(im['name'], im['name']))
-            return self.import_like(r)
+            got = self.import_like(r)
+            if not got and self.loc is not None: got = self.obj_map[r] = self.from_loc(r)
+            return got
         if self.s.class_name(self.s.exports[r - 1]['class']) in DEEP_COPY:
             return self.deep_copy(r - 1)
         return 0                                            # an export not copied: None
@@ -160,6 +163,26 @@ class Copier:
             name = 'Trilogy_' + self.s.exports[e['outer'] - 1]['name'] + '_' + e['name']
         made = self.copy(self.plan([i]), {e['outer']: 0}, rename={i: name})
         return made.get(i, 0)
+
+    def import_path(self, r):
+        parts, k = [], r
+        while k < 0:
+            im = self.s.imports[-k - 1]; parts.append(im['name']); k = im['outer']
+        if k > 0: parts.append(self.s.path(k - 1))      # (an import inside an exported group: Dom's lines' waves)
+        return '.'.join(reversed(parts))
+
+    def from_loc(self, r):
+        """an import the source's localized companion (<package>_LOC_int: Gears 1 cooks every spoken line's
+        SoundNodeWave there, its SoundCue in the package itself) exports: deep-copied from it, else None"""
+        if self.loc_index is None:
+            self.loc_index = {self.loc.path(i): i for i, e in enumerate(self.loc.exports)
+                              if self.loc.class_name(e['class']) in DEEP_COPY}
+        j = self.loc_index.get(self.import_path(r))
+        if j is None: return 0
+        if self.loc_copier is None:
+            self.loc_copier = Copier(self.loc, self.p3, self.w, self.types, self.classes, self.g3, self.offset, self.g1)
+            self.loc_copier.unconvertible = self.unconvertible
+        return self.loc_copier.deep_copy(j)
 
     def import_like(self, r):
         im = self.s.imports[-r - 1]

@@ -175,7 +175,7 @@ def set_post_process(p, w, g1_pp, base_package):
             g = g1_pp[name]
             if g[1] == 'BoolProperty': r[4] = b'\x01' if g[4] != bytes(len(g[4])) else b'\x00'
             elif g[1] == r[1] and len(g[4]) == len(r[4]) and r[1] in ('FloatProperty', 'IntProperty', 'StructProperty'):
-                r[4] = g[4]                            # floats, vectors, colours: the same layout in both games
+                r[4] = materialconv.g1_post_process_value(name, g[4])   # floats, vectors, colours: the same layout
         out.append(r); have.add(name)
     # the source's settings the base does not set (Gears 1's grading: Scene_*, bloom, depth of field), with their
     # override flags (Gears 3 blends post-process volumes over these per setting)
@@ -184,7 +184,7 @@ def set_post_process(p, w, g1_pp, base_package):
         if name.startswith('__') or name in have or name in ('bEnableDOF',): continue
         if g[1] not in ('FloatProperty', 'StructProperty', 'BoolProperty'): continue
         extra = struct.pack('>ii', *w.name(src.fname(*struct.unpack('>ii', g[3])))) if g[3] else b''
-        value = (b'\x01' if g[4] != bytes(len(g[4])) else b'\x00') if g[1] == 'BoolProperty' else g[4]
+        value = (b'\x01' if g[4] != bytes(len(g[4])) else b'\x00') if g[1] == 'BoolProperty' else materialconv.g1_post_process_value(name, g[4])
         out.append([name, g[1], 0, extra, value])
         if not name.startswith('b') and 'bOverride_' + name not in have:
             out.append(['bOverride_' + name, 'BoolProperty', 0, b'', b'\x01'])

@@ -222,6 +222,8 @@ def main():
                     "GEARGAMESP_SF in the campaign: COG_Dom_Summer.Materials.M_COG_Dom_Summer_Game)")
     ap.add_argument('--light-scale', type=float, default=1.0, help="the copied lights' brightness (and Matinee tracks "
                     "animating it) times this (objcopy.LIGHT_SCALE)")
+    ap.add_argument('--max-character-texture', type=int, default=None, help="the same for skeletal meshes' textures "
+                    "(default: --max-texture)")
     ap.add_argument('--max-texture', type=int, default=0, help="converted textures' mips larger than this are left out "
                     "(they stay resident in Gears 3's texture pool, which streaming textures share; 0: all kept)")
     ap.add_argument('--hair-material', default=None, help="<Gears 3 package>:<MIC path>: a masked skinned hair material "
@@ -254,6 +256,7 @@ def main():
                     "chapter's persistent level: the campaign starts there)")
     args = ap.parse_args()
     materialconv.MAX_TEXTURE_SIZE = args.max_texture
+    materialconv.MAX_CHARACTER_TEXTURE_SIZE = args.max_character_texture
     import objcopy
     objcopy.LIGHT_SCALE = args.light_scale
     offset = np.array([float(x) for x in args.offset.split(',')])
@@ -505,7 +508,7 @@ def main():
         import json
         manifest = json.load(open(args.texture_manifest)) if os.path.isfile(args.texture_manifest) else {'names': {}, 'entries': {}}
     shared_pkg, kit_tex_template = [], {}
-    def shared_texture(sp, ti, tt, tkey, slot, mask=None):
+    def shared_texture(sp, ti, tt, tkey, slot, mask=None, character=False):
         name = manifest['names'].get(tkey)
         if name is None:
             base = name = 'TrilogyT_' + tkey.split('.')[-1].split('#')[0] + ('_Mask' if mask else '')
@@ -516,6 +519,7 @@ def main():
             template = pk.path(kt) if pk is not None and kt is not None and kt >= 0 else p3.path(tt)
             manifest['entries'][name] = {'source': os.path.abspath(sp.filename), 'index': ti, 'template': template, 'slot': slot}
             if mask: manifest['entries'][name]['mask'] = mask
+            if character: manifest['entries'][name]['character'] = True
         if not shared_pkg: shared_pkg.append(w.add_import('Core', 'Package', 0, args.shared_textures))
         return w.add_import('Engine', 'Texture2D', shared_pkg[0], name)
     if args.materials and src.version == 374:
@@ -557,6 +561,7 @@ def main():
         mats = set()                                   # (source index, material export index)
         for (si, mi), sk in skel_meshes.items():
             mats.update((si, x - 1) for x in sk['materials'] if x > 0)
+        skel_mats = {(si, x - 1) for (si, mi), sk in skel_meshes.items() for x in sk['materials'] if x > 0}
         import_mats = {}                               # (source, import ref) -> (source, export ref) of the material
         refs_used = [(si, el['material']) for si, mi in mesh_keys for el in staticmesh.read(srcs[si], mi)['lods'][0]['elements']]
         refs_used += [(si, r) for (si, ci), ov in overrides.items() for r in ov if r]
@@ -630,12 +635,14 @@ def main():
                 tt = tex_template.get(slot)
                 if tt is None or tt < 0: continue
                 tkey = sp.path(ti)
+                character = (si, gm) in skel_mats             # (a character's: its own size cap)
                 if tkey not in tex_ref and args.shared_textures:
                     # in the chapter's shared texture package (written once all sections are converted): an import
-                    tex_ref[tkey] = shared_texture(sp, ti, tt, tkey, slot)
+                    tex_ref[tkey] = shared_texture(sp, ti, tt, tkey, slot, character=character)
                 if tkey not in tex_ref:
                     upk.E = '>'
-                    data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti), lod_bias=materialconv.SLOT_LOD_BIAS.get(slot))
+                    data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti), lod_bias=materialconv.SLOT_LOD_BIAS.get(slot),
+                                                         max_size=materialconv.MAX_CHARACTER_TEXTURE_SIZE if character else None)
                     tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1], 0), data, flags=tflags_, fixups=fix)
                 refs[{'diffuse': 'Diffuse_01', 'normal': 'Normal_01', 'specular': 'Specular_01'}[slot]] = tex_ref[tkey]
@@ -1424,6 +1431,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
         level1 = lvl + 1                                # (a package without Kismet still has actors to copy)
         c = objcopy.Copier(sp, p3, w, types, classes, script3, offset, script1)
         c.available_pawns = available
+        loc = os.path.splitext(fname)[0] + '_LOC_int' + os.path.splitext(fname)[1]   # (its spoken lines' waves)
+        if os.path.isfile(loc) and not os.environ.get('LEVELINJECT_NO_LOC'): c.loc = upk.Package(loc)
         for (msi, mi), ref in (new_mesh or {}).items():     # converted meshes stand for the source's
             if msi == si: c.obj_map[mi + 1] = ref
         for (msi, mref), mic in (mic_map or {}).items():   # ... converted materials too (a mover's own Materials)
@@ -1533,7 +1542,7 @@ def environment(src, p3, w, cls):
                 g = g1[name]
                 if g[1] == 'BoolProperty': r[4] = b'\x01' if g[4] != bytes(len(g[4])) else b'\x00'
                 elif g[1] == 'StructProperty' and g[3] != b'':
-                    r[4] = g[4]                                                   # Vector, Color: same layout
+                    r[4] = (materialconv.g1_post_process_value(name, g[4]) if src.version == 374 else g[4])   # same layout
                 else:
                     r[4] = g[4]
             out.append(r); have.add(name)
@@ -1541,7 +1550,7 @@ def environment(src, p3, w, cls):
                      'DOF_FocusDistance', 'DOF_ModulateBlurColor'):
             if name in g1 and name not in have:
                 g = g1[name]; extra = struct.pack('>ii', *w.name(src.fname(*struct.unpack('>ii', g[3])))) if g[3] else b''
-                out.append([name, g[1], 0, extra, g[4]])
+                out.append([name, g[1], 0, extra, materialconv.g1_post_process_value(name, g[4]) if src.version == 374 else g[4]])
         body = materialconv.encode_props(w, out)
         nd = bytearray(d[:v]) + body + d[v + size:]
         struct.pack_into('>i', nd, v - 16, len(body))                # the tag's size (struct name follows it)

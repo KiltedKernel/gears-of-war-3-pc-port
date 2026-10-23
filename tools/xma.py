@@ -15,7 +15,7 @@ Packets (2048 bytes) carry the same compressed frames in both; the 32-bit packet
   (in bits, after the header), 3 bits metadata, 8 bits packets to skip.
 A frame starts with its length in bits (15 bits, the length field included) and continues across packets after
 their headers; 0x7FFF ends the stream. Each frame decodes to 512 samples per channel."""
-import struct
+import os, struct
 
 PACKET = 2048
 PAYLOAD_BITS = (PACKET - 4) * 8
@@ -70,8 +70,47 @@ def frame_counts(packets):
     return counts, total
 
 
+def stream_packets(packets, streams):
+    """{stream: [packet index]} of an interleaved multi-stream XMA: stream k starts at packet k, each packet's header
+    (low 8 bits) the number of packets to skip to the stream's next one"""
+    n = len(packets) // PACKET
+    out = {}
+    for s in range(streams):
+        k, chain = s, []
+        while k < n:
+            chain.append(k)
+            k += (struct.unpack_from('>I', packets, k * PACKET)[0] & 0xFF) + 1
+        out[s] = chain
+    return out
+
+
+def to_g3_xbox_data_multi(w1):
+    """a multi-stream (5.1: three stereo streams, the cinematics' foley) Gears 1 wave -> one 6-channel XMA2 wave: the
+    packets as they are (interleaved, skips kept), each packet's frame count counted along its own stream, one block
+    holding them all (XMA2's packet skips address packets inside a block)"""
+    pk = bytearray(w1['packets'])
+    chains = stream_packets(bytes(pk), w1['streams'])
+    totals = []
+    for s, chain in chains.items():
+        seq = b''.join(bytes(pk[k * PACKET:(k + 1) * PACKET]) for k in chain)
+        counts, total = frame_counts(seq)
+        totals.append(total)
+        for k, cnt in zip(chain, counts):
+            h = struct.unpack_from('>I', pk, k * PACKET)[0]
+            struct.pack_into('>I', pk, k * PACKET, (h & 0x03FFFFFF) | (min(cnt, 63) << 26))
+    ch = w1['streams'] * 2 if w1['channels'] == 2 else w1['streams'] * w1['channels']
+    rate = w1['rate']
+    samples = min(totals) * 512
+    mask = {6: 0x3F, 4: 0x33}.get(ch, 0)
+    fmt = struct.pack('>HHIIHHH', 0x0166, ch, rate, rate * ch * 2, 2 * ch, 16, 34)
+    fmt += struct.pack('>HIIIIIIIBBH', w1['streams'], mask, samples, len(pk), 0, samples, 0, samples, 0, 4, 1)
+    return struct.pack('>3I', len(fmt), 0, len(pk)) + fmt + bytes(pk), (ch, rate, samples)
+
+
 def to_g3_xbox_data(w1):
     """XMA2 'CompressedXbox360Data' bytes for a Gears 1 wave (read_g1_wave), and (channels, rate, samples)"""
+    if w1['tag'] == 0x0165 and w1['streams'] > 1 and not os.environ.get('XMA_NO_MULTISTREAM'):
+        return to_g3_xbox_data_multi(w1)
     if w1['tag'] != 0x0165 or w1['streams'] != 1:
         raise ValueError(f"not a single-stream XMA1 wave (format {w1['tag']:#x}, {w1['streams']} streams)")
     pk = bytearray(w1['packets'])

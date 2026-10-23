@@ -449,6 +449,11 @@ class Copier:
         for i in exports:
             for v in self.linked_vars(i): users.setdefault(v, set()).add(self.s.class_name(self.s.exports[i]['class']))
         # (also with a ToggleHidden hiding the player's pawn beside a cinematic mode, whose bHidePlayer does that)
+        # Every other one too: Gears 1's Marcus is always player 1, and Gears 3's SeqVar_Marcus finds Marcus by his pawn
+        # class, which the classic Marcus the player becomes (GearPawn_COGMarcusG2MP) is not: Marcus's lines (Speak with
+        # him as the speaker) played as nothing. OBJCOPY_MARCUS_CHARACTER=1: only the player-control ones
+        if not os.environ.get('OBJCOPY_MARCUS_CHARACTER'):
+            return {v for v in users if self.s.class_name(self.s.exports[v]['class']) == 'SeqVar_Marcus'}
         return {v for v, cs in users.items() if self.s.class_name(self.s.exports[v]['class']) == 'SeqVar_Marcus'
                 and (cs <= PLAYER_CONTROL_OPS or ('SeqAct_ToggleCinematicMode' in cs
                                                   and cs <= PLAYER_CONTROL_OPS | {'SeqAct_ToggleHidden'}))}
@@ -1621,6 +1626,54 @@ def float_prop_brightness(c, props):
 
 
 FIXUPS['InterpTrackFloatProp'] = float_prop_brightness
+
+
+def facefx_sound_cue_keys(c, props):
+    """Gears 1's Matinee FaceFX track plays each key's line through its animation set (FaceFXAnimSet.
+    ReferencedSoundCues: the cue whose FaceFXAnimName is the key's); Gears 3's plays
+    FaceFXSoundCueKeys, one cue per key, which Gears 1's tracks do not have: the cutscene's mouths moved without
+    their lines (Dom silent, Marcus mouthing). Each key's cue is copied (its wave from the _LOC_int package)
+    and listed. OBJCOPY_NO_FACEFX_CUES=1: none"""
+    import materialconv
+    if os.environ.get('OBJCOPY_NO_FACEFX_CUES'): return props
+    s = c.s
+    src_path = s.path(c.current_src)                    # (copying the cues below runs the copier again)
+    raw = lambda i: {r[0]: r[4] for r in materialconv.raw_props(s, s.export_data(i), 4)[0]}
+    def strv(v):
+        n = struct.unpack_from('>i', v, 0)[0]
+        return v[4:4 + n - 1].decode('latin-1') if n > 0 else ''
+    try:
+        a = raw(c.current_src)
+        sets = struct.unpack_from(f">{struct.unpack_from('>i', a['FaceFXAnimSets'], 0)[0]}i", a['FaceFXAnimSets'], 4)
+        v = a['FaceFXSeqs']; n = struct.unpack_from('>i', v, 0)[0]; o = 4; seqs = []
+        for _ in range(n):
+            el, o = materialconv.raw_props(s, v, o); el = {r[0]: r[4] for r in el}
+            seqs.append((strv(el.get('FaceFXGroupName', b'\0\0\0\0')), strv(el.get('FaceFXSeqName', b'\0\0\0\0'))))
+        by_anim = {}
+        for sr in sets:
+            if sr <= 0: continue
+            rc = raw(sr - 1).get('ReferencedSoundCues', b'\0\0\0\0')
+            for cue in struct.unpack_from(f">{struct.unpack_from('>i', rc, 0)[0]}i", rc, 4):
+                if cue <= 0: continue
+                ca = raw(cue - 1)
+                # by the animation's name: the cue's group is its own set's ("Prison"), the key's the track's set's
+                # ("1_1_Prison_Intro")
+                by_anim.setdefault(strv(ca.get('FaceFXAnimName', b'\0\0\0\0')), cue)
+    except Exception as ex:
+        c.unconvertible[f'InterpTrackFaceFX cues ({type(ex).__name__})'] = c.unconvertible.get(f'InterpTrackFaceFX cues ({type(ex).__name__})', 0) + 1
+        return props
+    cues = [c.ref(by_anim[k[1]]) if k[1] in by_anim else 0 for k in seqs]
+    found = sum(1 for x in cues if x)
+    print(f'facefx: {src_path}: {found} of {len(seqs)} lines given their cues')
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    body = b''.join(encode(c.w, [['FaceFXSoundCue', 'ObjectProperty', 0, b'', struct.pack('>i', x)]]) for x in cues)
+    recs = [r for r in recs if r[0] != 'FaceFXSoundCueKeys'] + [
+        ['FaceFXSoundCueKeys', 'ArrayProperty', 0, b'', struct.pack('>i', len(cues)) + body]]
+    return encode(c.w, recs)
+
+
+FIXUPS['InterpTrackFaceFX'] = facefx_sound_cue_keys
 
 
 # Gears 1 assets copied when something copied refers to them (animation sets: Matinee groups, components)

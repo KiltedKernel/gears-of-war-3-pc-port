@@ -2318,3 +2318,43 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - The "floating" characters: Gears 1's data matches (measured earlier); the user now reads it as the sliding plus
   missing contact shadows. Key timing: Gears 1 keeps every second key (934 for 1868 frames), spread evenly as the
   converter does.
+
+## 2026-10-23 (evening): the user's next test: cutscene sound, Marcus's lines, control during Dom's line, reload
+- **Marcus silent in gameplay (no reply after the path choice) and free to walk while Dom spoke before it.** Gears 3's
+  SeqVar_Marcus is a SeqVar_Character: it finds Marcus by pawn class, and the player is the classic Marcus
+  (GearPawn_COGMarcusG2MP), so every Speak with Marcus as the speaker and the cinematic mode around Dom's line
+  (SeqAct_ToggleCinematicMode_2 -> SeqVar_Marcus_18, also linked by the choice and a teleport, so not converted
+  before) got None. Now every SeqVar_Marcus is GearSeqVar_Player (player 1, any class): Gears 1's Marcus is always
+  player 1 (objcopy.player_vars; OBJCOPY_MARCUS_CHARACTER=1 the old rule). (The choice used to come at once, so
+  the free walk only showed once Dom's line played.)
+- **Dom silent and Marcus mouthing ("shit") in the opening.** Gears 1's Matinee FaceFX track plays each key's line
+  through its animation set's ReferencedSoundCues (the cue whose FaceFXAnimName is the key's; the cue's group is
+  "Prison", the key's "1_1_Prison_Intro"); Gears 3's plays InterpTrackFaceFX.FaceFXSoundCueKeys, one cue per key,
+  which Gears 1's tracks lack. objcopy.facefx_sound_cue_keys fills them (cues copied, waves from _LOC_int): the
+  opening's tracks 1 of 1 (Marcus) and 6 of 6 (Dom). In a reload run Dom's subtitles show ("Not any more. Things
+  have changed").
+- **The opening's sound effects.** One cue, Foley_CinematicsA.1_1_PrisonIntro_51 (a 5.1 mix, 55 s, from 1.9 s), on
+  the director's track. Its wave is XMA1 with three interleaved stereo streams (1496 packets; each packet's low 8
+  header bits = packets to skip to its stream's next; stream k starts at packet k), which xma.py refused.
+  xma.to_g3_xbox_data_multi: one 6-channel XMA2 wave (NumStreams 3, ChannelMask 0x3F), packets kept in place, each
+  packet's frame count counted along its own stream, one block (XMA_NO_MULTISTREAM=1 off). The chains cover all
+  1496 packets; 2441728 samples = 55.37 s (Gears 1: 55.33). GOW3_AUDIO_DUMP over the opening: mean level 0.129 ->
+  0.191, continuous sound from the cutscene's start where there were gaps (not checked by ear).
+- **Reload Last Checkpoint during the opening (the chapter's first checkpoint): open.** The player comes back as a
+  new Gears 3 Marcus (GearPawn_COGMarcus_1) at (0, 0), falling; Dom is gone; the replayed opening draws Marcus and
+  Dom untextured; the opening's end crashes in Dom's factory (time2Go SeqAct_AIFactory_0 -> sub_822C3C20 +0xEC,
+  the null-spawn signature). No package is read again: the sections come back from memory. Ruled out: the
+  object lists holding the shared textures and carrier classes (444 / 7 / 3 entries, unchanged over the reload);
+  the carriers are LevelStreamingAlwaysLoaded (the runtime's reload handling leaves them). Test: scratch
+  reload.txt / reloadrun.ps1 (Start, Reload Last Checkpoint at 190-197 s). Findings since:
+  - No checkpoint is written during the chapter before the yard: every reload (and death) goes back to the
+    chapter's first checkpoint (the left-route regression test's reloads too: it crashes the same way).
+  - The crash is the flashback Dom's: a variant with the multiplayer Dom (GearPawn_COGDomG2MP, no SP_Nightmare_P
+    carrier) reloads, replays the opening and spawns classic Marcus and Dom again (the reload's untextured
+    characters are there too: a separate bug). The carriers stay loaded over the reload (their
+    LevelStreamingAlwaysLoaded: LoadedLevel unchanged). Why Gears 3 then refuses a second GearPawn_COGDomG2 is not
+    known yet (three experiments: circuit breaker; next is reverse engineering the factory's spawn,
+    sub_82A61AA8 -> sub_822C3C20).
+- Verified (easy route, GOW3_LOG_POS + Kismet trace): from Dom's line before the choice the player stays put (the
+  script keeps steering him after Dom: before, he walked on to -537,1110); Marcus's reply (Speak_14) plays (before,
+  it and Dom's answer fired in the same frame).

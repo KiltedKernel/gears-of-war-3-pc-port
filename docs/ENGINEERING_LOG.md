@@ -2274,3 +2274,19 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   state Pickup; S05's load with the class (their meshes once that section is visible). Not verified: picking one up.
   The yard pair sits between cover pieces south of a wall; scripted approaches from both sides stopped short or
   wedged the player in geometry (three tries: stopped).
+
+## 2026-10-23: the opening's characters "a bit too high": measured, matches Gears 1
+- **Meshes**: the converted cutscene meshes (Dom, Marcus, the bag, the Wretches) keep Gears 1's Origin (0), RotOrigin,
+  bounds and reference skeleton (b_MF_Root at 0, pelvis 92.5; the toes at z 0 in the reference pose). The components
+  have no Translation in either game.
+- **Animation**: forward kinematics over Gears 1's own keys (Baked_AnimSet_0, PrisonIntro_actor1/2: Fixed48 rotation
+  tracks after their 24-byte header, non-root keys conjugated relative to the reference skeleton's convention) keeps
+  the lowest foot bone at mesh z -2..+1.6 throughout, Marcus sitting included. The AnimSets keep bAnimRotationOnly 0;
+  the AnimNodeSequences carry only CurrentTime (defaults otherwise).
+- **Placement in game** (GOW3_LOG_PROPS="SkeletalMeshActor:Location,Location+4,Location+8", GOW3_LOG_PROPS_MS=500):
+  Dom starts at (141.0, 788.9, 112.4), the bag at (142.9, 778.0, 115.1), Marcus at (153.3, 829.9, 112.0), Gears 1's
+  values; the movement tracks (MoveFrame 1, relative to the start) then carry them by a few units (Dom z 111.6-113.0).
+- So the port places and animates them as Gears 1 does. The impression is not explained by the data; it may be
+  lighting (no contact darkening under the feet). Tried: copied lights keeping Gears 1's shadow flags (they are
+  written CastShadows 0): the opening's frames already showed the characters' shadows on the floor before (from the
+  light environments), no visible change; reverted. Needs a screenshot of a moment where it shows.

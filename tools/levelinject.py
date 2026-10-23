@@ -1439,7 +1439,7 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
         starts_ = objcopy.player_starts(sp) if with_starts else []
         routes = objcopy.route_ends(sp)                 # (Routes: their last points, copied, stand for them)
         ends = [n for n in set(routes.values()) if sp.class_name(sp.exports[n]['class']) in objcopy.ACTOR_CLASSES]
-        wanted = objcopy.kismet_actors(sp, todo, objcopy.movers(sp) + sorted(objcopy.scripted_mesh_actors(sp)) + objcopy.skeletal_actors(sp) + objcopy.sound_actors(sp) + lights_ + starts_ + ends)
+        wanted = objcopy.kismet_actors(sp, todo, objcopy.movers(sp) + sorted(objcopy.scripted_mesh_actors(sp)) + objcopy.skeletal_actors(sp) + objcopy.sound_actors(sp) + objcopy.pickups(sp) + lights_ + starts_ + ends)
         copied = []
         for ai in wanted:
             cn = sp.class_name(sp.exports[ai]['class'])

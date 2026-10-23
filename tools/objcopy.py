@@ -317,7 +317,7 @@ class Copier:
                 cn = self.s.class_name(e['class'])
                 owner = self.s.class_name(self.s.exports[e['outer'] - 1]['class'])
                 # editor-only components (frustum / light cone drawers, sprites...) and a camera's mesh: not copied
-                if cn in EDITOR_COMPONENTS or (owner == 'CameraActor' and cn == 'StaticMeshComponent'): continue
+                if cn in EDITOR_COMPONENTS or (owner in ('CameraActor',) + tuple(PICKUP_CLASSES) and cn == 'StaticMeshComponent'): continue
                 want.add(i); changed = True
         return sorted(want)
 
@@ -1212,6 +1212,10 @@ ACTOR_CLASSES = set() if os.environ.get("OBJCOPY_NO_ACTORS") else {"Trigger", "T
 LIGHT_CLASSES = {"PointLight", "SpotLight", "PointLightToggleable", "SpotLightToggleable", "PointLightMovable", "SpotLightMovable"}
 if not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= LIGHT_CLASSES
 SOUND_ACTORS = {'AmbientSoundSimple', 'AmbientSoundNonLoop', 'AmbientSound'}
+# Gears 1's weapon pickups (the prison's frag grenades): Gears 3's GearWeaponPickupFactory makes the pickup's mesh from
+# the weapon class (SetPickupMesh: DroppedPickupMesh), so Gears 1's static mesh component is not copied
+PICKUP_CLASSES = set() if os.environ.get('OBJCOPY_NO_PICKUPS') else {'WarWeaponPickupFactory'}
+ACTOR_CLASSES |= PICKUP_CLASSES
 # per component class: properties left out (a StaticMeshComponent's Materials override would point at Gears 1
 # materials: the converted mesh carries converted ones; a SkeletalMeshComponent's too: the prison opening's Dom
 # overrode his hair with a Gears 1 instance whose parent did not resolve, drawn as the default material, a white cap)
@@ -1257,6 +1261,12 @@ def route_ends(src):
         except Exception: continue
         if last > 0: out[i] = last - 1
     return out
+
+
+def pickups(src):
+    """the level's weapon pickups"""
+    return [i for i, e in enumerate(src.exports) if src.class_name(e['class']) in PICKUP_CLASSES
+            and src.path(i).count('.') == 2 and src.path(i).startswith('TheWorld.PersistentLevel')]
 
 
 def sound_actors(src):
@@ -1781,6 +1791,19 @@ def set_music_track(c, props):
 
 FIXUPS['SeqAct_SetMusicTrack'] = set_music_track
 CLASS_RENAME['SeqAct_SetMusicTrack'] = 'SeqAct_PlayMusicTrack'
+
+
+# ---- weapons ----
+# Gears 1's weapon classes (Weap_*: Kismet GiveInventory lists, spawn sets' loadouts, pickups) as Gears 3's (GearWeap_*
+# of the same name: the Lancer is GearWeap_AssaultRifle, the Hammerburst GearWeap_LocustAssaultRifle...); without a
+# match the reference was None (the time2Go GiveInventory converted with two empty entries). Gears 3 gives nothing
+# for a full slot unless the action forces a replace (GearPawn.OnGiveInventory)
+# (Gears 1's grenade base, King Raven turret and Troika have only abstract bases in Gears 3: left unmapped)
+WEAPON_RENAME = {'Weap_Boomer': 'GearWeap_Boomshot'}
+for _w in ('AssaultRifle', 'Bow', 'COGPistol', 'DarkWretchMelee', 'FragGrenade', 'LocustAssaultRifle', 'LocustPistol',
+           'PhysicsGun', 'Shotgun', 'SmokeGrenade', 'SniperRifle', 'WretchMelee'):
+    WEAPON_RENAME['Weap_' + _w] = 'GearWeap_' + _w
+if not os.environ.get('OBJCOPY_NO_RENAME'): CLASS_RENAME.update(WEAPON_RENAME)
 
 
 # ---- character variables ----

@@ -2253,3 +2253,24 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - Seen in passing: Gears 1's time2Go SeqAct_GiveInventory (the player: Weap_COGPistol, Weap_LocustAssaultRifle)
   converts with both entries 0 (the Weap_* classes are not mapped to GearWeap_*); harmless now (the classic Marcus
   has his own loadout), worth mapping when loadouts matter.
+
+## 2026-10-22 (late): Gears 1's weapons and grenade pickups
+
+- **Gears 1's weapon classes map to Gears 3's.** Weap_* (WarfareGame) had no Gears 3 counterpart in the class mapping,
+  so every reference converted to None: time2Go's SeqAct_GiveInventory (the player: Weap_LocustAssaultRifle,
+  Weap_COGPistol, which is also Gears 1's Pawn_COGMarcus DefaultInventory) carried two empty entries.
+  objcopy.WEAPON_RENAME: Weap_X -> GearWeap_X where Gears 3 has the class (Lancer GearWeap_AssaultRifle, Hammerburst
+  GearWeap_LocustAssaultRifle, Gnasher, Snub, Boltok, Longshot, Torque Bow, frag and smoke grenades, the wretches'
+  melee), Weap_Boomer -> GearWeap_Boomshot; the grenade base, King Raven turret and Troika only have abstract bases in
+  Gears 3: unmapped. Gears 3's GearPawn.OnGiveInventory skips a weapon the pawn already has or whose slot is full
+  (unless bForceReplace), so the classic Marcus keeps his loadout at time2Go.
+- **The prison's grenade pickups were missing.** Ten WarWeaponPickupFactory (2 in the yard, S04_Scripting at about
+  -1490,6120; 8 in S05_Scripting around -5300,7000) were not an actor class the converter copies. Now copied
+  (objcopy.PICKUP_CLASSES, objcopy.pickups; OBJCOPY_NO_PICKUPS=1 to leave them out) as GearWeaponPickupFactory with
+  their weapon class mapped. Gears 1's pickup static mesh component is not copied: Gears 3 makes the pickup's mesh
+  from the weapon (GearWeaponPickupFactory.SetPickupMesh: WeaponPickupClass / InventoryType DroppedPickupMesh).
+- Verified in the game (hard-route test, then a teleport into the yard; prop log of GearWeaponPickupFactory): both
+  yard pickups load with InventoryType GearWeap_FragGrenade, make their grenade mesh (a StaticMeshComponent) and go to
+  state Pickup; S05's load with the class (their meshes once that section is visible). Not verified: picking one up.
+  The yard pair sits between cover pieces south of a wall; scripted approaches from both sides stopped short or
+  wedged the player in geometry (three tries: stopped).

@@ -33,9 +33,14 @@ def g1_post_process_value(name, value):
     """a Gears 1 post-process setting's bytes as Gears 3 reads the same look. Scene_HighLights: Gears 1 scales the
     scene by it, Gears 3 divides by it (measured: the prison's (0.8, 0.8, 0.7) taken as it is drew the opening 1.5x too
     bright and neutral, blue 33% of the colour where Gears 1's is 27%; as (1/0.8, 1/0.8, 1/0.7), 36.6/33.1/28.4 against
-    Gears 1's 42.4/39.3/30.2 on the Xbox 360, Xenia). GEARS1_PP_RAW=1: every value as it is"""
+    Gears 1's 42.4/39.3/30.2 on the Xbox 360, Xenia); Scene_Shadows: negated. GEARS1_PP_RAW=1: every value as it is"""
     if name == 'Scene_HighLights' and len(value) == 12 and not os.environ.get('GEARS1_PP_RAW'):
         return struct.pack('>3f', *(1.0 / max(x, 1e-3) for x in struct.unpack('>3f', value)))
+    # Scene_Shadows: the opposite sign (measured: the prison's (0, 0, -0.03) taken as it is lifted blue in the dark
+    # corridors, 32.7% of the colour against Gears 1's 28.7%; negated, the path choice's corridor drew 29.6/31.2/24.7
+    # against the let's play's 29.9/30.8/24.4)
+    if name == 'Scene_Shadows' and len(value) == 12 and not os.environ.get('GEARS1_PP_RAW'):
+        return struct.pack('>3f', *(-x for x in struct.unpack('>3f', value)))
     return value
 
 def raw_props(p, d, o):

@@ -2475,3 +2475,11 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (materialconv.scale_colour; a DXT1 block whose 3/4-colour mode would flip is left alone). Measured on the
   converted tube texture: mean endpoint colour x (1.20, 1.76, 1.08) against the plain copy (green and blue clip at
   the format's maximum). LEVELINJECT_NO_EMISSIVE_SCALE=1: unscaled.
+
+## 2026-10-25 (later): Gears 1's grade, its shadows term
+- The port's residual cool cast (dark corridors blue-grey, Gears 1 warm) was the grade's Scene_Shadows: Gears 1's
+  (0, 0, -0.03) pulls blue down in the darks; Gears 3 applies the term with the opposite sign, so copied as it was
+  it lifted blue. materialconv.g1_post_process_value now negates it (as it inverts Scene_HighLights). Tested first
+  on a patched copy, then built: the path choice's corridor 29.5/31.1/24.7 (blue 28.9%) against the let's play's
+  29.9/30.8/24.4 (28.7%), before 27.7/29.3/27.3 (32.4%); the opening cutscene's frames blue 26.4% against Xenia's
+  27.0%, before 29.9%. Reference frames: build/scratch/xref (Xenia, the opening every 2 s).

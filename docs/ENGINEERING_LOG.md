@@ -2467,3 +2467,11 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   animation (-6..+6 s) plants the feet. So the slide is in Gears 1's own data as read so far; why Gears 1 does
   not show it is open (next: frame-by-frame against Xenia at t 17-23, and how Gears 1's Matinee applies a move
   track to a group with an AnimControl track).
+- **Emissive multipliers (2026-10-25).** materialconv.g1_emissive follows the emissive chain's Multiply nodes and
+  folds their constants (Constant, Constant3/4Vector, a VectorParameter's default) into an (r, g, b) scale: the
+  corridor tubes x (1.2, 1.95, 1.65) (x 1.5 x LightColor), a light pillar's support x 0.08. The scaled texture is
+  its own shared entry (TrilogyT_<name>_Emis: the same source may feed another slot; the tubes' glow is their
+  normal map) and texture_828's colour_scale scales every DXT block's two colour endpoints in place
+  (materialconv.scale_colour; a DXT1 block whose 3/4-colour mode would flip is left alone). Measured on the
+  converted tube texture: mean endpoint colour x (1.20, 1.76, 1.08) against the plain copy (green and blue clip at
+  the format's maximum). LEVELINJECT_NO_EMISSIVE_SCALE=1: unscaled.

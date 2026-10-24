@@ -11,6 +11,7 @@ Gears 3 textures are written with every mip inline (LZO-decoded from Gears 1; th
 NeverStream = True, cloned from a Gears 3 texture of the same slot for the other properties (LODGroup, compression
 settings...), TextureFileCacheName removed."""
 import os, struct, sys
+import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import upk, levelinject, texture2d
 
@@ -234,6 +235,64 @@ def g1_unlit(p, mat):
     return 'EmissiveColor' in a and 'DiffuseColor' not in a
 
 
+def g1_emissive(p, mat):
+    """(texture export index, (r, g, b) scale) a lit Gears 1 material's EmissiveColor draws: its texture times the
+    constants multiplied onto it (Constant, Constant3/4Vector, a VectorParameter's default; the corridor tubes:
+    x 1.5 x LightColor (0.8, 1.3, 1.1)); None without a texture"""
+    tex = g1_emissive_texture(p, mat)
+    if tex is None: return None
+    recs = {r[0]: r[4] for r in raw_props(p, p.export_data(mat), 4)[0]}
+    def expr_of(v):
+        try: sub = {r[0]: r[4] for r in raw_props(p, v, 0)[0]}
+        except Exception: return 0
+        return struct.unpack('>i', sub['Expression'])[0] if 'Expression' in sub else 0
+    def value(e, depth=0):
+        """('tex', scale) or ('const', rgb) or None"""
+        if e <= 0 or depth > 12: return None
+        cn = p.class_name(p.exports[e - 1]['class']).replace('MaterialExpression', '')
+        try: er = {r[0]: r for r in raw_props(p, p.export_data(e - 1), 4)[0]}
+        except Exception: return None
+        f = lambda k, d=0.0: struct.unpack('>f', er[k][4])[0] if k in er else d
+        if 'TextureSample' in cn: return ('tex', np.ones(3))
+        if cn == 'Constant': return ('const', np.full(3, f('R')))
+        if cn in ('Constant3Vector', 'Constant4Vector'): return ('const', np.array([f('R'), f('G'), f('B')]))
+        if cn == 'VectorParameter' and 'DefaultValue' in er:
+            v = er['DefaultValue'][4]
+            try: c = {r[0]: struct.unpack('>f', r[4])[0] for r in raw_props(p, v, 0)[0]}; return ('const', np.array([c.get('R', 0), c.get('G', 0), c.get('B', 0)]))
+            except Exception: return ('const', np.array(struct.unpack_from('>3f', v, 0))) if len(v) >= 12 else None
+        ins = [value(expr_of(r[4]), depth + 1) for k, r in er.items() if r[1] == 'StructProperty' and k in ('A', 'B', 'Input')]
+        ins = [x for x in ins if x is not None]
+        if cn == 'Multiply' and len(ins) == 2:
+            (ka, va), (kb, vb) = ins
+            return ('tex' if 'tex' in (ka, kb) else 'const', va * vb)
+        texs = [x for x in ins if x[0] == 'tex']
+        return texs[0] if texs else (ins[0] if ins else None)
+    v = value(expr_of(recs['EmissiveColor']))
+    scale = tuple(float(x) for x in np.clip(v[1], 0, 4)) if v and v[0] == 'tex' else (1.0, 1.0, 1.0)
+    return tex, scale
+
+
+def scale_colour(data, fmt, scale):
+    """a tiled DXT1/3/5 mip with its colour times scale (r, g, b), block by block in place (the tiling and the packed
+    mip tail stay as they are): both colour endpoints scaled, so every texel the block interpolates is; a DXT1 block
+    whose endpoint order (its 3/4-colour mode) the scaling would flip is left as it was"""
+    import numpy as np
+    if fmt not in ('PF_DXT1', 'PF_DXT3', 'PF_DXT5'): return data
+    bs, co = (8, 0) if fmt == 'PF_DXT1' else (16, 8)
+    a = bytearray(data)
+    sr, sg, sb = scale
+    for o in range(0, len(a) - bs + 1, bs):
+        c0, c1 = struct.unpack_from('>HH', a, o + co)
+        def sc(c):
+            r, g, b = (c >> 11) & 31, (c >> 5) & 63, c & 31
+            r, g, b = min(31, round(r * sr)), min(63, round(g * sg)), min(31, round(b * sb))
+            return (r << 11) | (g << 5) | b
+        n0, n1 = sc(c0), sc(c1)
+        if fmt == 'PF_DXT1' and ((c0 > c1) != (n0 > n1) or (c0 == c1) != (n0 == n1)): continue
+        struct.pack_into('>HH', a, o + co, n0, n1)
+    return bytes(a)
+
+
 def g1_emissive_texture(p, mat):
     """the texture (export index) a lit Gears 1 material's EmissiveColor draws from (the first TextureSample down its
     expression chain: the corridor's fluorescent tubes, a hanging lamp), or None (no emissive, unlit, or a constant)"""
@@ -408,7 +467,7 @@ def g1_volumetric(p, ref):
 SLOT_LOD_BIAS = {'diffuse': 0, 'mask': 0}
 
 
-def texture_828(w, p3, template, src, mask=None, lod_bias=None, max_size=None):
+def texture_828(w, p3, template, src, mask=None, lod_bias=None, max_size=None, colour_scale=None):
     """(data, fixups) for a Gears 3 Texture2D export: template = a Gears 3 texture export index (its properties),
     src = texture2d.Texture of a Gears 1 texture; mask: 'A' (its alpha as grey too: alpha_to_grey) or 'R' (a DXT1
     mask's red as its alpha: red_to_alpha); lod_bias: its LODBias (None: the template's)"""
@@ -445,6 +504,7 @@ def texture_828(w, p3, template, src, mask=None, lod_bias=None, max_size=None):
     for m, mip in enumerate(mips):
         data = src.mip_bytes(first + m)
         if data is not None and mask: data = (red_to_alpha if mask == 'R' else alpha_to_grey)(data, fmt)
+        if data is not None and colour_scale and tuple(colour_scale) != (1.0, 1.0, 1.0): data = scale_colour(data, fmt, colour_scale)
         if data is None:
             out += struct.pack('>Iiii', 0x21, 0, -1, -1)
         else:

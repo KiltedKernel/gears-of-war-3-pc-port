@@ -517,10 +517,10 @@ def main():
         import json
         manifest = json.load(open(args.texture_manifest)) if os.path.isfile(args.texture_manifest) else {'names': {}, 'entries': {}}
     shared_pkg, kit_tex_template = [], {}
-    def shared_texture(sp, ti, tt, tkey, slot, mask=None, character=False):
+    def shared_texture(sp, ti, tt, tkey, slot, mask=None, character=False, scale=None):
         name = manifest['names'].get(tkey)
         if name is None:
-            base = name = 'TrilogyT_' + tkey.split('.')[-1].split('#')[0] + ('_Mask' if mask else '')
+            base = name = 'TrilogyT_' + tkey.split('.')[-1].split('#')[0] + ('_Mask' if mask else '') + ('_Emis' if scale else '')
             k = 2
             while name in manifest['entries']: name = f'{base}_v{k}'; k += 1
             manifest['names'][tkey] = name
@@ -529,6 +529,7 @@ def main():
             manifest['entries'][name] = {'source': os.path.abspath(sp.filename), 'index': ti, 'template': template, 'slot': slot}
             if mask: manifest['entries'][name]['mask'] = mask
             if character: manifest['entries'][name]['character'] = True
+            if scale: manifest['entries'][name]['scale'] = list(scale)
         if not shared_pkg: shared_pkg.append(w.add_import('Core', 'Package', 0, args.shared_textures))
         return w.add_import('Engine', 'Texture2D', shared_pkg[0], name)
     if args.materials and src.version == 374:
@@ -660,16 +661,19 @@ def main():
                     tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1], 0), data, flags=tflags_, fixups=fix)
                 refs[{'diffuse': 'Diffuse_01', 'normal': 'Normal_01', 'specular': 'Specular_01'}[slot]] = tex_ref[tkey]
-            etex = materialconv.g1_emissive_texture(sp, gm) if not os.environ.get('LEVELINJECT_NO_EMISSIVE') and args.skin_material else None
+            em_ = materialconv.g1_emissive(sp, gm) if not os.environ.get('LEVELINJECT_NO_EMISSIVE') and args.skin_material else None
+            etex, escale = em_ if em_ else (None, (1.0, 1.0, 1.0))
+            escale = None if os.environ.get('LEVELINJECT_NO_EMISSIVE_SCALE') or tuple(round(x, 3) for x in escale) == (1.0, 1.0, 1.0) else escale
             if etex is not None and sp.class_name(sp.exports[etex]['class']) == 'Texture2D':
                 try: texture2d.Texture(sp, etex)
                 except Exception: etex = None       # (not a texture texture2d reads: left out)
             else:
                 etex = None
             if etex is not None and materialconv.g1_blend(sp, gm + 1) == 0 and tex_template.get('diffuse') is not None:
-                tkey = sp.path(etex)
+                # (scaled by Gears 1's emissive multipliers: its own texture entry, the source may be another slot's)
+                tkey = sp.path(etex) + ('#emis' + '_'.join(str(round(x * 100)) for x in escale) if escale else '')
                 if tkey not in tex_ref and args.shared_textures:
-                    tex_ref[tkey] = shared_texture(sp, etex, tex_template['diffuse'], tkey, 'diffuse')
+                    tex_ref[tkey] = shared_texture(sp, etex, tex_template['diffuse'], tkey, 'diffuse', scale=escale)
                 if tkey in tex_ref: emissive_tex[(si, gm + 1)] = tex_ref[tkey]
             # masked (the fence, razor wire, grass): a child of the masked template, its mask texture the cutout as
             # grey and alpha (the diffuse's alpha: alpha_to_grey; a DXT1 mask's red: red_to_alpha)

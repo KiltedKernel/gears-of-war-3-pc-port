@@ -81,7 +81,8 @@ def shared_textures_into(manifest, package, hold_names=()):
         upk.E = '>'
         data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, e['index']), e.get('mask'),
                                              lod_bias=materialconv.SLOT_LOD_BIAS.get('mask' if e.get('mask') else e.get('slot')),
-                                             max_size=materialconv.MAX_CHARACTER_TEXTURE_SIZE if e.get('character') else None)
+                                             max_size=materialconv.MAX_CHARACTER_TEXTURE_SIZE if e.get('character') else None,
+                                             colour_scale=e.get('scale'))
         flags = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
         refs.append(w.add_export(p3.exports[tt]['class'], 0, (name, 0), data, flags=flags, fixups=fix))
     # nothing in the level referred to them: the first garbage collection freed them before the sections resolved

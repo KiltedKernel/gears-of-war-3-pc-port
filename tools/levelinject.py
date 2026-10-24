@@ -502,6 +502,7 @@ def main():
 
     # materials (Gears 1): textures converted once, one material instance per source material
     mic_of, mic_refs = {}, {}                          # (source, material ref) -> converted MIC / its texture refs
+    emissive_tex = {}                                  # (source, material ref) -> its emissive texture (below)
     # a chapter of its own (--kit): the material templates are the kit's (the chapter's persistent level); the
     # converted materials are child instances of them, imported (materialconv.child_mic), and the converted textures
     # take a texture of this package with the same compression and LOD group as their property template
@@ -566,6 +567,11 @@ def main():
                 if masked_mic is not None else None
             print(f'masked material template: {p3.path(masked_mic) if masked_mic is not None else "not in the target"} ({masked_param})')
         n_masked, n_fog, fog_ref = 0, 0, [None, None]
+        # lit opaque materials glowing from a texture (the corridors' fluorescent tubes, the prison's light bulbs, lamps):
+        # (si, material ref) -> the converted emissive texture; they become instances of the skin material (a weapon
+        # shader), whose Weap_Emis draws it: Gears 3 draws it on world meshes with vertex light maps too (in game: the
+        # cell block's bulbs glow, dull grey without). LEVELINJECT_NO_EMISSIVE=1: off
+        emissive_tex.clear()
         mats = set()                                   # (source index, material export index)
         for (si, mi), sk in skel_meshes.items():
             mats.update((si, x - 1) for x in sk['materials'] if x > 0)
@@ -654,6 +660,17 @@ def main():
                     tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1], 0), data, flags=tflags_, fixups=fix)
                 refs[{'diffuse': 'Diffuse_01', 'normal': 'Normal_01', 'specular': 'Specular_01'}[slot]] = tex_ref[tkey]
+            etex = materialconv.g1_emissive_texture(sp, gm) if not os.environ.get('LEVELINJECT_NO_EMISSIVE') and args.skin_material else None
+            if etex is not None and sp.class_name(sp.exports[etex]['class']) == 'Texture2D':
+                try: texture2d.Texture(sp, etex)
+                except Exception: etex = None       # (not a texture texture2d reads: left out)
+            else:
+                etex = None
+            if etex is not None and materialconv.g1_blend(sp, gm + 1) == 0 and tex_template.get('diffuse') is not None:
+                tkey = sp.path(etex)
+                if tkey not in tex_ref and args.shared_textures:
+                    tex_ref[tkey] = shared_texture(sp, etex, tex_template['diffuse'], tkey, 'diffuse')
+                if tkey in tex_ref: emissive_tex[(si, gm + 1)] = tex_ref[tkey]
             # masked (the fence, razor wire, grass): a child of the masked template, its mask texture the cutout as
             # grey and alpha (the diffuse's alpha: alpha_to_grey; a DXT1 mask's red: red_to_alpha)
             mask = materialconv.g1_mask(sp, gm) if masked_mic is not None and masked_param else None
@@ -689,6 +706,34 @@ def main():
             if v in unlit_mats: unlit_mats.add(k)
         if import_mats: print(f'{len(import_mats)} imported materials, {sum(1 for k in import_mats if k in mic_of)} converted')
         print(f'{len(mic_of)} materials ({n_masked} masked, {n_fog} fog), {len(tex_ref)} textures converted (template {tp.path(tmic)})')
+        if emissive_tex and args.skin_material:
+            # lit opaque materials glowing from a texture: instances of the skin material (a
+            # weapon shader: Weap_Diffuse / Weap_Norm / Weap_Spec / Weap_Emis), its other textures black or flat
+            ef_, epath = args.skin_material.rsplit(':', 1)
+            ep_ = upk.Package(ef_)
+            etmic = next(i for i in range(len(ep_.exports)) if ep_.path(i).endswith(epath.strip())
+                         and ep_.class_name(ep_.exports[i]['class']) == 'MaterialInstanceConstant')
+            eimports = {}
+            eparent = materialconv.import_object(w, p3, ep_, etmic, eimports)
+            def eneutral(name_):
+                ref_ = next((-k - 1 for k, im in enumerate(ep_.imports) if im['class'] == 'Texture2D' and im['name'] == name_), None)
+                return materialconv.copy_import(w, p3, ep_, ref_, eimports) if ref_ is not None else None
+            eblack, eflat = eneutral('AllBlack'), eneutral('DefaultNormal')
+            eparams = materialconv.mic_texture_params(ep_, etmic)
+            roles_ = {r_: next((n_ for n_ in eparams if part_ in n_.lower()), r_) for r_, part_ in
+                      (('Diffuse_01', 'diffuse'), ('Normal_01', 'norm'), ('Specular_01', 'spec'))}
+            emis_param = next((n_ for n_ in eparams if 'emis' in n_.lower()), None)
+            efl = struct.unpack_from('>Q', ep_.data, ep_.exports[etmic]['entry'] + 24)[0]
+            ecls = next((p3.exports[i]['class'] for i in range(len(p3.exports)) if cls(i) == 'MaterialInstanceConstant'), None)
+            for key_, eref in emissive_tex.items():
+                if emis_param is None or key_ not in mic_refs or ecls is None: continue
+                refs_ = {n_: (eflat if 'norm' in n_.lower() else eblack) for n_ in eparams}
+                refs_.update({roles_[k_]: v_ for k_, v_ in mic_refs[key_].items() if k_ in roles_})
+                refs_[emis_param] = eref
+                refs_ = {k_: v_ for k_, v_ in refs_.items() if v_ is not None}
+                mic_of[key_] = w.add_export(ecls, 0, ('Trilogy_Emissive_' + srcs[key_[0]].exports[key_[1] - 1]['name'], 0),
+                                            materialconv.child_mic(w, p3, ep_, etmic, eparent, refs_), flags=efl)
+            print(f'emissive: {len(emissive_tex)} lit materials glowing from a texture, instances of {ep_.path(etmic)} ({emis_param})')
     # converted meshes have no BodySetup (simple collision): line and box checks must use the triangles (the kDOP
     # tree), or a simple-collision check finds nothing (UseSimpleLineCollision / UseSimpleBoxCollision off)
     def per_poly_collision(data):
@@ -804,6 +849,7 @@ def main():
                     skel_cache[key] = w.add_export(p3.exports[skel_tmic]['class'], 0, ('Trilogy_Skel_' + key.split('.')[-1], 0), data_, flags=fl_)
             return skel_cache[key]
         print('skeletal material template:', sp_.path(skel_tmic) if skel_tmic is not None else None, '(kit)' if pk is not None else '')
+
         skflags = struct.unpack_from('>Q', p3.data, p3.exports[tsk]['entry'] + 24)[0]
         # the mesh's FaceFX actor (facial animation, lip sync): Gears 1's FaceFXAsset copied as it is (both games
         # serialize properties, then the FaceFX archive "FACB" + version, Gears 1 1600, Gears 3 1740, as a byte

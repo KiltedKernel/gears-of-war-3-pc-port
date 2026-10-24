@@ -234,6 +234,32 @@ def g1_unlit(p, mat):
     return 'EmissiveColor' in a and 'DiffuseColor' not in a
 
 
+def g1_emissive_texture(p, mat):
+    """the texture (export index) a lit Gears 1 material's EmissiveColor draws from (the first TextureSample down its
+    expression chain: the corridor's fluorescent tubes, a hanging lamp), or None (no emissive, unlit, or a constant)"""
+    if mat < 0 or p.class_name(p.exports[mat]['class']) != 'Material' or g1_unlit(p, mat): return None
+    try: recs = {r[0]: r[4] for r in raw_props(p, p.export_data(mat), 4)[0]}
+    except Exception: return None
+    if 'EmissiveColor' not in recs: return None
+    def expr_of(v):
+        try: sub = {r[0]: r[4] for r in raw_props(p, v, 0)[0]}
+        except Exception: return 0
+        return struct.unpack('>i', sub['Expression'])[0] if 'Expression' in sub else 0
+    todo, seen = [expr_of(recs['EmissiveColor'])], set()
+    while todo:
+        e = todo.pop(0)
+        if e <= 0 or e in seen: continue
+        seen.add(e)
+        try: er = raw_props(p, p.export_data(e - 1), 4)[0]
+        except Exception: continue
+        if 'TextureSample' in p.class_name(p.exports[e - 1]['class']):
+            t = next((struct.unpack('>i', r[4])[0] for r in er if r[0] == 'Texture'), 0)
+            if t > 0: return t - 1
+        for r in er:
+            if r[1] == 'StructProperty': todo.append(expr_of(r[4]))
+    return None
+
+
 def g1_blend(p, ref, depth=0):
     """a Gears 1 material reference's BlendMode (0 opaque, 1 masked, 2 translucent, 3 additive, 4 modulate),
     following a material instance's Parent; None when not known (an import, unreadable)"""

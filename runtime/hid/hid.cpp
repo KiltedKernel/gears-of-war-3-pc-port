@@ -59,6 +59,7 @@ namespace
     std::atomic<uint16_t> g_scriptPadButtons{ 0 };   // "t pad <XInput buttons hex> ms": a virtual controller
     std::atomic<int16_t> g_scriptLX{ 0 }, g_scriptLY{ 0 };   // "t walkto <x> <y> [s]": the virtual left stick
     std::atomic<int16_t> g_scriptRX{ 0 };                    // "t face <x> <y>": the virtual right stick
+    std::atomic<int16_t> g_scriptRY{ 0 };                    // "t look <-1..1> <ms>": its Y (camera pitch; + up)
     // scripted menu mouse: "t cursor <x> <y>" (UI space), "t click L|R [ms]", "t wheel <notches>"
     std::atomic<int> g_scriptCursorX{ -1 }, g_scriptCursorY{ -1 }, g_scriptWheel{ 0 };
     std::atomic<bool> g_scriptLeft{ false }, g_scriptRight{ false };
@@ -434,6 +435,7 @@ namespace
             else if (e.kind == "walkto") { in >> e.a >> e.b >> e.c; if (!e.c) e.c = 20; }
             else if (e.kind == "teleport") { in >> e.a >> e.b >> e.c; }
             else if (e.kind == "face") { in >> e.a >> e.b; }
+            else if (e.kind == "look") { in >> e.a >> e.b; if (!e.b) e.b = 300; }
             else if (e.kind == "follow") { in >> e.text >> e.a >> e.b; if (!e.a) e.a = 60; }
             else if (e.kind == "route") { in >> e.text >> e.a; }
             evs.push_back(e);
@@ -508,6 +510,9 @@ namespace
             else if (e.kind == "walkto") std::thread(WalkTo, e.a, e.b, e.c).detach();
             else if (e.kind == "teleport") Teleport(e.a, e.b, e.c);
             else if (e.kind == "face") std::thread(Face, e.a, e.b).detach();
+            else if (e.kind == "look")
+                std::thread([amount = e.a, hold = e.b] {
+                    g_scriptRY = int16_t(std::lround(std::clamp(amount, -1.0, 1.0) * 32000)); Sleep(DWORD(hold)); g_scriptRY = 0; }).detach();
             else if (e.kind == "follow") std::thread(Follow, e.text, e.a, e.b).detach();
             else if (e.kind == "route") std::thread(Route, e.text, e.a).detach();
         }
@@ -607,9 +612,9 @@ namespace
         XINPUT_STATE pad{};
         bool hasPad = !g_scripted && XInputGetState(user, &pad) == ERROR_SUCCESS;
         if (g_scripted && user == 0 && g_scriptPadButtons) { pad.Gamepad.wButtons = g_scriptPadButtons; hasPad = true; }
-        if (g_scripted && user == 0 && (g_scriptLX || g_scriptLY || g_scriptRX))
+        if (g_scripted && user == 0 && (g_scriptLX || g_scriptLY || g_scriptRX || g_scriptRY))
         {
-            pad.Gamepad.sThumbLX = g_scriptLX; pad.Gamepad.sThumbLY = g_scriptLY; pad.Gamepad.sThumbRX = g_scriptRX; hasPad = true;
+            pad.Gamepad.sThumbLX = g_scriptLX; pad.Gamepad.sThumbLY = g_scriptLY; pad.Gamepad.sThumbRX = g_scriptRX; pad.Gamepad.sThumbRY = g_scriptRY; hasPad = true;
         }
         if (g_scripted && user == 0 && (g_scriptLT || g_scriptRT))
         {

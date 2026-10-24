@@ -2443,3 +2443,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   cutscene characters' COG_WeaponShader_HOD_SP: Weap_Diffuse / Weap_Norm / Weap_Spec / Weap_Emis; no emissive scale
   parameter). Untested: whether it draws on a world mesh with a vertex light map (its static permutation may be
   compiled for skeletal meshes only, which would give the default material).
+- **Emissive surfaces: done (same day).** Lit opaque materials whose EmissiveColor draws from a texture
+  (materialconv.g1_emissive_texture: the first TextureSample down the emissive chain; 13 of the chapter's sections
+  have some: fluorescent tubes, the prison's light bulbs, hanging lamps, panels, a power box) become instances of
+  the recipe's skin material (GEARGAMESP_SF's COG_WeaponShader_HOD_SP) with Weap_Diffuse / Weap_Norm / Weap_Spec
+  and the emissive texture in Weap_Emis (levelinject, after the material loop, before the meshes are built;
+  LEVELINJECT_NO_EMISSIVE=1 off). Gears 3 draws that weapon shader on world meshes with vertex light maps (the
+  fixtures stay textured). Verified with a new input verb, `look <-1..1> <ms>` (right stick Y, camera pitch;
+  runtime/hid/hid.cpp): from below the corridor's light fittings (teleport 128 1000, face 0 856, look up) the
+  bulbs glow cyan-green, dull grey in a build without (same frame). Gears 1's emissive scales (the tubes' x1.5 x
+  LightColor) are not carried: the weapon shader has no emissive scale parameter. Path-choice run: 60 fps.

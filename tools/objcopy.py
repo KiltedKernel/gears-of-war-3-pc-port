@@ -151,6 +151,9 @@ class Copier:
             got = self.import_like(r)
             if not got and self.loc is not None: got = self.obj_map[r] = self.from_loc(r)
             return got
+        if self.s.class_name(self.s.exports[r - 1]['class']) == 'ParticleSystem' and self.s.exports[r - 1]['name'] in PARTICLE_SYSTEMS:
+            got = self.obj_map[r] = g3_object_import(self, PARTICLE_SYSTEMS[self.s.exports[r - 1]['name']], 'ParticleSystem')
+            return got
         if self.s.class_name(self.s.exports[r - 1]['class']) in DEEP_COPY:
             return self.deep_copy(r - 1)
         return 0                                            # an export not copied: None
@@ -1788,6 +1791,9 @@ PARTICLE_MATERIALS = {
     # Jack's torch sparks: Gears 3's flamethrower spark (GEARGAMESP_SF, loaded with every campaign map)
     'Mat_Sparks': 'FX_Flamethrower.Materials.M_FX_FlameThrower_SimpleSpark_01',
 }
+# Gears 1 particle system name -> a Gears 3 system standing for it (levelinject --g3-effects: a carrier's, e.g. Jack's
+# COG_BOT.Effects.P_Jack_ResOUT); the emitter's component imports it instead of a converted copy
+PARTICLE_SYSTEMS = {}
 # by Gears 1 BlendMode (2 translucent, 3 additive): the same two
 PARTICLE_MATERIAL_FALLBACK = {2: 'War_Level_Effects.Materials.M_Steam_smoke', 3: 'War_Level_Effects.Materials.M_Steam_Burst_Flair'}
 

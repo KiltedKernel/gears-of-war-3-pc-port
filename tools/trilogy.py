@@ -65,7 +65,7 @@ def has_masked(package):
                for i, e in enumerate(p.exports))
 
 
-def shared_textures_into(manifest, package):
+def shared_textures_into(manifest, package, hold_names=()):
     """the chapter's shared textures (levelinject --shared-textures) added to a package (the persistent level's):
     every texture the manifest lists, converted from its Gears 1 source with the template texture it names (the
     persistent level is a clone of the kit: the template textures' paths are the sections' too, all clones of Gears 3
@@ -88,6 +88,9 @@ def shared_textures_into(manifest, package):
     # their imports, and every converted wall and floor drew its template's rock. A Kismet object list in the
     # level's Main_Sequence holds them (the level keeps its sequence, the sequence its objects)
     import objcopy, levelpkg
+    # (and the level's own objects named in the recipe's persistent_hold: the kit's assets the chapter uses, e.g.
+    # SP_Nightmare_02_S's M_Vapors_2 for the opening's drool)
+    refs += [i + 1 for i, e in enumerate(p3.exports) if e['name'] in hold_names]
     main = next(i for i in range(len(p3.exports)) if p3.path(i) == 'TheWorld.PersistentLevel.Main_Sequence')
     wname = lambda i, n: (w.names[i] if n == 0 else f'{w.names[i]}_{n - 1}')
     lst = w.add_export(levelpkg.class_import(p3, w, 'SeqVar_ObjectList'), main + 1, ('TrilogySharedTextures', 0), b'',
@@ -306,11 +309,15 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     if missing: raise SystemExit('missing Gears 1 packages: ' + ', '.join(missing))
     # carriers: Gears 3 level packages streamed in with the chapter (always loaded) for the characters cooked into them
     # (a pawn class spawns only if a loaded package carries it: docs/TRILOGY.md), all their actors and Kismet off
+    # (a carrier may name other objects to hold: "SP_Tower_P (P_Jack_ResOUT P_Jack_Jets)", Gears 3 assets the chapter
+    # uses in place of Gears 1's: g3_effects)
     carriers = []
-    for name in [x.strip() for x in ch.get('carriers', '').split(',') if x.strip()]:
+    for entry in [x.strip() for x in ch.get('carriers', '').split(',') if x.strip()]:
+        name, _, held = entry.partition('(')
+        name, held = name.strip(), held.rstrip(')').split()
         out = os.path.join(out_dir, f'{prefix}Carrier_{name}.xxx')
         os.makedirs(out_dir, exist_ok=True)
-        levelpkg.clone(os.path.join(g3cooked, name + '.xxx'), out, keep=('WorldInfo',), hold=True)
+        levelpkg.clone(os.path.join(g3cooked, name + '.xxx'), out, keep=('WorldInfo',), hold=True, hold_names=held)
         carriers.append(out)
         print(f'  {prefix}Carrier_{name}: the characters cooked into {name}', flush=True)
     content = ','.join([ch.get('content', 'GEARGAMESP_SF')] + carriers)
@@ -328,6 +335,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         common += ['--skin-material', os.path.join(g3cooked, pkg_ + '.xxx') + ':' + mic_]
     if ch.get('max_texture'): common += ['--max-texture', ch['max_texture']]
     if ch.get('max_character_texture'): common += ['--max-character-texture', ch['max_character_texture']]
+    if ch.get('g3_effects'): common += ['--g3-effects', ','.join(x.replace(' ', '') for x in ch['g3_effects'].split(',') if x.strip())]
     if ch.get('light_scale'): common += ['--light-scale', ch['light_scale']]
     if ch.get('facefx_assets'):                       # (G1 name = package: object path, ...) Gears 3 FaceFX actors
         parts_ = []
@@ -401,7 +409,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         import materialconv
         materialconv.MAX_TEXTURE_SIZE = int(ch.get('max_texture', 0))
         materialconv.MAX_CHARACTER_TEXTURE_SIZE = int(ch['max_character_texture']) if ch.get('max_character_texture') else None
-        n_tex = shared_textures_into(manifest, os.path.join(out_dir, shared_tex + '.xxx'))
+        n_tex = shared_textures_into(manifest, os.path.join(out_dir, shared_tex + '.xxx'), ch.get('persistent_hold', '').split())
         import modpack
         modpack.update_toc(folder, g3cooked)
         print(f'  {shared_tex}: {n_tex} textures, shared by the sections', flush=True)

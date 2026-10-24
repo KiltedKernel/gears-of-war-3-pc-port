@@ -197,13 +197,14 @@ def set_post_process(p, w, g1_pp, base_package):
     return len(out)
 
 
-def hold_classes(p, w):
+def hold_classes(p, w, names=()):
     """a carrier's classes held by a Kismet object list in its emptied Main_Sequence: with nothing in the level
     referring to them, the first garbage collection freed them, and a section streamed in later resolved its factory's
-    pawn class import to None (the left route's Drones: null + 0xEC in the factory's "Last Spawned" write). Returns
+    pawn class import to None (the left route's Drones: null + 0xEC in the factory's "Last Spawned" write). names:
+    other objects held too (Gears 3 assets a converted chapter uses: Jack's particle systems, a smoke material). Returns
     the count held"""
     m = next(i for i in range(len(p.exports)) if p.path(i) == 'TheWorld.PersistentLevel.Main_Sequence')
-    refs = [i + 1 for i, e in enumerate(p.exports) if p.class_name(e['class']) == 'Class']
+    refs = [i + 1 for i, e in enumerate(p.exports) if p.class_name(e['class']) == 'Class' or e['name'] in names]
     if not refs: return 0
     lst = w.add_export(class_import(p, w, 'SeqVar_ObjectList'), m + 1, ('TrilogyCarrierClasses', 0), b'',
                        flags=0x0007000100000000)
@@ -217,15 +218,15 @@ def hold_classes(p, w):
     return len(refs)
 
 
-def clone(template, out, name=None, keep=KEEP_SECTION, hold=False):
+def clone(template, out, name=None, keep=KEEP_SECTION, hold=False, hold_names=()):
     """a blanked clone of a Gears 3 level package with its own GUID, written to out; returns (kept, removed);
-    hold: its classes held (a carrier)"""
+    hold: its classes held (a carrier), with the objects named in hold_names"""
     p = upk.Package(template)
     upk.E = '>'
     w = upkwrite.Rewriter(p)
     w.guid = package_guid(name or os.path.splitext(os.path.basename(out))[0])
     kept, removed = blank(p, w, keep)
-    if hold: hold_classes(p, w)
+    if hold: hold_classes(p, w, hold_names)
     os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
     open(out, 'wb').write(w.build())
     return kept, removed

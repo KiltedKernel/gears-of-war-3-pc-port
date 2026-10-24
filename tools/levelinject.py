@@ -222,6 +222,8 @@ def main():
                     "GEARGAMESP_SF in the campaign: COG_Dom_Summer.Materials.M_COG_Dom_Summer_Game)")
     ap.add_argument('--light-scale', type=float, default=1.0, help="the copied lights' brightness (and Matinee tracks "
                     "animating it) times this (objcopy.LIGHT_SCALE)")
+    ap.add_argument('--g3-effects', default='', help="Gears 1 particle systems / particle materials standing for Gears 3 "
+                    "objects the chapter loads (a carrier's): Name=Path,... (objcopy.PARTICLE_SYSTEMS, PARTICLE_MATERIALS)")
     ap.add_argument('--max-character-texture', type=int, default=None, help="the same for skeletal meshes' textures "
                     "(default: --max-texture)")
     ap.add_argument('--max-texture', type=int, default=0, help="converted textures' mips larger than this are left out "
@@ -257,6 +259,10 @@ def main():
     args = ap.parse_args()
     materialconv.MAX_TEXTURE_SIZE = args.max_texture
     materialconv.MAX_CHARACTER_TEXTURE_SIZE = args.max_character_texture
+    for pair in [x for x in args.g3_effects.split(',') if '=' in x]:
+        g1, g3 = (y.strip() for y in pair.split('=', 1))
+        import objcopy as _oc
+        _oc.PARTICLE_SYSTEMS[g1] = g3; _oc.PARTICLE_MATERIALS[g1] = g3
     import objcopy
     objcopy.LIGHT_SCALE = args.light_scale
     offset = np.array([float(x) for x in args.offset.split(',')])

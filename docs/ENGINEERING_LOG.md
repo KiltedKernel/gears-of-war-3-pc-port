@@ -2408,3 +2408,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - **Gears 3 has some of these assets itself**: COG_BOT.Effects.P_Jack_ResOUT / P_Jack_Jets (SP_Airfield_03B_S, the
   Azura levels, GEARGAMESIEGE_SF), War_Level_Effects M_Steam_smoke_thick (bag dust: SP_Bridge_01_S...), M_Vapors_2
   (drool: the kit SP_Nightmare_02_S, so also in the converted persistent level, unreferenced). Next: hold/carry them.
+- **Gears 3's own copies where it has them (same day).** Carriers can now hold named objects besides classes
+  (recipe `carriers = ..., SP_Tower_P (P_Jack_ResOUT P_Jack_Jets), SP_Bridge_02b_S (M_Steam_smoke_thick)`;
+  levelpkg.hold_classes names), and `g3_effects = Name = Path, ...` (levelinject --g3-effects) makes the converter
+  import those instead: a ParticleSystem export of that name becomes an import of the Gears 3 system (Copier.ref), a
+  particle material of that name an import of the Gears 3 material. In game: Jack's emitters play
+  COG_BOT.Effects.P_Jack_ResOUT / P_Jack_Jets (with their M_Jack_Elect_float), the bag dust M_Steam_smoke_thick.
+  The drool's M_Vapors_2 (the kit's, so in the persistent level: recipe persistent_hold puts it in
+  TrilogySharedTextures, and it is live in memory) resolved to None from the cutscene section all the same, with an
+  import chain identical to the carrier's smoke material: not explained; the drool keeps the smoke stand-in.
+  The bag dust emitter (84, 589, 129) activates on cue (138-140 s) but nothing shows where the bag lands.

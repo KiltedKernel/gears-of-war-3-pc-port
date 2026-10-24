@@ -2453,3 +2453,17 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   runtime/hid/hid.cpp): from below the corridor's light fittings (teleport 128 1000, face 0 856, look up) the
   bulbs glow cyan-green, dull grey in a build without (same frame). Gears 1's emissive scales (the tubes' x1.5 x
   LightColor) are not carried: the weapon shader has no emissive scale parameter. Path-choice run: 60 fps.
+
+## 2026-10-25: the opening's sliding animations, findings (not fixed)
+- The opening's character animations carry all their travel in the pelvis (PrisonIntro_actor1/2: b_MF_Root has one
+  key at 0; the pelvis travels up to ~340 units); the actors' Matinee movement tracks (MoveFrame relative to
+  initial, CurveAuto keys, Gears 1 mode 1 = Gears 3's CIM_CurveAuto) add small offsets. The converted
+  InterpTrackAnimControl keys are identical to Gears 1's (StartTime -3.694 / -3.985, offsets, rate 1).
+- Forward kinematics over Dom's own keys (scratch build/scratch/footslide.py, slidetest.py, slidescan.py,
+  slidectl.py): with the animation alone his planted feet hold still (mean 11-17 units/s including touch-down and
+  lift-off, 90th percentile 23-40); adding his movement track raises the 90th percentile to ~97 units/s, mostly
+  where the track moves him ~120 units between t 17.3 and 22.3 s while the animation has him standing. Neither
+  reading of the offsets (rotated by the actor's yaw -84.4 as Gears 3 does, or not) nor any time shift of the
+  animation (-6..+6 s) plants the feet. So the slide is in Gears 1's own data as read so far; why Gears 1 does
+  not show it is open (next: frame-by-frame against Xenia at t 17-23, and how Gears 1's Matinee applies a move
+  track to a group with an AnimControl track).

@@ -222,6 +222,8 @@ def main():
                     "GEARGAMESP_SF in the campaign: COG_Dom_Summer.Materials.M_COG_Dom_Summer_Game)")
     ap.add_argument('--light-scale', type=float, default=1.0, help="the copied lights' brightness (and Matinee tracks "
                     "animating it) times this (objcopy.LIGHT_SCALE)")
+    ap.add_argument('--chapter-lights', default=None, help="a .npz of the chapter's lights in no Gears 1 light map "
+                    "(trilogy: lighting.unbaked_lights over all its packages): baked instead of the sources' point lights")
     ap.add_argument('--g3-effects', default='', help="Gears 1 particle systems / particle materials standing for Gears 3 "
                     "objects the chapter loads (a carrier's): Name=Path,... (objcopy.PARTICLE_SYSTEMS, PARTICLE_MATERIALS)")
     ap.add_argument('--max-character-texture', type=int, default=None, help="the same for skeletal meshes' textures "
@@ -882,11 +884,17 @@ def main():
             if n_ in ('LightGuid', 'LightmapGuid') and t_ == 'StructProperty': light_guids.append(bytes(v_[1]))
     print(f'{len(light_guids)} light GUIDs listed as baked')
     point_lights = None
-    if src.version == 374 and not args.no_point_lights:
+    bake = lighting.bake_point_lights
+    if src.version == 374 and not args.no_point_lights and args.chapter_lights:
+        z = np.load(args.chapter_lights)
+        point_lights = tuple(z[k] for k in ('pos', 'radius', 'colour', 'dir', 'cos_inner', 'cos_outer'))
+        bake = lighting.bake_lights
+        print(f"{len(point_lights[0])} of the chapter's lights (in no Gears 1 light map) baked into the light maps")
+    elif src.version == 374 and not args.no_point_lights:
         parts = [lighting.g1_point_lights(sp) for sp in srcs]
         parts = [x for x in parts if x is not None and len(x[0])]
         if parts: point_lights = tuple(np.concatenate([x[k] for x in parts]) for k in range(len(parts[0])))
-    if point_lights is not None: print(f'{len(point_lights[0])} point lights baked into the light maps')
+        if point_lights is not None: print(f'{len(point_lights[0])} point lights baked into the light maps')
     def world_vertices(mesh, loc, rot, scale):
         pos, tx, tz, uvh, nv = meshconv.source_vertices(mesh)
         P = np.frombuffer(pos.tobytes(), '>f4').reshape(nv, 3).astype(np.float64)
@@ -1009,7 +1017,7 @@ def main():
                 samples = np.full((nv, 3, 3), UNLIT_LIGHT, np.float32); n_unlit += 1
             elif point_lights is not None:
                 Pw, Nw = world_vertices(parsed[mi], loc, rot, scale)
-                pl = lighting.bake_point_lights(point_lights, Pw, Nw)
+                pl = bake(point_lights, Pw, Nw)
                 base = samples if samples is not None else np.full((nv, 3, 3), 0.05, np.float32)
                 samples = base + pl[:, None, :]
             if samples is not None:
@@ -1118,7 +1126,7 @@ def main():
             Pb = np.frombuffer(lod0['positions'][2][2], '>f4').reshape(-1, 3).astype(np.float64)
             vb = np.frombuffer(lod0['vertices'][4][2], np.uint8).reshape(-1, 12)
             Nb = vb[:, [7, 6, 5]].astype(np.float64) / 127.5 - 1      # TangentZ (w z y x)
-            light = light + lighting.bake_point_lights(point_lights, Pb, Nb)[:, None, :]
+            light = light + bake(point_lights, Pb, Nb)[:, None, :]
         tail = bytes(4) if args.no_lighting else lighting.gears3_vertex_lightmap(light, len(w.exports) + 1, light_guids)
         d = bytearray(td[:tend]) + tail
         struct.pack_into('>i', d, sm_off, mref)

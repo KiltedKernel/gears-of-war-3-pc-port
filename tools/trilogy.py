@@ -362,6 +362,15 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     # of their own, streamed in, was not always in when a section resolved its imports, and those textures were the
     # template material's rock)
     shared_tex = prefix + persistent if ch.get('shared_textures', 'true').lower() != 'false' else None
+    # the chapter's lights in no Gears 1 light map (lighting.unbaked_lights over all its packages): every section
+    # bakes these, not its own package's point lights (most of which Gears 1's light maps already hold)
+    if ch.get('chapter_lights', 'true').lower() != 'false':
+        import numpy as np, lighting, upk as upk_
+        arrs, (n_all, n_kept) = lighting.unbaked_lights([upk_.Package(src(n)) for n in [persistent] + sections])
+        lights_npz = os.path.join(work, 'chapter_lights.npz')
+        np.savez(lights_npz, **dict(zip(('pos', 'radius', 'colour', 'dir', 'cos_inner', 'cos_outer'), arrs)))
+        common += ['--chapter-lights', lights_npz]
+        print(f'  chapter lights: {n_kept} of {n_all} in no Gears 1 light map, baked', flush=True)
     manifest = os.path.join(work, 'textures.json')
     if os.path.isfile(manifest): os.remove(manifest)
     tex_options = ['--shared-textures', shared_tex, '--texture-manifest', manifest] if shared_tex else []

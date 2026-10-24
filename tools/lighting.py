@@ -196,3 +196,111 @@ def bake_point_lights(lights, P, N):
         lam = np.clip((L * N).sum(1) / np.sqrt(np.maximum(d2, 1e-6)), 0, 1)
         out += (att * lam)[:, None] * col[k]
     return out
+
+
+# ---- a chapter's lights not in Gears 1's light maps, baked ----
+# Gears 1 bakes most of a level's point and spot lights into its light maps too, not only its directional and sky
+# lights: each light map lists the GUIDs of the lights in it (the prison's cell block: 255 of 288 point lights, 73 of
+# 83 spot lights). Baking every point light again on top of them lit those surfaces twice; the lights in no light map
+# are the ones Gears 1 drew dynamically. And a section's lights are not always in its own package: the cell block's
+# meshes (SP_Prison_S02_Meshes) are lit by SP_Prison_S02's. So the chapter's lights are gathered once from all its
+# packages (spot lights with their cones), those any light map lists are left out, and every section bakes the rest.
+
+def g1_lights(p, classes=('PointLight', 'SpotLight')):
+    """a Gears 1 level's PointLight / SpotLight actors (classes: not the Toggleable / Movable ones, which scripts switch
+    and move: copied as lights for characters, not baked into the walls): list of dicts {pos, radius,
+    colour (x brightness), dir (spot: its X axis), cos_inner, cos_outer (point: -2), guids}"""
+    import levelinject
+    out = []
+    for i, e in enumerate(p.exports):
+        cn = p.class_name(e['class'])
+        if cn not in classes: continue
+        if p.path(i).count('.') != 2 or not p.path(i).startswith('TheWorld'): continue
+        try:
+            o, pr, end = levelinject.props_at(p, p.export_data(i), (32, 4, 8))
+            a = {n: v for n, t, k, v in pr}
+            comp = a.get('LightComponent', 0)
+            if comp <= 0: continue
+            o, cpr, end = levelinject.props_at(p, p.export_data(comp - 1), (8, 4, 12))
+        except ValueError:
+            continue
+        c = {n: v for n, t, k, v in cpr}
+        en = c.get('bEnabled', True)                     # (a bool, or (type, bytes))
+        if en is False or (isinstance(en, tuple) and not any(bytes(en[1]))): continue
+        m = struct.unpack('>16f', c['CachedParentToWorld'][1]) if 'CachedParentToWorld' in c else None
+        if m: where, axis = m[12:15], np.array(m[0:3], np.float64)
+        elif 'Location' in a: where, axis = struct.unpack('>3f', a['Location'][1]), np.array([1.0, 0, 0])
+        else: continue
+        argb = c['LightColor'][1] if 'LightColor' in c else b'\xff\xff\xff\x00'
+        rgb = np.array([argb[2], argb[1], argb[0]], np.float32) / 255           # FColor stored B G R A
+        L = {'pos': where, 'radius': float(c.get('Radius', 1024.0)), 'colour': rgb * float(c.get('Brightness', 1.0)),
+             'dir': axis / max(np.linalg.norm(axis), 1e-6), 'cos_inner': -2.0, 'cos_outer': -2.0,
+             'guids': {bytes(c[k][1]) for k in ('LightGuid', 'LightmapGuid') if k in c}}
+        if cn.startswith('SpotLight'):
+            inner = float(c.get('InnerConeAngle', 0.0)); outer = float(c.get('OuterConeAngle', 44.0))
+            L['cos_inner'], L['cos_outer'] = np.cos(np.radians(inner)), np.cos(np.radians(outer))
+        out.append(L)
+    return out
+
+
+def baked_light_guids(p):
+    """the GUIDs every light map of a Gears 1 level lists (static meshes' LODs and the BSP's ModelComponent elements)"""
+    import levelinject
+    out = set()
+    for i, e in enumerate(p.exports):
+        cn = p.class_name(e['class'])
+        if cn not in ('StaticMeshComponent', 'ModelComponent'): continue
+        d = p.export_data(i)
+        try:
+            o, pr, end = levelinject.props_at(p, d, (8, 4))
+            c = Cursor(d, end)
+            if cn == 'StaticMeshComponent':
+                for _ in range(c.i32()):
+                    c.raw(4 * c.i32()); c.raw(4 * c.i32())
+                    lm = read_lightmap_374(c)
+                    g = lm.get('guids', b'')
+                    out.update(g[k:k + 16] for k in range(0, len(g), 16))
+            else:
+                c.i32(); c.i32()                                         # model, zone
+                for _ in range(c.i32()):
+                    lm = read_lightmap_374(c)
+                    g = lm.get('guids', b'')
+                    out.update(g[k:k + 16] for k in range(0, len(g), 16))
+                    c.i32(); c.i32(); c.raw(2 * c.i32()); c.raw(4 * c.i32()); c.raw(16 * c.i32())
+        except Exception:
+            continue
+    return out
+
+
+def unbaked_lights(packages):
+    """the lights of these Gears 1 packages that no light map among them lists, as arrays for bake_lights:
+    (positions, radii, colours, dirs, cos_inner, cos_outer), and (total, kept) counts"""
+    lights, baked = [], set()
+    for p in packages:
+        lights += g1_lights(p)
+        baked |= baked_light_guids(p)
+    kept = [L for L in lights if not (L['guids'] & baked)]
+    arr = lambda k, dt=np.float64: np.array([L[k] for L in kept], dt)
+    return ((arr('pos').reshape(-1, 3), arr('radius'), arr('colour', np.float32).reshape(-1, 3), arr('dir').reshape(-1, 3),
+             arr('cos_inner'), arr('cos_outer')), (len(lights), len(kept)))
+
+
+def bake_lights(lights, P, N):
+    """(n, 3) rgb light at world positions P (n, 3) with normals N (n, 3) from unbaked_lights' arrays: UE3's radial
+    falloff (exponent 2) x N.L, spot lights x their cone ((cos - cos_outer) / (cos_inner - cos_outer), squared)"""
+    pos, rad, col, dirs, ci, co = lights
+    out = np.zeros((len(P), 3), np.float32)
+    if len(P) == 0 or len(pos) == 0: return out
+    lo, hi = P.min(0), P.max(0)
+    near = np.all((pos + rad[:, None] >= lo) & (pos - rad[:, None] <= hi), 1)
+    for k in np.nonzero(near)[0]:
+        L = pos[k] - P
+        d2 = (L * L).sum(1)
+        inv = 1 / np.sqrt(np.maximum(d2, 1e-6))
+        att = np.clip(1 - d2 / rad[k] ** 2, 0, 1) ** 2
+        lam = np.clip((L * N).sum(1) * inv, 0, 1)
+        if co[k] > -1.5:
+            cosang = -(L * dirs[k]).sum(1) * inv
+            att = att * np.clip((cosang - co[k]) / max(ci[k] - co[k], 1e-4), 0, 1) ** 2
+        out += (att * lam)[:, None] * col[k]
+    return out

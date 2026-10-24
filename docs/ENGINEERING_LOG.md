@@ -2418,3 +2418,19 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   TrilogySharedTextures, and it is live in memory) resolved to None from the cutscene section all the same, with an
   import chain identical to the carrier's smoke material: not explained; the drool keeps the smoke stand-in.
   The bag dust emitter (84, 589, 129) activates on cue (138-140 s) but nothing shows where the bag lands.
+
+## 2026-10-24 (later): Gears 1's lights baked once, not twice
+- Gears 1's light maps list the GUIDs of the lights baked into them, and they hold nearly all of the prison's point
+  and spot lights (933 lights in the chapter's packages, 31 in no light map: the ones Gears 1 drew dynamically). The
+  converter baked every point light of a section's own package on top of those light maps (the old note that Gears 1
+  bakes only directional and sky lights held for MP_Gridlock, not here), and a section's lights were often in
+  another package (the cell block's meshes, SP_Prison_S02_Meshes, got 2 lights; SP_Prison_S02 holds its 288).
+- Now trilogy gathers the chapter's lights once (lighting.unbaked_lights over the persistent level and every
+  section: PointLight and SpotLight, not the Toggleable / Movable ones scripts switch and move, which stay live
+  lights for characters), leaves out those any mesh or BSP light map lists (lighting.baked_light_guids), writes the
+  rest to chapter_lights.npz, and every section bakes them (levelinject --chapter-lights; lighting.bake_lights adds
+  spot cones). Recipe chapter_lights = false: the old per-package bake. Build time 13 -> 7 min.
+- Measured: the opening cutscene's frames unchanged (33.9/31.5/27.9 against 33.5/31.1/27.5); the corridor at the
+  path choice 28.3/29.9/28.2 against Gears 1's let's play 29.9/30.8/24.4 (the playtest before the grade fix: 29.6/
+  31.8/38.5). Still neutral where Gears 1 is green-yellow, and Gears 1's fluorescent tubes glow (emissive) where the
+  port's are dark: emissive materials are not converted yet.

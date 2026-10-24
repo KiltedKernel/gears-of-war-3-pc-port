@@ -2434,3 +2434,12 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   path choice 28.3/29.9/28.2 against Gears 1's let's play 29.9/30.8/24.4 (the playtest before the grade fix: 29.6/
   31.8/38.5). Still neutral where Gears 1 is green-yellow, and Gears 1's fluorescent tubes glow (emissive) where the
   port's are dark: emissive materials are not converted yet.
+- **Emissive (glowing) surfaces, findings.** 50 of the chapter's materials feed EmissiveColor; most are unlit
+  translucent (fog, beams, decals, smoke) and handled elsewhere. The lit opaque ones are few but visible: the
+  corridor's fluorescent tubes (COG_City_Interior_FluorecentLights_DR_Mat: emissive = its tube texture x 1.5 x
+  LightColor (0.8, 1.3, 1.1), the green-white of Gears 1's corridors), COG_EBHangingLamp_Mat (its own emissive
+  texture), COG_PanelPrefabs_JJ_Mat. They convert as children of the kit's rock instance, which has no emissive:
+  dark. The only Gears 3 instances loaded with an emissive texture parameter are character / weapon shaders (the
+  cutscene characters' COG_WeaponShader_HOD_SP: Weap_Diffuse / Weap_Norm / Weap_Spec / Weap_Emis; no emissive scale
+  parameter). Untested: whether it draws on a world mesh with a vertex light map (its static permutation may be
+  compiled for skeletal meshes only, which would give the default material).

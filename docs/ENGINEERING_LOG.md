@@ -2495,3 +2495,16 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   converter does not handle them; Gears 3 still has the class), Emergence Holes (WarSpawner_EmergenceHole), the
   Troika (Turret_TroikaCabal: same class name in Gears 3), the opening cutscene, the player as the classic Marcus,
   navmesh, Carmine/Minh (Minh has no Gears 3 class: stand-in), over-bright white surfaces.
+
+## 2026-10-25 (later): Gears 1 terrain as BSP polygons (tools/terrainconv.py)
+- Embry Square has three Terrain actors (S01 13x13, S02 25x32, S07_Ruins 21x31). Gears 1's layout (version 374): the
+  heights (uint16) after the tagged properties, local z = (h - 32768) / 128, DrawScale3D from Engine.Default__Terrain
+  = 256 (a patch 256 units); per vertex info bits (1 = hole); AlphaMaps (a byte per vertex) by TerrainLayer.AlphaMapIndex;
+  TerrainLayerSetup.Materials -> TerrainMaterial {Material, MappingScale, MappingPanU/V}.
+- terrainconv.polygons gives two triangles a patch as bspconv.polygons tuples, on synthetic surfaces (one per
+  material: the last layer covering over half the patch; no blending), so levelinject's BSP path chunks, textures and
+  collides them like BSP (LEVELINJECT_NO_TERRAIN=1: left out). A package with terrain and no BSP model gets an empty one.
+- Checked offline: each terrain's heights meet the BSP floors over it (S01 -804..-746 against a floor at -776; S02
+  -250..-60 against -128..16). In game the chapter loads with them (no crash); the S02 test spot showed the paved BSP
+  floor over the terrain (z 0 against the terrain's -140 there). The ruins' terrain (S07, Kismet-streamed later) not
+  seen yet.

@@ -387,14 +387,20 @@ def main():
           f'{len(overrides)} components with their own materials')
     bsp_chunks, polys = [], []                         # chunks: (source index, materials, mesh)
     if args.bsp:
+        import terrainconv
         for si, sp in enumerate(srcs):
             if sp.version != 374: continue
             try:
                 wm = bspconv.world_model(sp)
+                model = bspconv.read_model_374(sp, wm)
+                sp_polys = bspconv.polygons(model, sp, bspconv.node_lightmaps(sp, wm + 1))
             except ValueError:
-                continue
-            model = bspconv.read_model_374(sp, wm)
-            sp_polys = bspconv.polygons(model, sp, bspconv.node_lightmaps(sp, wm + 1))
+                model, sp_polys = terrainconv.empty_model(), []
+            # Gears 1's terrain (Embry Square's floors): BSP-style polygons with surfaces of their own (terrainconv)
+            if not os.environ.get('LEVELINJECT_NO_TERRAIN'):
+                t_polys = terrainconv.polygons(sp, model)
+                if t_polys: print(f'terrain: {len(t_polys)} triangles')
+                sp_polys += t_polys
             if args.center:
                 sp_polys = [x for x in sp_polys if np.linalg.norm(x[1].mean(0) - c) <= args.radius]
             if not sp_polys: continue

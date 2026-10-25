@@ -353,7 +353,15 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     kit_target = os.path.join(work, prefix + persistent + '.xxx')
     kept, removed = levelpkg.clone(os.path.join(g3cooked, ch['kit'] + '.xxx'), kit_target)
     print(f'  {prefix}{persistent}: the kit ({ch["kit"]}: {kept} actors kept, {removed} off)', flush=True)
-    levelinject(folder, kit_target, [src(persistent)], ['--kismet', '--player-starts', '--replace'] + materials + common
+    # the persistent level's AI factories: their pawn classes resolve when it loads, before the carriers stream in (a
+    # carrier's class there is a null: Embry's squad factories crashed spawning), so persistent_pawn_classes (classes
+    # of load_packages, loaded with the game) take over pawn_classes there
+    p_pawns = common
+    if ch.get('persistent_pawn_classes'):
+        merged = dict(x.strip().split('=', 1) for x in ch.get('pawn_classes', '').split(',') if '=' in x)
+        merged.update(dict(x.strip().split('=', 1) for x in ch['persistent_pawn_classes'].split(',') if '=' in x))
+        p_pawns = common + ['--pawn-classes', ','.join(f'{k}={v}' for k, v in merged.items())]
+    levelinject(folder, kit_target, [src(persistent)], ['--kismet', '--player-starts', '--replace'] + materials + p_pawns
                 + ch.get('persistent_options', '').split(), g3cooked)
     kit = os.path.join(out_dir, prefix + persistent + '.xxx')
     # always_loaded: sections Gears 1 streamed by LevelStreamingVolume only (not converted; Kismet streams the rest):

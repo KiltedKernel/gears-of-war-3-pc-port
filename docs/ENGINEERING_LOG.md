@@ -2553,3 +2553,17 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   Left: its other links (Set 1 [1], bForceMoveToSpawnLocation, TeleportDistance, TeleportZDistance: named variables
   of the persistent level, now linked), the pawn class (GearPawn_COGDomG2, as the prison's), and the crash site
   sub_822C3C20+3E reading +0xEC of a null in the decompiled game. The landing2 navmesh region is parked in the recipe.
+- **Found: the squad factory crash.** The crash site (sub_822C3C20, walking an object's outers, called from the factory's
+  spawn loop sub_82A61AA8 with spawn set +132, its GearPawnClass) got a null class. Embry's squad factories are in the
+  persistent level, which loads before the carrier levels stream in, so its imports of carrier classes
+  (GearPawn_COGDomG2, GearPawn_COGBenjaminCarmine, GearPawn_COGRedShirt: SP_Nightmare_P) resolve to nothing; the prison's
+  factories are all in sections (loaded after the carriers). Checked: Dom as GEARGAMESP_SF's GearPawn_COGDom got
+  through, the crash moved to Carmine's factory. A carrier listed as a content package crashed the game at start.
+  Fix: recipe persistent_pawn_classes (trilogy.py: pawn_classes overridden for the persistent level only) with
+  classes of load_packages (multiplayer character packages, loaded with the game): Dom GearPawn_COGDomG2MP, Carmine
+  GearPawn_COGCarmineMP (Gears 3's Anthony Carmine, Gears 1's), Minh GearPawn_COGRedshirtMP.
+  In game (520 s): no crash; Dom, Carmine and the Minh stand-in spawn beside the player and take cover at the first
+  landing; four Drones spawn, two die.
+- Seen there: every character draws dark outdoors (the player and squad too, not only the cutscene's): Gears 3 lights
+  characters from light actors near them (light environments), and Embry's open square has few; its sun, copied,
+  lit the converted world as well. And the player stayed Gears 3's Marcus: the classic swap after the opening never ran.

@@ -1257,10 +1257,11 @@ ACTOR_CLASSES = set() if os.environ.get("OBJCOPY_NO_ACTORS") else {"Trigger", "T
 # Gears 1's lights: their light is baked into the converted geometry (tools/lighting.py), but Gears 3 lights
 # characters (light environments) and cutscene actors from light actors: copied, lighting dynamic objects only
 LIGHT_CLASSES = {"PointLight", "SpotLight", "PointLightToggleable", "SpotLightToggleable", "PointLightMovable", "SpotLightMovable"}
-# (experimental, OBJCOPY_SUN=1) outdoor levels' sun: Embry Square's opening characters draw black without it. Copied
-# like the other lights (not scaled by LIGHT_SCALE), Embry Square never finished loading (an exception while loading a
-# section; the same with Gears 1's SkyLights): their components need converting first
+# (experimental) outdoor levels' sun (OBJCOPY_SUN=1) and sky light (OBJCOPY_SKY=1), not scaled by LIGHT_SCALE. They load
+# (with COMPONENT_TAIL's empty arrays; without them the load hung) but in Embry Square's opening they lit the converted
+# world too (washed out white, the sky light most), whatever their LightingChannels, and its dark characters stayed dark
 if os.environ.get("OBJCOPY_SUN"): LIGHT_CLASSES |= {"DirectionalLight", "DirectionalLightToggleable"}
+if os.environ.get("OBJCOPY_SKY"): LIGHT_CLASSES |= {"SkyLight", "SkyLightToggleable"}
 if not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= LIGHT_CLASSES
 SOUND_ACTORS = {'AmbientSoundSimple', 'AmbientSoundNonLoop', 'AmbientSound'}
 # Gears 1's weapon pickups (the prison's frag grenades): Gears 3's GearWeaponPickupFactory makes the pickup's mesh from
@@ -1275,7 +1276,8 @@ COMPONENT_DROP = {'StaticMeshComponent': {'Materials'}, 'SkeletalMeshComponent':
 COMPONENT_TAIL = {'StaticMeshComponent': bytes(4),
                   # a light component ends with its InclusionConvexVolumes / ExclusionConvexVolumes (empty arrays): written
                   # without them, Gears 3 read past the component and the campaign load crashed or hung
-                  'PointLightComponent': bytes(8), 'SpotLightComponent': bytes(8)}
+                  'PointLightComponent': bytes(8), 'SpotLightComponent': bytes(8),
+                  'DirectionalLightComponent': bytes(8), 'SkyLightComponent': bytes(8)}
 
 
 def movers(src):
@@ -2733,5 +2735,5 @@ def light_component(c, props, scale=True):
 if not os.environ.get('OBJCOPY_LIGHTS_RAW'):                  # (debugging: the components as Gears 1 had them)
     for _lc in ('PointLightComponent', 'SpotLightComponent'):
         FIXUPS[_lc] = light_component
-    for _lc in ('DirectionalLightComponent',):
+    for _lc in ('DirectionalLightComponent', 'SkyLightComponent'):
         FIXUPS[_lc] = lambda c, props: light_component(c, props, scale=False)

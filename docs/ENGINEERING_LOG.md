@@ -2483,3 +2483,15 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   on a patched copy, then built: the path choice's corridor 29.5/31.1/24.7 (blue 28.9%) against the let's play's
   29.9/30.8/24.4 (28.7%), before 27.7/29.3/27.3 (32.4%); the opening cutscene's frames blue 26.4% against Xenia's
   27.0%, before 29.9%. Reference frames: build/scratch/xref (Xenia, the opening every 2 s).
+
+## 2026-10-25 (later): chapter 2, Embry Square: first build
+- The prison's end names the next map: SeqAct_PrepareMapChange MainLevelName sp_embry_p (Gears 1's act 1 chapter 2,
+  "Trial by Fire"). tools/recipes/gears1_ch2.ini: chapter 33, the persistent level and its 23 sections; the five no
+  Kismet streams (Gears 1's 27 LevelStreamingVolumes) always loaded; the chapter 1 recipe's shared settings.
+- levelinject.source_actors: a StaticMeshComponent with no tagged properties (S05_Detail's StaticMeshActor_30) failed
+  props_at; an empty list at offset 8 is now taken (no mesh: skipped).
+- Built in 197 s (no navmesh regions yet). Select Chapter starts it: the level loads with no crash, "Embry Square"
+  shows, the square's buildings, sandbags and props draw. Not yet: terrain (3 Terrain actors, 13x13 heights: the
+  converter does not handle them; Gears 3 still has the class), Emergence Holes (WarSpawner_EmergenceHole), the
+  Troika (Turret_TroikaCabal: same class name in Gears 3), the opening cutscene, the player as the classic Marcus,
+  navmesh, Carmine/Minh (Minh has no Gears 3 class: stand-in), over-bright white surfaces.

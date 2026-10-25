@@ -104,7 +104,8 @@ def source_actors(p):
         a = {n: v for n, t, k, v in pr}
         comp = a.get('StaticMeshComponent', 0)
         if comp <= 0: continue
-        co, cpr, cend = props_at(p, p.export_data(comp - 1), (8, 4, 12))
+        try: co, cpr, cend = props_at(p, p.export_data(comp - 1), (8, 4, 12))
+        except ValueError: cpr = props_at(p, p.export_data(comp - 1), (8,))[1]    # none set (Embry's S05_Detail)
         c = {n: v for n, t, k, v in cpr}
         mesh = c.get('StaticMesh', 0)
         if mesh <= 0: continue                                     # an import (another package) or none: later

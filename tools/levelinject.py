@@ -221,6 +221,8 @@ def main():
                     "child instances the converted skeletal meshes' materials become (its Diffuse / Normal / Specular "
                     "set, its other texture parameters neutral); the package must be loaded where the level is (e.g. "
                     "GEARGAMESP_SF in the campaign: COG_Dom_Summer.Materials.M_COG_Dom_Summer_Game)")
+    ap.add_argument('--character-ambient', default=None, help="r,g,b: cutscene characters' light environments' AmbientGlow "
+                    "(objcopy.CHARACTER_AMBIENT)")
     ap.add_argument('--light-scale', type=float, default=1.0, help="the copied lights' brightness (and Matinee tracks "
                     "animating it) times this (objcopy.LIGHT_SCALE)")
     ap.add_argument('--chapter-lights', default=None, help="a .npz of the chapter's lights in no Gears 1 light map "
@@ -268,6 +270,7 @@ def main():
         _oc.PARTICLE_SYSTEMS[g1] = g3; _oc.PARTICLE_MATERIALS[g1] = g3
     import objcopy
     objcopy.LIGHT_SCALE = args.light_scale
+    if args.character_ambient: objcopy.CHARACTER_AMBIENT = tuple(float(x) for x in args.character_ambient.split(','))
     offset = np.array([float(x) for x in args.offset.split(',')])
     if args.streaming_prefix is not None:
         import objcopy

@@ -1075,6 +1075,12 @@ def neutralize_streaming(up, made):
 # SkeletalMeshActor carries Gears 1's component list, without one (composite lights could not reach it). Each
 # copied SkeletalMeshActor gets the light environment of Gears 3's class (LightEnvironment, Components, and its mesh
 # component's LightEnvironment).
+# an outdoor chapter's cutscene characters: their light environments' AmbientGlow (recipe character_ambient: r,g,b).
+# Gears 1 lit them with its sun (a dynamic DirectionalLight); copied, the sun lit the converted world white too, and
+# with none the characters (Embry Square's opening) drew black
+CHARACTER_AMBIENT = None
+
+
 def light_environments(up, made):
     c, s, w = up.c, up.c.s, up.w
     dle = c.class_ref('DynamicLightEnvironmentComponent')
@@ -1086,7 +1092,9 @@ def light_environments(up, made):
     for i, ref in made.items():
         if s.class_name(s.exports[i]['class']) != 'SkeletalMeshActor': continue
         comp = w.add_export(dle, ref, c.unique_name('G1LightEnvironment', 0), b'', flags=0x0007000100000000, archetype=tmpl)
-        w.replace(comp - 1, c.prelude_828('component', dle) + encode(w, []))
+        glow = [['AmbientGlow', 'StructProperty', 0, struct.pack('>ii', *w.name('LinearColor')),
+                 struct.pack('>4f', *CHARACTER_AMBIENT, 1.0)]] if CHARACTER_AMBIENT else []
+        w.replace(comp - 1, c.prelude_828('component', dle) + encode(w, glow))
         d = w.current(ref - 1)
         recs, end = parse828(d, 26, up.wname)
         mesh = next((struct.unpack('>i', r[4])[0] for r in recs if r[0] == 'SkeletalMeshComponent'), 0)

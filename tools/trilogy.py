@@ -338,6 +338,7 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     if ch.get('max_character_texture'): common += ['--max-character-texture', ch['max_character_texture']]
     if ch.get('g3_effects'): common += ['--g3-effects', ','.join(x.replace(' ', '') for x in ch['g3_effects'].split(',') if x.strip())]
     if ch.get('light_scale'): common += ['--light-scale', ch['light_scale']]
+    if ch.get('character_ambient'): common += ['--character-ambient', ch['character_ambient'].replace(' ', '')]
     if ch.get('facefx_assets'):                       # (G1 name = package: object path, ...) Gears 3 FaceFX actors
         parts_ = []
         for x in ch['facefx_assets'].split(','):

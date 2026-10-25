@@ -2519,3 +2519,14 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   a SkyLight; objcopy copies point and spot lights only. Copying the DirectionalLight and SkyLight like the others hung
   the load (an exception at the first section holding a SkyLight; with the sun alone, earlier). Kept as an experiment
   behind OBJCOPY_SUN=1; their components need converting first (next).
+
+## 2026-10-25 (later): chapter 2: the opening's black characters are a material problem, not light
+- Directional and sky light components now get COMPONENT_TAIL's empty arrays (the missing 8 bytes hung the load, as
+  point/spot lights did once). Copied (OBJCOPY_SUN=1, OBJCOPY_SKY=1), they lit the converted world white too, whatever
+  their LightingChannels, and the opening's characters stayed black: left opt-in.
+- objcopy.CHARACTER_AMBIENT (recipe character_ambient, levelinject --character-ambient): an AmbientGlow on the cutscene
+  characters' light environments. At 0.6 the figures stayed flat black, with no shading at all (a close crop: a COG
+  soldier vaulting, a rifle beside him), so the cause is their materials, not light. Kept as an option, not used.
+- Lead: Embry's cutscene meshes are imported (the build: "skeletal mesh COG_Dom.Cine_COG_Dom: imported, read from
+  WarfareGame.xxx"), where the prison's were cooked into its cutscene package; their materials / textures likely do not
+  come along. Next: follow the imported meshes' materials into WarfareGame.xxx and convert them.

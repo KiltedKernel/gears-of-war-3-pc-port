@@ -490,16 +490,20 @@ class Copier:
         if want in NAMED_SQUAD and SQUAD_SLOTS:
             self.current_named = getattr(self, 'current_named', {}); self.current_named[i] = want
             return 'squad'
-        if want not in NAMED_REMOTE: return None
-        if not hasattr(self, 'local_var_names'):
-            self.local_var_names = set()
+        if not hasattr(self, 'local_vars'):
+            self.local_vars = {}
             for k in exports:
-                if not self.s.class_name(self.s.exports[k]['class']).startswith('SeqVar'): continue
+                ck = self.s.class_name(self.s.exports[k]['class'])
+                if not ck.startswith('SeqVar') or ck == 'SeqVar_Named': continue
                 try: rr, _ = materialconv.raw_props(self.s, self.s.export_data(k), 4)
                 except Exception: continue
                 v = next((r[4] for r in rr if r[0] == 'VarName'), None)
-                if v is not None: self.local_var_names.add(self.s.fname(*struct.unpack('>ii', v[:8])).lower())
-        if want in self.local_var_names: return None
+                if v is not None: self.local_vars.setdefault(self.s.fname(*struct.unpack('>ii', v[:8])).lower(), k)
+        # a variable of the same level by that name: the SeqVar_Named stands for it (Gears 3 has no SeqVar_Named;
+        # Embry's persistent squad factories name their spawn points, DomSpawnPoint..., in their own level: dropped,
+        # the factory spawned with none and crashed). OBJCOPY_NO_LOCAL_NAMED=1: copied as is (dropped)
+        if want in self.local_vars and not os.environ.get('OBJCOPY_NO_LOCAL_NAMED'): return ('local', self.local_vars[want])
+        if want not in NAMED_REMOTE: return None
         return self.remote_import(NAMED_REMOTE[want])
 
     def remote_import(self, chain):
@@ -541,6 +545,7 @@ class Copier:
         dom_vars = [i for i in exports if self.s.class_name(self.s.exports[i]['class']) == 'SeqVar_Dom']
         canonical = self.factory_output_var(dom_vars) if len(dom_vars) > 1 and not SQUAD_SLOTS else None
         aliases = [i for i in dom_vars if canonical is not None and i != canonical]
+        local_named = {}                                # SeqVar_Named -> the same level's variable it names
         as_player = self.player_vars(exports) if not os.environ.get('OBJCOPY_NO_RENAME') else set()
         for i in exports:
             e = self.s.exports[i]
@@ -550,6 +555,9 @@ class Copier:
                 target = self.named_target(i, exports)
                 if target == 'squad':                          # a squad member by name: Gears 3's slot variable
                     cn = 'SeqVar_NamedSquad'
+                elif isinstance(target, tuple):                # the same level's variable: references go to it
+                    local_named[i] = target[1]
+                    continue
                 elif target:                                   # the persistent level's variable itself (an import)
                     self.obj_map[i + 1] = target
                     self.remote_refs = getattr(self, 'remote_refs', set()) | {target}
@@ -595,6 +603,7 @@ class Copier:
             self.obj_map[i + 1] = made[i] = ref
             self.kinds[ref] = (kind, cls)
         for i in aliases: self.obj_map[i + 1] = self.obj_map.get(canonical + 1, 0)
+        for i, k in local_named.items(): self.obj_map[i + 1] = self.obj_map.get(k + 1, 0)
         # outers once every export exists (a child can come before its parent in the source): entry field +8
         for i, ref in made.items():
             o = self.s.exports[i]['outer']
@@ -2614,6 +2623,44 @@ def drop_remote_from_sequences(up, made):
         if changed:
             d = w.current(ref - 1)
             w.replace(ref - 1, d[:4] + up.enc(recs) + d[end:])
+    return n
+
+
+# An AI factory's spawn point variable empty in the source (Embry's persistent squad factories: DomSpawnPoint... are
+# filled by each section's Squad_Spawn_Set_Up, which ran after the factory): Gears 3 crashed spawning at none (a read
+# through a null). Such a variable starts at the level's player start instead (the sections' SetObject still moves it).
+# OBJCOPY_NO_SPAWN_FALLBACK=1: left empty
+def factory_spawn_fallback(up, made):
+    if os.environ.get('OBJCOPY_NO_SPAWN_FALLBACK'): return 0
+    c, s, w = up.c, up.c.s, up.w
+    start = next((ref for i, ref in made.items() if s.class_name(s.exports[i]['class']) == 'PlayerStart'), None)
+    if start is None:                                   # (copied with the level's actors: any PlayerStart in the output)
+        pcls = c.class_ref('PlayerStart')
+        start = next((k + 1 for k in range(len(w.exports)) if pcls and struct.unpack_from('>i', w.exports[k], 0)[0] == pcls), None)
+    if start is None:
+        if os.environ.get('OBJCOPY_DEBUG_SPAWN'): print('factory spawn fallback: no PlayerStart')
+        return 0
+    n, done = 0, set()
+    for i, ref in made.items():
+        if s.class_name(s.exports[i]['class']) != 'SeqAct_AIFactory': continue
+        recs, end = parse828(w.current(ref - 1), 4, up.wname)
+        for r in recs:
+            if r[0] != 'VariableLinks': continue
+            for e in up.elements(r[4], up.wname):
+                if next((str_value(x[4]) for x in e if x[0] == 'LinkDesc'), '').lower() != 'spawn points': continue
+                lv = next((x for x in e if x[0] == 'LinkedVariables'), None)
+                if lv is None: continue
+                k = struct.unpack_from('>i', lv[4], 0)[0]
+                for var in struct.unpack_from(f'>{k}i', lv[4], 4):
+                    if var <= 0 or var in done or var > len(w.exports): continue
+                    vd = w.current(var - 1)
+                    try: vrecs, vend = parse828(vd, 4, up.wname)
+                    except Exception: continue
+                    ov = next((x for x in vrecs if x[0] == 'ObjValue'), None)
+                    if ov is not None and struct.unpack('>i', ov[4])[0] != 0: continue
+                    vrecs = [x for x in vrecs if x[0] != 'ObjValue'] + [['ObjValue', 'ObjectProperty', 0, b'', struct.pack('>i', start)]]
+                    w.replace(var - 1, vd[:4] + up.enc(vrecs) + vd[vend:])
+                    done.add(var); n += 1
     return n
 
 

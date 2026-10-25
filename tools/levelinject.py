@@ -1557,6 +1557,7 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
             stats['held shots resumed after a path choice'] += objcopy.resume_held_matinees(up, made)
             stats['light environments for skeletal mesh actors'] += objcopy.light_environments(up, made)
             stats['squad factories (player slot)'] += objcopy.squad_factories(up, made)
+            stats['factory spawn points defaulted'] += objcopy.factory_spawn_fallback(up, made)
             stats['checkpoint events also on save'] += objcopy.checkpoint_events(up, made)
             stats['named variables of the persistent level'] += objcopy.drop_remote_from_sequences(up, made)
             if objcopy.player_pawn(up, made): print(f'kismet: the player becomes {objcopy.PLAYER_PAWN[0]} after {objcopy.PLAYER_PAWN[1]} ({objcopy.PLAYER_PAWN[2]})')
@@ -1587,6 +1588,7 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
     print(f"kismet: links rebuilt from Gears 3's classes on {stats['ops upgraded']} ops, {stats['links kept from Gears 1']} Gears 1 "
           f"links without a Gears 3 counterpart kept; {stats['streaming actions emptied']} level streaming/visibility actions "
           f"{'renamed' if objcopy.STREAMING_PREFIX is not None else 'emptied'}; {stats['squad factories (player slot)']} squad factories; "
+          f"{stats['factory spawn points defaulted']} empty factory spawn points set to the player start; "
           f"{stats['named variables of the persistent level']} named variables of the persistent level imported")
     print(f"kismet: {len(added)} sequences, {stats['objects']} objects copied, {stats['dropped (no Gears 3 class)']} without a "
           f"Gears 3 class: {', '.join(f'{k[9:]} {v}' for k, v in top_missing)}")

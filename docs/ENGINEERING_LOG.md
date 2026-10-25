@@ -2543,3 +2543,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   squad factory, MinhSquad). Its Spawn Points is the named variable DomSpawnPoint (empty in SP_Embry_P), set at run
   time by each section's Squad_Spawn_Set_Up (SeqAct_SetObject, SeqVar_Named DomSpawnPoint <- a PathNode; Scripting_01:
   Start_of_Level's PathNode_0). Next: whether the factory runs before the set, or the named import fails.
+- The crash in SpawnSquad.SeqAct_AIFactory_3 (Dom's factory, Player Slot 2) after Embry's opening, narrowed down
+  (GOW3_KISMET_TRACE: the factory runs before Scripting_01's Squad_Spawn_Set_Up sets the spawn points). Ruled out:
+  1. SeqVar_Named in the persistent level: now resolved to the same level's variable (objcopy.named_target 'local';
+     OBJCOPY_NO_LOCAL_NAMED=1: as before); the factory's Spawn Points link reaches DomSpawnPoint. Same crash.
+  2. The empty spawn point: AI factories' empty Spawn Points variables now start at the level's PlayerStart
+     (objcopy.factory_spawn_fallback, 3 in SP_Embry_P; OBJCOPY_NO_SPAWN_FALLBACK=1: left empty). Same crash.
+  3. The classic Marcus swap at the same moment (built without player_pawn): same crash.
+  Left: its other links (Set 1 [1], bForceMoveToSpawnLocation, TeleportDistance, TeleportZDistance: named variables
+  of the persistent level, now linked), the pawn class (GearPawn_COGDomG2, as the prison's), and the crash site
+  sub_822C3C20+3E reading +0xEC of a null in the decompiled game. The landing2 navmesh region is parked in the recipe.

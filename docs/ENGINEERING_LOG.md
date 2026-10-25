@@ -2567,3 +2567,10 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - Seen there: every character draws dark outdoors (the player and squad too, not only the cutscene's): Gears 3 lights
   characters from light actors near them (light environments), and Embry's open square has few; its sun, copied,
   lit the converted world as well. And the player stayed Gears 3's Marcus: the classic swap after the opening never ran.
+- Outdoor character lighting, three attempts, none changed the characters (squad area of the same gameplay frame:
+  44.6 without, 44.7 and 45.7 with): Gears 1's DirectionalLights as PointLights (objcopy SUN_POINT, now opt-in
+  OBJCOPY_SUN_POINT=1; OBJCOPY_SUN_DISTANCE): placed SUN_DISTANCE back along the sun (60000, then 3000), radius 250000,
+  falloff 0.05. GOW3_LOG_PROPS confirmed them live in game (13: Start_Cinematic 1.25, S04_Temple, Worldb up to 2.5,
+  bEnabled). So the characters' light environments do not take these lights, wherever they are; the prison's are lit
+  by its copied point lights (2026-10-2x: frame 107 -> 54 without). Next: read how Gears 3's DynamicLightEnvironment
+  picks its lights (its relevant-light test) before converting more lights.

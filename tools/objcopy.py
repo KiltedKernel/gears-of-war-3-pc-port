@@ -1280,6 +1280,19 @@ LIGHT_CLASSES = {"PointLight", "SpotLight", "PointLightToggleable", "SpotLightTo
 # (with COMPONENT_TAIL's empty arrays; without them the load hung) but in Embry Square's opening they lit the converted
 # world too (washed out white, the sky light most), whatever their LightingChannels, and its dark characters stayed dark
 if os.environ.get("OBJCOPY_SUN"): LIGHT_CLASSES |= {"DirectionalLight", "DirectionalLightToggleable"}
+# The sun for characters: Gears 1 lit outdoor characters with its DirectionalLight (Embry Square: every character, the
+# player's too, drew dark with none). As a point light, the kind that lights the prison's characters and not the
+# converted world: SUN_DISTANCE units back along the sun's direction, SUN_RADIUS across, falloff nearly flat (the same
+# light anywhere in the level)
+SUN_DISTANCE, SUN_RADIUS, SUN_FALLOFF = (float(os.environ.get("OBJCOPY_SUN_DISTANCE", 60000)), 250000.0, 0.05)
+# (experimental, OBJCOPY_SUN_POINT=1: in Embry the 13 converted suns were live and enabled in game, brightness 0.25-2.5,
+# yet the characters' brightness did not change at all, 60000 or 3000 units back: off until the light environments'
+# light gathering is understood)
+SUN_POINT = bool(os.environ.get("OBJCOPY_SUN_POINT")) and not os.environ.get("OBJCOPY_SUN")
+if SUN_POINT:
+    LIGHT_CLASSES |= {"DirectionalLight"}
+    CLASS_RENAME['DirectionalLight'] = 'PointLight'
+    CLASS_RENAME['DirectionalLightComponent'] = 'PointLightComponent'
 if os.environ.get("OBJCOPY_SKY"): LIGHT_CLASSES |= {"SkyLight", "SkyLightToggleable"}
 if not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= LIGHT_CLASSES
 SOUND_ACTORS = {'AmbientSoundSimple', 'AmbientSoundNonLoop', 'AmbientSound'}
@@ -2794,3 +2807,32 @@ if not os.environ.get('OBJCOPY_LIGHTS_RAW'):                  # (debugging: the 
         FIXUPS[_lc] = light_component
     for _lc in ('DirectionalLightComponent', 'SkyLightComponent'):
         FIXUPS[_lc] = lambda c, props: light_component(c, props, scale=False)
+    if SUN_POINT: FIXUPS['DirectionalLightComponent'] = lambda c, props: sun_component(c, props)
+
+
+def sun_component(c, props):
+    """a DirectionalLightComponent as a PointLightComponent: the sun's colour and brightness, SUN_RADIUS, SUN_FALLOFF"""
+    props = light_component(c, props, scale=False)
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in ('Radius', 'FalloffExponent')] + [
+        ['Radius', 'FloatProperty', 0, b'', struct.pack('>f', SUN_RADIUS)],
+        ['FalloffExponent', 'FloatProperty', 0, b'', struct.pack('>f', SUN_FALLOFF)]]
+    return encode(c.w, recs)
+
+
+def sun_actor(c, props):
+    """a DirectionalLight as a PointLight: moved SUN_DISTANCE back along its direction (its X axis)"""
+    import levelinject
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    rot = next((struct.unpack('>3i', r[4]) for r in recs if r[0] == 'Rotation' and len(r[4]) == 12), (0, 0, 0))
+    d = levelinject.rotation_matrix(*rot)[0]
+    for r in recs:
+        if r[0] == 'Location' and len(r[4]) == 12:
+            loc = struct.unpack('>3f', r[4])
+            r[4] = struct.pack('>3f', *(loc[k] - d[k] * SUN_DISTANCE for k in range(3)))
+    return encode(c.w, recs)
+
+
+if SUN_POINT: FIXUPS['DirectionalLight'] = sun_actor

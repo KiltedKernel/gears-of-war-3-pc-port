@@ -2530,3 +2530,16 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - Lead: Embry's cutscene meshes are imported (the build: "skeletal mesh COG_Dom.Cine_COG_Dom: imported, read from
   WarfareGame.xxx"), where the prison's were cooked into its cutscene package; their materials / textures likely do not
   come along. Next: follow the imported meshes' materials into WarfareGame.xxx and convert them.
+- Correction: the AmbientGlow test reached nothing. The opening's SkeletalMeshActors keep a copy of Gears 1's own light
+  environment (SkeletalMeshActor_3.LightEnvironment -> DynamicLightEnvironmentComponent_11 {bDirty}), not
+  light_environments' G1LightEnvironment; their materials are complete (every TrilogyT_ texture they name is in
+  GOW1_SP_Embry_P). Still open: why they draw black where the prison's characters, set up the same way, are lit.
+- Navmesh regions for Embry (recipe [navmesh landing1], [navmesh landing2]: pylons and seeds from Gears 1's path nodes,
+  spread out). landing1 built (build/trilogy/Gears1_Chapter2_landing1.navm, into Scripting_01). landing2: "no walkable
+  ground found from its pylons" twice (sources widened to S03/S04/FrontDetail/S05_Detail: five of six seeds then found
+  a floor, still none walkable); left without a navmesh.
+- In game past the opening (440 s): the first landing's two Savage Drones spawn (10668,-36081 / 9937,-36005), then a
+  crash (C0000005, reading guest 000000EC from a null) in the persistent level's SpawnSquad.SeqAct_AIFactory_3 (Dom's
+  squad factory, MinhSquad). Its Spawn Points is the named variable DomSpawnPoint (empty in SP_Embry_P), set at run
+  time by each section's Squad_Spawn_Set_Up (SeqAct_SetObject, SeqVar_Named DomSpawnPoint <- a PathNode; Scripting_01:
+  Start_of_Level's PathNode_0). Next: whether the factory runs before the set, or the named import fails.

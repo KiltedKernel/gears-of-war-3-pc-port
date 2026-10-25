@@ -1084,7 +1084,9 @@ CHARACTER_AMBIENT = None
 def light_environments(up, made):
     c, s, w = up.c, up.c.s, up.w
     dle = c.class_ref('DynamicLightEnvironmentComponent')
-    if not dle: return 0
+    if not dle:
+        if CHARACTER_AMBIENT or os.environ.get('OBJCOPY_DEBUG_LE'): print('light environments: no DynamicLightEnvironmentComponent class')
+        return 0
     pk = c.find_import('Core', 'Package', 0, 'Engine')
     d_imp = c.find_import('Engine', 'SkeletalMeshActor', pk, 'Default__SkeletalMeshActor')
     tmpl = c.find_import('Engine', 'DynamicLightEnvironmentComponent', d_imp, 'MyLightEnvironment')

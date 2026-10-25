@@ -1257,6 +1257,10 @@ ACTOR_CLASSES = set() if os.environ.get("OBJCOPY_NO_ACTORS") else {"Trigger", "T
 # Gears 1's lights: their light is baked into the converted geometry (tools/lighting.py), but Gears 3 lights
 # characters (light environments) and cutscene actors from light actors: copied, lighting dynamic objects only
 LIGHT_CLASSES = {"PointLight", "SpotLight", "PointLightToggleable", "SpotLightToggleable", "PointLightMovable", "SpotLightMovable"}
+# (experimental, OBJCOPY_SUN=1) outdoor levels' sun: Embry Square's opening characters draw black without it. Copied
+# like the other lights (not scaled by LIGHT_SCALE), Embry Square never finished loading (an exception while loading a
+# section; the same with Gears 1's SkyLights): their components need converting first
+if os.environ.get("OBJCOPY_SUN"): LIGHT_CLASSES |= {"DirectionalLight", "DirectionalLightToggleable"}
 if not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= LIGHT_CLASSES
 SOUND_ACTORS = {'AmbientSoundSimple', 'AmbientSoundNonLoop', 'AmbientSound'}
 # Gears 1's weapon pickups (the prison's frag grenades): Gears 3's GearWeaponPickupFactory makes the pickup's mesh from
@@ -2702,7 +2706,7 @@ def lights(src):
             and src.path(i).count('.') == 2 and src.path(i).startswith('TheWorld.PersistentLevel')]
 
 
-def light_component(c, props):
+def light_component(c, props, scale=True):
     """a copied light lights characters only, through their light environments (LightingChannels: CompositeDynamic;
     not BSP / Static: the converted geometry already has this light baked in; not Dynamic: a dynamic light is a pass
     of its own on every dynamic primitive it reaches, and a Gears 1 section has hundreds of lights where Gears 3's
@@ -2716,7 +2720,7 @@ def light_component(c, props):
     ch = encode(c.w, [[k, 'BoolProperty', 0, b'', b'\x01'] for k in channels])
     if os.environ.get('OBJCOPY_LIGHTS_MINIMAL'):       # (debugging the load crash: only the light's look)
         recs = [r for r in recs if r[0] in ('Radius', 'Brightness', 'LightColor', 'FalloffExponent', 'InnerConeAngle', 'OuterConeAngle')]
-    if LIGHT_SCALE != 1.0:
+    if LIGHT_SCALE != 1.0 and scale:
         b = next((r for r in recs if r[0] == 'Brightness'), None)
         if b is None: recs.append(['Brightness', 'FloatProperty', 0, b'', struct.pack('>f', LIGHT_SCALE)])
         else: b[4] = struct.pack('>f', struct.unpack('>f', b[4])[0] * LIGHT_SCALE)
@@ -2729,3 +2733,5 @@ def light_component(c, props):
 if not os.environ.get('OBJCOPY_LIGHTS_RAW'):                  # (debugging: the components as Gears 1 had them)
     for _lc in ('PointLightComponent', 'SpotLightComponent'):
         FIXUPS[_lc] = light_component
+    for _lc in ('DirectionalLightComponent',):
+        FIXUPS[_lc] = lambda c, props: light_component(c, props, scale=False)

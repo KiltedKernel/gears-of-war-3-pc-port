@@ -2508,3 +2508,14 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   -250..-60 against -128..16). In game the chapter loads with them (no crash); the S02 test spot showed the paved BSP
   floor over the terrain (z 0 against the terrain's -140 there). The ruins' terrain (S07, Kismet-streamed later) not
   seen yet.
+
+## 2026-10-25 (later): chapter 2: classic Marcus, the opening, the sun (not yet)
+- player_pawn for Embry: the op is matched by its path under Main_Sequence, so the recipe names
+  HOFFMAN_CINEMATIC.SeqAct_Interp_0 (the opening's Matinee; Interp_1 has no links). The build now logs "the player
+  becomes GearPawn_COGMarcusG2MP". The opening (Hoffman, Kim, Minh) runs past 250 s of the test, so the swap itself is
+  not seen yet.
+- The opening plays (Gears 1's subtitle "Hey, are you the Marcus Fenix? ...") but its characters draw black or not at
+  all, and the shots frame empty floor. The cutscene section's lights are a DirectionalLight (the sun), point lights and
+  a SkyLight; objcopy copies point and spot lights only. Copying the DirectionalLight and SkyLight like the others hung
+  the load (an exception at the first section holding a SkyLight; with the sun alone, earlier). Kept as an experiment
+  behind OBJCOPY_SUN=1; their components need converting first (next).

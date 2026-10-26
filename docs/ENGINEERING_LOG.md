@@ -2649,3 +2649,10 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   nothing to hit (flags 20DE), while landing1's floors are BSP chunks, which they hit. Next: read what the slot's
   floor meshes carry (collision flags, the per-poly collision data, the hidden hull meshes' kDOP) against a
   Gears 3 mesh the builder does hit; parked again until then.
+- Embry landing2, the floor itself: a vertical ray at (9000,-31500) through every Embry package's BSP, terrain and
+  static mesh triangles hits only Terrain_3 (S02) at z -140 near the ground (S04's facades far above, its BSP at -192
+  and -1424). So the second landing's floor is Gears 1 terrain (the path nodes stand 50 over it, as over BSP). Seeded
+  30 over it (pylon_at 9000,-31500,-90 with seeds_on_path_nodes): the line checks from z 75 to -229 still -> 0. The
+  converted terrain (BSP-style chunks: terrainconv) does not stop the builder's traces, though landing1's BSP chunks
+  do. Suspects: the terrain triangles' winding (kDOP line checks are one-sided) or their chunks' collision; the
+  hidden blocking-volume meshes (176 here) did not either. Parked again (recipe [unused landing2]).

@@ -2585,3 +2585,8 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - Chapter 2's classic Marcus: the player factory ran after the opening (Kismet trace) but no pawn came; spawning at
   the player start's import found nothing. Recipe player_spawn_at = 10464,-40032,-1300,122 (beside the chapter's player
   start, as the prison's recipe does): the player is GearPawn_COGMarcusG2MP at the first landing, lit, with the squad.
+- Embry's opening (HOFFMAN_CINEMATIC), staging: with the lighting fix its characters draw lit (a textured COG soldier
+  vaulting), but most shots frame a wall or the floor close up. Checked: the 30 InterpTrackMove tracks convert key for
+  key (point counts and first keys identical) with MoveFrame IMF_RelativeToInitial as in Gears 1 (and the prison);
+  15 SkeletalMeshActors copied, not Hoffman's SkeletalMeshActorMAT (no Gears 3 class). Needs a Gears 1 reference of
+  this cutscene (Xenia) to tell which shots are wrong.

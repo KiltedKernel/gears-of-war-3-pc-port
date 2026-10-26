@@ -221,6 +221,9 @@ def main():
                     "child instances the converted skeletal meshes' materials become (its Diffuse / Normal / Specular "
                     "set, its other texture parameters neutral); the package must be loaded where the level is (e.g. "
                     "GEARGAMESP_SF in the campaign: COG_Dom_Summer.Materials.M_COG_Dom_Summer_Game)")
+    ap.add_argument('--bodies-block-traces', action='store_true', help="the hidden collision meshes (Gears 1's blocking "
+                    "volumes and simple collision) block line traces too: for a navmesh build (its builder traces down to the "
+                    "floor; with them for pawns only, Embry's mesh floors were not found)")
     ap.add_argument('--light-radius-min', type=float, default=0.0, help="copied lights reach at least this far "
                     "(objcopy.LIGHT_RADIUS_MIN: outdoor characters)")
     ap.add_argument('--sun-from', default='', help="Gears 1 packages (comma separated) whose DirectionalLights are copied "
@@ -1215,7 +1218,7 @@ def main():
                 struct.pack_into('>i', d, sm_off, mref)
                 struct.pack_into('>3f', d, sc_off, 1.0, 1.0, 1.0)
                 if vis_off: struct.pack_into('>i', d, vis_off, -1)
-                for prop, value in (('HiddenGame', b'\x01'), ('CastShadow', b'\x00'), ('BlockZeroExtent', b'\x00')):
+                for prop, value in (('HiddenGame', b'\x01'), ('CastShadow', b'\x00'), ('BlockZeroExtent', b'\x01' if args.bodies_block_traces else b'\x00')):
                     d = set_property(p3, w, d, to, prop, value, 'BoolProperty')
                 refs.append(w.add_export(p3.exports[tcomp]['class'], coll + 1, ('TrilogyVolume', n_volumes + 1), bytes(d) + bytes(4), flags=tflags, archetype=tarch))
                 m = np.eye(4); m[3, :3] = offset
@@ -1248,7 +1251,7 @@ def main():
                 struct.pack_into('>i', d, sm_off, mref)
                 struct.pack_into('>3f', d, sc_off, 1.0, 1.0, 1.0)
                 if vis_off: struct.pack_into('>i', d, vis_off, -1)
-                for prop, value in (('HiddenGame', b'\x01'), ('CastShadow', b'\x00'), ('BlockZeroExtent', b'\x00')):
+                for prop, value in (('HiddenGame', b'\x01'), ('CastShadow', b'\x00'), ('BlockZeroExtent', b'\x01' if args.bodies_block_traces else b'\x00')):
                     d = set_property(p3, w, d, to, prop, value, 'BoolProperty')
                 refs.append(w.add_export(p3.exports[tcomp]['class'], coll + 1, ('TrilogyBody', n_bodies + 1), bytes(d) + bytes(4), flags=tflags, archetype=tarch))
                 m = np.eye(4); m[3, :3] = offset

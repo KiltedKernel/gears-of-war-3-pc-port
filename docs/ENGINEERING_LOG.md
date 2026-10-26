@@ -2632,3 +2632,14 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   movement track moves the actor about 120 units at the same time, and anim_sequence_tail copies translation keys as
   they are (no header, unlike rotation). Next: measure the converted Dom's pelvis and actor positions in game
   (GOW3_LOG_PROPS) against the same instants in the Gears 1 recording (build/scratch/xref_prison).
+- Embry's second landing navmesh, again (parked once more, recipe [unused landing2]):
+  1. Gears 1 path nodes stand 50 units over their floor (the prison's, over BSP: median exactly 50); floor_seeds finds
+     BSP only and put this region's seeds on the BSP under its mesh floors. Recipe seeds_on_path_nodes = true: 20 under
+     each node (trilogy.py). The seeds then sat where intended; still no ground.
+  2. The builder's downward line checks (GOW3 log: 'line check ... flags 20DE -> 0') hit nothing; Gears 1's simple
+     collision hulls are hidden meshes for pawns only (BlockZeroExtent off). levelinject --bodies-block-traces (now
+     passed for every navmesh slot) turns it on; still -> 0.
+  3. The main seed moved to where the player stands in game (9000,-31500, floor about 0): the checks from z 215 to -89
+     still hit nothing. So the slot's geometry there has no collision at all; the region's slot is far larger than
+     landing1's (7 source packages, 141 MB, 2098 components against 3 packages). Next: build it from fewer sources
+     (S02 alone), and check the slot's collision at that spot.

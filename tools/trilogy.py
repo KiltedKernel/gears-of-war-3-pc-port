@@ -193,6 +193,7 @@ def slot_navmesh(folder, nav, g1cooked, g3cooked, out, rename_to=None):
         opts.append(t)
     if 'pylon_at' in nav:
         opts += seed_options(nav, tuple(float(v) for v in nav.get('offset', '0,0,0').split(',')))
+    opts.append('--bodies-block-traces')             # (the builder traces down to the floor: mesh floors' hulls too)
     levelinject(work, os.path.join(g3cooked, nav['slot'] + '.xxx'), sources, opts, g3cooked)
     raw = out + '.slot'
     slot_pylons = pylon_locations(os.path.join(work, 'GearGame', 'CookedXbox360', nav['slot'] + '.xxx'))
@@ -399,7 +400,13 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
     # conversion takes the same seeds + its offset
     for name, nav in navs.items():
         raw = [tuple(float(v) for v in q.split(',')) for q in [nav['pylon_at']] + [x for x in nav.get('pylons_at', '').split(';') if x.strip()]]
-        nav['_seeds'] = floor_seeds(raw, [src(x.strip()) for x in nav['sources'].split(',') if x.strip()])
+        if nav.get('seeds_on_path_nodes', '').lower() == 'true':
+            # seeds that are Gears 1 path nodes: those stand 50 units over their floor (the prison's over BSP: median
+            # exactly 50), so 30 over it is 20 under them; floor_seeds finds BSP only and put Embry's second landing's
+            # seeds on the BSP under its mesh floors (the builder found no walkable ground there, twice)
+            nav['_seeds'] = [(x, y, z - 20) for x, y, z in raw]
+        else:
+            nav['_seeds'] = floor_seeds(raw, [src(x.strip()) for x in nav['sources'].split(',') if x.strip()])
         moved = [f'{a[2]:.0f}->{b[2]:.0f}' for a, b in zip(raw, nav['_seeds']) if abs(a[2] - b[2]) > 1]
         if moved: print(f'  navmesh {name}: seed heights set over the floor ({", ".join(moved)})', flush=True)
     for s in sections:

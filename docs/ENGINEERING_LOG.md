@@ -2623,3 +2623,12 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - Cutscene sections ('cine' in the name) keep their lights' own reach (trilogy.py passes --light-radius-min 0 there):
   Embry's opening mean brightness 112 -> 80 (the Raven in its own colours, no blown highlights; Gears 1's opening in
   Xenia averages 49 over its first 3.5 min, not frame-matched), gameplay's squad unchanged (48.6). Installed.
+- Chapter 1's sliding Dom (the opening's walk through the cell door), against the user's clips (playtest and let's
+  play, 8 frames a second): in ours his leg pose barely changes over a second while he moves; in Gears 1 he steps.
+  Ruled out: (1) the AnimControl key at StartTime -3.69 (Gears 3 clamping it): a planted foot slides about as much
+  either way in the offline model (slidelag.py: ~50-60 u/s with offset 3.694 or 0); (2) bAnimRotationOnly: false in
+  both packages; (3) timing: SequenceLength 62.267, NumFrames 1868 in both. Found: PrisonIntro_actor2's walk is in its
+  pelvis track (b_MF_Root fixed; the pelvis travels about 240 units between anim times 17 and 21 s) while the Matinee
+  movement track moves the actor about 120 units at the same time, and anim_sequence_tail copies translation keys as
+  they are (no header, unlike rotation). Next: measure the converted Dom's pelvis and actor positions in game
+  (GOW3_LOG_PROPS) against the same instants in the Gears 1 recording (build/scratch/xref_prison).

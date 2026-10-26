@@ -2167,6 +2167,63 @@ def input_event(c, props):
 if not os.environ.get('OBJCOPY_NO_INPUT_EVENTS'): FIXUPS['SeqEvt_Input'] = input_event
 
 
+# ---- a switch on a constant ----
+# Gears 1's SeqAct_Switch takes its output from its Index variable on every activation; Gears 3's, given none it can
+# read, takes CurrentIndex and steps it by IncrementAmount: Embry's opening switched on CINEMATIC_VERSION (1, through
+# the sequence's external variable) went to FULL_VERSION, then on its second activation to LD_VERSION (the designers'
+# stand-in: its Destroy ops and its own Matinee stopped the King Raven and dropped the cameras off it). A switch whose
+# Index is a constant (a SeqVar_Int, directly or through a SeqVar_External of its sequence) gets Indices = [that] and
+# IncrementAmount 0. OBJCOPY_NO_SWITCH_CONST=1: as Gears 1 had it
+def switch_constant_index(c, i):
+    """the constant a Gears 1 SeqAct_Switch (source export i) switches on, else None"""
+    import materialconv
+    s = c.s
+    def recs_of(k):
+        try: return materialconv.raw_props(s, s.export_data(k), 4)[0]
+        except Exception: return []
+    def links(k):
+        out = {}
+        for r in recs_of(k):
+            if r[0] != 'VariableLinks': continue
+            v = r[4]; n = struct.unpack_from('>i', v)[0]; q = 4
+            for _ in range(n):
+                el, q = materialconv.raw_props(s, v, q)
+                d = {x[0]: x[4] for x in el}
+                lv = d.get('LinkedVariables', b'\0\0\0\0'); m = struct.unpack_from('>i', lv)[0]
+                out[str_value(d.get('LinkDesc', b'\0\0\0\0')).lower()] = struct.unpack_from(f'>{m}i', lv, 4) if m else ()
+        return out
+    def int_of(k, depth=0):
+        if k <= 0 or depth > 4: return None
+        cn = s.class_name(s.exports[k - 1]['class'])
+        if cn == 'SeqVar_Int':
+            return next((struct.unpack('>i', r[4])[0] for r in recs_of(k - 1) if r[0] == 'IntValue'), 0)
+        if cn == 'SeqVar_External':
+            label = next((str_value(r[4]) for r in recs_of(k - 1) if r[0] == 'VariableLabel'), '').lower()
+            seq = s.exports[k - 1]['outer']
+            vals = links(seq - 1).get(label, ()) if seq > 0 else ()
+            return int_of(vals[0], depth + 1) if len(vals) == 1 else None
+        return None
+    v = links(i).get('index', ())
+    return int_of(v[0]) if len(v) == 1 else None
+
+
+def switch_props(c, props):
+    if os.environ.get('OBJCOPY_NO_SWITCH_CONST'): return props
+    k = switch_constant_index(c, c.current_src)
+    if k is None: return props
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in ('Indices', 'IncrementAmount', 'CurrentIndex')] + [
+        ['Indices', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, k)],
+        ['IncrementAmount', 'IntProperty', 0, b'', struct.pack('>i', 0)],
+        ['CurrentIndex', 'IntProperty', 0, b'', struct.pack('>i', k)]]
+    c.const_switches = getattr(c, 'const_switches', 0) + 1
+    return encode(c.w, recs)
+
+
+FIXUPS['SeqAct_Switch'] = switch_props
+
+
 # ---- the chapter's end ----
 # Gears 1 ends a chapter in its Kismet: SeqAct_PrepareMapChange (the next chapter's map, MainLevelName, loaded in the
 # background), SeqAct_ChapterComplete (no properties: its chapter came from the map), SeqAct_CommitMapChange. Gears

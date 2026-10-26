@@ -2611,3 +2611,12 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   build/scratch/Gears1_Chapter1_prev). Checked: GOW1_SP_Prison_P's PrepareMapChange names GOW1_sp_embry_p and
   Cine_End keeps its CommitMapChange (no EndGame); both mods together: chapters 32 and 33 registered, chapter 1's
   opening runs, no crash. The hand-off itself (the prison's end into Embry) is not yet seen in game.
+- **Found: Embry's opening ran the designers' stand-in.** HOFFMAN_CINEMATIC switches (SeqAct_Switch_1, Index =
+  CINEMATIC_VERSION through the sequence's SeqVar_External: Main_Sequence.SeqVar_Int_0 = 1) between FULL_VERSION and
+  LD_VERSION; it is activated twice. Gears 3's switch read no index and stepped CurrentIndex: the second activation
+  ran LD_VERSION (Destroy on "KILL_THIS_STUFF" and its own Matinee): the Raven stopped and the cameras fell off it.
+  objcopy.switch_props (FIXUPS SeqAct_Switch; OBJCOPY_NO_SWITCH_CONST=1: off): a switch on a constant gets Indices =
+  [it], IncrementAmount 0, CurrentIndex. In game: FULL_VERSION twice, LD_VERSION never; the opening now plays as
+  Gears 1's (title card inside the flying King Raven, the squad aboard, the landing, Hoffman, the sandbags; compared
+  with build/scratch/xref_embry). Left: it is over-bright (the Raven near white, blown highlights on the characters):
+  likely light_radius_min reaching the cutscene's own lights too.

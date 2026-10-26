@@ -2643,3 +2643,9 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
      still hit nothing. So the slot's geometry there has no collision at all; the region's slot is far larger than
      landing1's (7 source packages, 141 MB, 2098 components against 3 packages). Next: build it from fewer sources
      (S02 alone), and check the slot's collision at that spot.
+- Embry landing2 from its own section only (sources = SP_Embry_S02_2ndLanding; the floor pieces at the seed are all
+  there: rocky_floor_low, EphyraCity_Blocks): a 76 MB slot, 402 components; the builder's line checks at the
+  verified spot still -> 0. So size is not it: in a navmesh slot, converted mesh floors give the builder's traces
+  nothing to hit (flags 20DE), while landing1's floors are BSP chunks, which they hit. Next: read what the slot's
+  floor meshes carry (collision flags, the per-poly collision data, the hidden hull meshes' kDOP) against a
+  Gears 3 mesh the builder does hit; parked again until then.

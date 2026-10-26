@@ -2606,3 +2606,8 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   the cameras' Base / bHardAttach. Live (GOW3_LOG_PROPS): the Raven's Location never changes, it gains a Base of its
   own, and CameraActor_0's Base drops to none right after the start: the Raven is not flown by its track and the
   camera is detached from it. Next: why (its movement track, its Physics, what it gets based on).
+- **Chapter 2 installed** (user OK, 2026-10-26): build/mods/Gears1_Chapter2 (Act VI chapter 2, Embry Square), and
+  chapter 1 rebuilt with recipe next = SP_Embry_P / next_folder = Gears1_Chapter2 (the previous chapter 1 kept in
+  build/scratch/Gears1_Chapter1_prev). Checked: GOW1_SP_Prison_P's PrepareMapChange names GOW1_sp_embry_p and
+  Cine_End keeps its CommitMapChange (no EndGame); both mods together: chapters 32 and 33 registered, chapter 1's
+  opening runs, no crash. The hand-off itself (the prison's end into Embry) is not yet seen in game.

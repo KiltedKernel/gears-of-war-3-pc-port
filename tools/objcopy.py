@@ -1101,7 +1101,7 @@ def light_environments(up, made):
     tmpl = c.find_import('Engine', 'DynamicLightEnvironmentComponent', d_imp, 'MyLightEnvironment')
     n = 0
     for i, ref in made.items():
-        if s.class_name(s.exports[i]['class']) != 'SkeletalMeshActor': continue
+        if s.class_name(s.exports[i]['class']) not in SKELETAL_ACTOR_CLASSES: continue
         comp = w.add_export(dle, ref, c.unique_name('G1LightEnvironment', 0), b'', flags=0x0007000100000000, archetype=tmpl)
         glow = [['AmbientGlow', 'StructProperty', 0, struct.pack('>ii', *w.name('LinearColor')),
                  struct.pack('>4f', *CHARACTER_AMBIENT, 1.0)]] if CHARACTER_AMBIENT else []
@@ -1272,7 +1272,7 @@ def restore_view_after_cutscenes(up, made):
 # Location + the conversion offset), then listed in Level.Actors. Classes needing data Gears 3 reads differently are
 # converted instead: a TriggerVolume (a brush Model + cached physics data) becomes a Trigger whose collision cylinder
 # covers the brush's bounds (touch events behave the same; the shape is approximate).
-ACTOR_CLASSES = set() if os.environ.get("OBJCOPY_NO_ACTORS") else {"Trigger", "TriggerVolume", "InterpActor", "Trigger_DoorInteraction", "Trigger_ButtonInteraction", "Note", "SkeletalMeshActor", "AmbientSoundSimple", "AmbientSoundNonLoop", "AmbientSound", "PathNode", "CameraActor", "PlayerStart"}
+ACTOR_CLASSES = set() if os.environ.get("OBJCOPY_NO_ACTORS") else {"Trigger", "TriggerVolume", "InterpActor", "Trigger_DoorInteraction", "Trigger_ButtonInteraction", "Note", "SkeletalMeshActor", "SkeletalMeshActorMAT", "AmbientSoundSimple", "AmbientSoundNonLoop", "AmbientSound", "PathNode", "CameraActor", "PlayerStart"}
 # Gears 1's lights: their light is baked into the converted geometry (tools/lighting.py), but Gears 3 lights
 # characters (light environments) and cutscene actors from light actors: copied, lighting dynamic objects only
 LIGHT_CLASSES = {"PointLight", "SpotLight", "PointLightToggleable", "SpotLightToggleable", "PointLightMovable", "SpotLightMovable"}
@@ -1358,9 +1358,13 @@ def sound_actors(src):
             and src.path(i).count('.') == 2 and src.path(i).startswith('TheWorld.PersistentLevel')]
 
 
+# (SkeletalMeshActorMAT: Matinee-animated, in Gears 3 too; Embry's opening Hoffman is one: left out before, he was missing)
+SKELETAL_ACTOR_CLASSES = {'SkeletalMeshActor', 'SkeletalMeshActorMAT'}
+
+
 def skeletal_actors(src):
     """the level's SkeletalMeshActors (their meshes converted by tools/skelmesh.py)"""
-    return [i for i, e in enumerate(src.exports) if src.class_name(e['class']) == 'SkeletalMeshActor'
+    return [i for i, e in enumerate(src.exports) if src.class_name(e['class']) in SKELETAL_ACTOR_CLASSES
             and src.path(i).count('.') == 2 and src.path(i).startswith('TheWorld.PersistentLevel')]
 
 

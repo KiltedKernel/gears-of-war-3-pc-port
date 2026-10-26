@@ -2590,3 +2590,9 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   key (point counts and first keys identical) with MoveFrame IMF_RelativeToInitial as in Gears 1 (and the prison);
   15 SkeletalMeshActors copied, not Hoffman's SkeletalMeshActorMAT (no Gears 3 class). Needs a Gears 1 reference of
   this cutscene (Xenia) to tell which shots are wrong.
+- SkeletalMeshActorMAT (Matinee-animated; Gears 3 has the class) now copied and lit like SkeletalMeshActor
+  (objcopy.SKELETAL_ACTOR_CLASSES): Embry's opening Hoffman was left out.
+- Chapter 1 regression with the converter as it now is (named variables of the same level, empty factory spawn points,
+  light tails, Matinee skeletal actors): built aside (the installed copy kept), 481 s. The opening: no crash, colour
+  36.4/33.7/25.5 against 35.9/33.1/24.7; the path choice: Dom's line and the choice as before, 29.6/31.3/24.8 against
+  29.5/31.1/24.7; the hard route (730 s): no crash, the same pawns at the same places as the last sweep.

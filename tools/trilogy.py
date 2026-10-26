@@ -425,8 +425,10 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         if ch.get('track_offsets'): options += ['--track-offsets=' + ch['track_offsets'].replace(' ', '')]
         if ch.get('object_vars'): options += ['--object-vars=' + ch['object_vars'].replace(' ', '')]
         if ch.get('no_collision'): options += ['--actors-no-collision=' + ch['no_collision'].replace(' ', '')]
+        # a cutscene's lights keep their reach (light_radius_min is for gameplay: with it Embry's opening drew blown out)
+        cine = ['--light-radius-min', '0'] if 'cine' in s.lower() and ch.get('light_radius_min') else []
         levelinject(folder, target, [src(s)] + [src(x.strip()) for x in opts.get('extra_sources', '').split(',') if x.strip()],
-                    ['--kit', kit, '--named-vars', src(persistent)] + materials + options + common + tex_options, g3cooked)
+                    ['--kit', kit, '--named-vars', src(persistent)] + materials + options + common + cine + tex_options, g3cooked)
     if shared_tex:
         import materialconv
         materialconv.MAX_TEXTURE_SIZE = int(ch.get('max_texture', 0))

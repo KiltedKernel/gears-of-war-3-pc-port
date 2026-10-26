@@ -2620,3 +2620,6 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   Gears 1's (title card inside the flying King Raven, the squad aboard, the landing, Hoffman, the sandbags; compared
   with build/scratch/xref_embry). Left: it is over-bright (the Raven near white, blown highlights on the characters):
   likely light_radius_min reaching the cutscene's own lights too.
+- Cutscene sections ('cine' in the name) keep their lights' own reach (trilogy.py passes --light-radius-min 0 there):
+  Embry's opening mean brightness 112 -> 80 (the Raven in its own colours, no blown highlights; Gears 1's opening in
+  Xenia averages 49 over its first 3.5 min, not frame-matched), gameplay's squad unchanged (48.6). Installed.

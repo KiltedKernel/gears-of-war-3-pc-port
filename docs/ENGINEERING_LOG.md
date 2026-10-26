@@ -2596,3 +2596,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   light tails, Matinee skeletal actors): built aside (the installed copy kept), 481 s. The opening: no crash, colour
   36.4/33.7/25.5 against 35.9/33.1/24.7; the path choice: Dom's line and the choice as before, 29.6/31.3/24.8 against
   29.5/31.1/24.7; the hard route (730 s): no crash, the same pawns at the same places as the last sweep.
+- **Gears 1 references recorded in Xenia** (user OK; `xenia_canary.exe --cl=<map> gow1-decomp/disc/default.xex`,
+  `um win record`, no input): build/scratch/xref_embry/take1.mkv (Embry's opening, 330 s; gameplay from ~210 s) and
+  build/scratch/xref_prison/take1.mkv (the prison's opening, 150 s), with frame sheets.
+- Embry's opening in Gears 1 starts inside the flying King Raven (the squad seated, cameras riding it), then the
+  landing, Hoffman, Anya on a screen, the sandbags. Ours shows a fixed view of a wall for its first ~20 s. The
+  conversion keeps the Matinee's 37 variable links and their actors (Chopper01 -> the Raven InterpActor_17 with the
+  converted cog_kingraven_cine; its Attached list of 9: three PointLightMovables, CameraActor_0, five passengers) and
+  the cameras' Base / bHardAttach. Live (GOW3_LOG_PROPS): the Raven's Location never changes, it gains a Base of its
+  own, and CameraActor_0's Base drops to none right after the start: the Raven is not flown by its track and the
+  camera is detached from it. Next: why (its movement track, its Physics, what it gets based on).

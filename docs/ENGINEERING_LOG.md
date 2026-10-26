@@ -2574,3 +2574,11 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   bEnabled). So the characters' light environments do not take these lights, wherever they are; the prison's are lit
   by its copied point lights (2026-10-2x: frame 107 -> 54 without). Next: read how Gears 3's DynamicLightEnvironment
   picks its lights (its relevant-light test) before converting more lights.
+- Outdoor character lighting, continued. Decisive test: every copied light's radius at least 20000
+  (OBJCOPY_LIGHT_RADIUS_MIN): the squad at the first landing showed its armour (squad area 48.5 against 44.6; the whole
+  frame 76.7 against 75.8: the world unchanged, the lights being CompositeDynamic only). So the characters' light
+  environments do take copied lights there. The sun did nothing in any form: as point lights in their own sections
+  (radius 250000 or 40000; those sections are loaded but hidden during play), and copied into the persistent level
+  (levelinject --sun-from / recipe sun_from, objcopy.install_sun_point: built, live, still 44.7). Why the sun point light
+  is ignored there is open (an occlusion trace towards it?). Chapter 2 uses recipe light_radius_min = 20000
+  (objcopy.LIGHT_RADIUS_MIN); rebuilt from the recipe: 48.5 again, no crash.

@@ -1284,15 +1284,13 @@ if os.environ.get("OBJCOPY_SUN"): LIGHT_CLASSES |= {"DirectionalLight", "Directi
 # player's too, drew dark with none). As a point light, the kind that lights the prison's characters and not the
 # converted world: SUN_DISTANCE units back along the sun's direction, SUN_RADIUS across, falloff nearly flat (the same
 # light anywhere in the level)
-SUN_DISTANCE, SUN_RADIUS, SUN_FALLOFF = (float(os.environ.get("OBJCOPY_SUN_DISTANCE", 60000)), 250000.0, 0.05)
+SUN_DISTANCE, SUN_RADIUS, SUN_FALLOFF = (float(os.environ.get("OBJCOPY_SUN_DISTANCE", 8000)),
+                                     float(os.environ.get("OBJCOPY_SUN_RADIUS", 40000)), 0.05)
 # (experimental, OBJCOPY_SUN_POINT=1: in Embry the 13 converted suns were live and enabled in game, brightness 0.25-2.5,
 # yet the characters' brightness did not change at all, 60000 or 3000 units back: off until the light environments'
 # light gathering is understood)
 SUN_POINT = bool(os.environ.get("OBJCOPY_SUN_POINT")) and not os.environ.get("OBJCOPY_SUN")
-if SUN_POINT:
-    LIGHT_CLASSES |= {"DirectionalLight"}
-    CLASS_RENAME['DirectionalLight'] = 'PointLight'
-    CLASS_RENAME['DirectionalLightComponent'] = 'PointLightComponent'
+if SUN_POINT: LIGHT_CLASSES |= {"DirectionalLight"}
 if os.environ.get("OBJCOPY_SKY"): LIGHT_CLASSES |= {"SkyLight", "SkyLightToggleable"}
 if not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= LIGHT_CLASSES
 SOUND_ACTORS = {'AmbientSoundSimple', 'AmbientSoundNonLoop', 'AmbientSound'}
@@ -1656,6 +1654,11 @@ TRACK_OFFSETS = {}
 # Gears 1's cutscene lights (brightness 9-20 on the prison opening's spotlights) composited into Gears 3's light
 # environments lit the characters white, and their bloom washed out the frame
 LIGHT_SCALE = 1.0
+# an outdoor chapter's copied lights reach at least this far (recipe light_radius_min; OBJCOPY_LIGHT_RADIUS_MIN): Gears 3
+# lights characters only from light actors near them, and Gears 1 lit its outdoor ones with the sun, which as a light
+# here (as a DirectionalLight or a point light, in a section or the persistent level) changed nothing on them. With
+# Embry's lights at 20000 the squad at the first landing showed its armour (48.5 against 44.6, the world unchanged)
+LIGHT_RADIUS_MIN = float(os.environ.get('OBJCOPY_LIGHT_RADIUS_MIN', 0))
 
 
 def float_prop_brightness(c, props):
@@ -2796,6 +2799,11 @@ def light_component(c, props, scale=True):
         b = next((r for r in recs if r[0] == 'Brightness'), None)
         if b is None: recs.append(['Brightness', 'FloatProperty', 0, b'', struct.pack('>f', LIGHT_SCALE)])
         else: b[4] = struct.pack('>f', struct.unpack('>f', b[4])[0] * LIGHT_SCALE)
+    if LIGHT_RADIUS_MIN:                                # (recipe light_radius_min) every copied light reaching that far
+        rmin = LIGHT_RADIUS_MIN
+        rr = next((r for r in recs if r[0] == 'Radius'), None)
+        if rr is None: recs.append(['Radius', 'FloatProperty', 0, b'', struct.pack('>f', rmin)])
+        else: rr[4] = struct.pack('>f', max(rmin, struct.unpack('>f', rr[4])[0]))
     recs = [r for r in recs if r[0] not in drop] + [
         ['LightingChannels', 'StructProperty', 0, struct.pack('>ii', *c.w.name('LightingChannelContainer')), ch],
         ['CastShadows', 'BoolProperty', 0, b'', b'\x00'], ['CastDynamicShadows', 'BoolProperty', 0, b'', b'\x00']]
@@ -2807,7 +2815,6 @@ if not os.environ.get('OBJCOPY_LIGHTS_RAW'):                  # (debugging: the 
         FIXUPS[_lc] = light_component
     for _lc in ('DirectionalLightComponent', 'SkyLightComponent'):
         FIXUPS[_lc] = lambda c, props: light_component(c, props, scale=False)
-    if SUN_POINT: FIXUPS['DirectionalLightComponent'] = lambda c, props: sun_component(c, props)
 
 
 def sun_component(c, props):
@@ -2835,4 +2842,12 @@ def sun_actor(c, props):
     return encode(c.w, recs)
 
 
-if SUN_POINT: FIXUPS['DirectionalLight'] = sun_actor
+def install_sun_point():
+    """DirectionalLights copied from here on become the sun's point light (sun_actor, sun_component)"""
+    CLASS_RENAME['DirectionalLight'] = 'PointLight'
+    CLASS_RENAME['DirectionalLightComponent'] = 'PointLightComponent'
+    FIXUPS['DirectionalLight'] = sun_actor
+    FIXUPS['DirectionalLightComponent'] = sun_component
+
+
+if SUN_POINT: install_sun_point()

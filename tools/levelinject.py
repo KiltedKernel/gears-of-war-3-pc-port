@@ -221,6 +221,10 @@ def main():
                     "child instances the converted skeletal meshes' materials become (its Diffuse / Normal / Specular "
                     "set, its other texture parameters neutral); the package must be loaded where the level is (e.g. "
                     "GEARGAMESP_SF in the campaign: COG_Dom_Summer.Materials.M_COG_Dom_Summer_Game)")
+    ap.add_argument('--light-radius-min', type=float, default=0.0, help="copied lights reach at least this far "
+                    "(objcopy.LIGHT_RADIUS_MIN: outdoor characters)")
+    ap.add_argument('--sun-from', default='', help="Gears 1 packages (comma separated) whose DirectionalLights are copied "
+                    "in as the sun (objcopy sun point lights): for the persistent level")
     ap.add_argument('--character-ambient', default=None, help="r,g,b: cutscene characters' light environments' AmbientGlow "
                     "(objcopy.CHARACTER_AMBIENT)")
     ap.add_argument('--light-scale', type=float, default=1.0, help="the copied lights' brightness (and Matinee tracks "
@@ -270,6 +274,9 @@ def main():
         _oc.PARTICLE_SYSTEMS[g1] = g3; _oc.PARTICLE_MATERIALS[g1] = g3
     import objcopy
     objcopy.LIGHT_SCALE = args.light_scale
+    if args.light_radius_min: objcopy.LIGHT_RADIUS_MIN = args.light_radius_min
+    global SUN_FROM
+    SUN_FROM = [x for x in args.sun_from.split(',') if x]
     if args.character_ambient: objcopy.CHARACTER_AMBIENT = tuple(float(x) for x in args.character_ambient.split(','))
     offset = np.array([float(x) for x in args.offset.split(',')])
     if args.streaming_prefix is not None:
@@ -1461,6 +1468,9 @@ def main():
           f'{(len(qd) - qend) // 64} matrices; {len(q.exports)} exports')
 
 
+SUN_FROM = []                 # (--sun-from) packages whose DirectionalLights become this package's sun
+
+
 def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_map=None, content_names=None, g3cooked=None, with_starts=False, mic_map=None):
     """every source's Main_Sequence (and all under it) into the target, a subsequence of the target's Main_Sequence"""
     import objcopy, collections
@@ -1497,6 +1507,21 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
     added = []
     stats = collections.Counter()
     only = [x for x in os.environ.get('LEVELINJECT_KISMET_ONLY', '').split(',') if x]   # (debugging) these packages' Kismet only
+    # the sun (recipe sun_from: a section holding Gears 1's DirectionalLight): its light as objcopy's sun point light in
+    # this package (the persistent level, always visible: lights in a hidden section light nothing; Embry's sun is in
+    # its opening's section). Its other contents are not copied
+    for fname in SUN_FROM:
+        sp = upk.Package(fname)
+        lvl = next((i for i in range(len(sp.exports)) if sp.path(i) == 'TheWorld.PersistentLevel'), None)
+        suns = [i for i, e in enumerate(sp.exports) if sp.class_name(e['class']) == 'DirectionalLight'
+                and sp.path(i).count('.') == 2 and sp.path(i).startswith('TheWorld.PersistentLevel')] if lvl is not None else []
+        if not suns: print(f'sun: none in {os.path.basename(fname)}'); continue
+        objcopy.install_sun_point()
+        c = objcopy.Copier(sp, p3, w, types, classes, script3, offset, script1)
+        made_s = c.copy(c.plan(suns), {lvl + 1: level3 + 1})
+        objcopy.add_to_level(p3, w, level3, [made_s[ai] for ai in suns if made_s.get(ai)])
+        print(f'sun: {len(suns)} from {os.path.basename(fname)} as point lights (radius {objcopy.SUN_RADIUS:.0f}, '
+              f'{objcopy.SUN_DISTANCE:.0f} back)')
     for si, (sp, fname) in enumerate(zip(srcs, names)):
         if only and os.path.splitext(os.path.basename(fname))[0] not in only: continue
         main1 = next((i for i in range(len(sp.exports)) if sp.path(i) == 'TheWorld.PersistentLevel.Main_Sequence'), None)

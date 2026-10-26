@@ -2582,3 +2582,6 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (levelinject --sun-from / recipe sun_from, objcopy.install_sun_point: built, live, still 44.7). Why the sun point light
   is ignored there is open (an occlusion trace towards it?). Chapter 2 uses recipe light_radius_min = 20000
   (objcopy.LIGHT_RADIUS_MIN); rebuilt from the recipe: 48.5 again, no crash.
+- Chapter 2's classic Marcus: the player factory ran after the opening (Kismet trace) but no pawn came; spawning at
+  the player start's import found nothing. Recipe player_spawn_at = 10464,-40032,-1300,122 (beside the chapter's player
+  start, as the prison's recipe does): the player is GearPawn_COGMarcusG2MP at the first landing, lit, with the squad.

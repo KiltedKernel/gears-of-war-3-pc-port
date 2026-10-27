@@ -2656,3 +2656,9 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   converted terrain (BSP-style chunks: terrainconv) does not stop the builder's traces, though landing1's BSP chunks
   do. Suspects: the terrain triangles' winding (kDOP line checks are one-sided) or their chunks' collision; the
   hidden blocking-volume meshes (176 here) did not either. Parked again (recipe [unused landing2]).
+- Converted terrain in game: the player teleported over (9000,-31500) (the input script's teleport leaves the pawn
+  hovering until it moves: 'walkto' after it) fell and rested at z -62, a pawn's height over Terrain_3's -140: pawns
+  collide with the converted terrain. The navmesh builder's line checks (zero extent) in the slot pass through it.
+  So the terrain chunks' collision works for movement and not for line traces (likewise no blocking volume there:
+  a ray through every Embry blocking volume at that spot hits none). Next: what line checks read that box checks do
+  not (the kDOP triangles' facing, or the component's BlockZeroExtent in the chunk), compared with landing1's.

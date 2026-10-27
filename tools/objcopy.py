@@ -1534,6 +1534,35 @@ def volume_as_trigger(c, i, level_ref):
     return actor
 
 
+# Gears 1's emergence holes (WarSpawner_EmergenceHole: Embry's Drones' squad factories spawn from them, their Spawn
+# Points): Gears 3's GearSpawner_EHole (GearGame, always loaded) at the same place, Gears 3's defaults otherwise (its
+# spawn slots; Gears 1's meshes, particles and lights are not carried). Unconverted, the factories had no spawn points.
+# OBJCOPY_NO_EHOLES=1: left out
+EHOLE_CLASSES = set() if os.environ.get('OBJCOPY_NO_EHOLES') else {'WarSpawner_EmergenceHole'}
+if EHOLE_CLASSES and not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= EHOLE_CLASSES
+
+
+def hole_as_spawner(c, i, level_ref):
+    """a Gears 3 GearSpawner_EHole standing for Gears 1 emergence hole i: returns the new actor's ref (0: none)"""
+    import materialconv
+    s = c.s
+    cls = c.class_ref('GearSpawner_EHole')
+    if not cls: return 0
+    recs, _ = materialconv.raw_props(s, s.export_data(i), 32)
+    a = {r[0]: r[4] for r in recs}
+    loc = struct.unpack('>3f', a['Location']) if 'Location' in a else (0.0, 0.0, 0.0)
+    loc = tuple(loc[k] + c.offset[k] for k in range(3))
+    name = s.exports[i]['name']
+    num = int(name.rsplit('_', 1)[1]) + 1 if name.rsplit('_', 1)[-1].isdigit() else 0
+    actor = c.w.add_export(cls, level_ref, c.unique_name('G1EHole', num), b'', flags=0x0207000100000000)
+    out = [['Location', 'StructProperty', 0, struct.pack('>ii', *c.w.name('Vector')), struct.pack('>3f', *loc)]]
+    if 'Rotation' in a: out.append(['Rotation', 'StructProperty', 0, struct.pack('>ii', *c.w.name('Rotator')), a['Rotation']])
+    if 'Tag' in a: out.append(['Tag', 'NameProperty', 0, b'', struct.pack('>ii', *c.name(*struct.unpack('>ii', a['Tag'])))])
+    c.w.replace(actor - 1, c.prelude_828('actor', cls) + encode(c.w, out))
+    c.obj_map[i + 1] = actor
+    return actor
+
+
 def add_to_level(p3, w, level_index, actor_refs):
     """append actors (refs) to the level's Actors array (after its properties: an int, then count + refs)"""
     if not actor_refs: return

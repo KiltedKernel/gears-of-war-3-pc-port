@@ -1562,6 +1562,9 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
             if cn == 'TriggerVolume':
                 r = objcopy.volume_as_trigger(c, ai, level3 + 1)
                 if r: new_actors.append(r)
+            elif cn in objcopy.EHOLE_CLASSES:
+                r = objcopy.hole_as_spawner(c, ai, level3 + 1)
+                if r: new_actors.append(r)
             else:
                 copied.append(ai)
         # in one pass: every reference between them resolves (exports are made before any data is written)

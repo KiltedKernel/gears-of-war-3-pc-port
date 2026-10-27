@@ -2672,3 +2672,11 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - Embry landing2 navmesh built (seconds 900; build 1212 s): Pylon_1 1445 polygons (2600 vertices) after the merge,
   the other pylons none; written into GOW1_SP_Embry_Scripting_02 (build/trilogy/Gears1_Chapter2_landing2.navm, reused
   by --reuse-navmesh). Installed. Not yet seen in game: the second landing's fight (its AI moving on it).
+- **Emergence holes**: Gears 1's WarSpawner_EmergenceHole (Embry's Drone factories' Spawn Points, through
+  SeqVar_Objects; its own meshes, particles, lights as subobjects) becomes Gears 3's GearSpawner_EHole (GearGame:
+  always loaded; its default carries SpawnSlots and an explosion template) at the same Location / Rotation / Tag
+  (objcopy.hole_as_spawner, like volume_as_trigger; EHOLE_CLASSES; OBJCOPY_NO_EHOLES=1: left out). Embry: 8 holes
+  (Scripting_02 1, _03 2, _04 4, _05 1), every SeqVar_Object that named one now names its spawner. In game: the
+  spawners load (GOW3_LOG_PROPS), no crash, the first landing's fight as before. Not seen yet: a factory spawning
+  from one (the fights past the first landing), and the hole's look (Gears 1's meshes are not carried: Gears 3 draws
+  its holes with EmergenceHoleRenderingComponent / SeqAct_OpenEmergenceHole).

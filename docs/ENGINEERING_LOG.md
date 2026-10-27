@@ -2680,3 +2680,9 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   spawners load (GOW3_LOG_PROPS), no crash, the first landing's fight as before. Not seen yet: a factory spawning
   from one (the fights past the first landing), and the hole's look (Gears 1's meshes are not carried: Gears 3 draws
   its holes with EmergenceHoleRenderingComponent / SeqAct_OpenEmergenceHole).
+- Trying to see a hole fight without playing the first landing: a trigger tour (teleport + walkto onto
+  Scripting_02's touch triggers: Trigger_0 9856,-26595; TriggerVolume_0/3/6/7; GATE_01's TriggerVolume_2) did
+  nothing: Scripting_02 is streamed by the first landing's progress, and in a test build loading it from the start
+  (always_loaded, a separate test folder) its ops still never ran: the input script's walkto left the player where the
+  teleport put him (no touch), and some of these triggers start with collision off until scripted. Seeing Drones
+  emerge needs the first landing played through (a scripted fight run, or the user's playtest).

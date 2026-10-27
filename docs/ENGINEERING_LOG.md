@@ -2662,3 +2662,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   So the terrain chunks' collision works for movement and not for line traces (likewise no blocking volume there:
   a ray through every Embry blocking volume at that spot hits none). Next: what line checks read that box checks do
   not (the kDOP triangles' facing, or the component's BlockZeroExtent in the chunk), compared with landing1's.
+- **Correction (Embry landing2):** the navmesh log's 'line check ... -> 0' is a HIT (UE3 SingleLineCheck returns true
+  when nothing is hit; '-> 1' is clear). The builder found the floor all along: with the seed over Terrain_3 its first
+  pass for Pylon_1 expanded 9400 times into 11592 polygons in 31 s, then the next passes (the merge) ran past the
+  region's 300 s, and the dump, written only after every pass, never came: "no walkable ground". The earlier entries'
+  "traces pass through" readings (meshes, terrain facing, blocking volumes) were wrong; the terrain two-sided switch
+  (levelinject --terrain-two-sided, now passed for navmesh slots) and --bodies-block-traces stay, harmless. Recipe
+  landing2 seconds = 900 (as chapter 1's large outdoor region needed 600).
+- Embry landing2 navmesh built (seconds 900; build 1212 s): Pylon_1 1445 polygons (2600 vertices) after the merge,
+  the other pylons none; written into GOW1_SP_Embry_Scripting_02 (build/trilogy/Gears1_Chapter2_landing2.navm, reused
+  by --reuse-navmesh). Installed. Not yet seen in game: the second landing's fight (its AI moving on it).

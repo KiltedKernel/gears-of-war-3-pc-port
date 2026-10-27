@@ -221,6 +221,7 @@ def main():
                     "child instances the converted skeletal meshes' materials become (its Diffuse / Normal / Specular "
                     "set, its other texture parameters neutral); the package must be loaded where the level is (e.g. "
                     "GEARGAMESP_SF in the campaign: COG_Dom_Summer.Materials.M_COG_Dom_Summer_Game)")
+    ap.add_argument('--terrain-two-sided', action='store_true', help='terrain triangles in both facings (navmesh slots)')
     ap.add_argument('--bodies-block-traces', action='store_true', help="the hidden collision meshes (Gears 1's blocking "
                     "volumes and simple collision) block line traces too: for a navmesh build (its builder traces down to the "
                     "floor; with them for pawns only, Embry's mesh floors were not found)")
@@ -412,6 +413,9 @@ def main():
             # Gears 1's terrain (Embry Square's floors): BSP-style polygons with surfaces of their own (terrainconv)
             if not os.environ.get('LEVELINJECT_NO_TERRAIN'):
                 t_polys = terrainconv.polygons(sp, model)
+                # (a navmesh slot) both facings: the builder's line checks passed through the converted terrain
+                # (pawns stood on it); line checks against the collision tree may be one-sided
+                if args.terrain_two_sided: t_polys += [(t[0], t[1][::-1], t[2][::-1], -t[3], t[4]) for t in t_polys]
                 if t_polys: print(f'terrain: {len(t_polys)} triangles')
                 sp_polys += t_polys
             if args.center:

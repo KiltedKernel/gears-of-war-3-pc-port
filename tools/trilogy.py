@@ -193,7 +193,7 @@ def slot_navmesh(folder, nav, g1cooked, g3cooked, out, rename_to=None):
         opts.append(t)
     if 'pylon_at' in nav:
         opts += seed_options(nav, tuple(float(v) for v in nav.get('offset', '0,0,0').split(',')))
-    opts.append('--bodies-block-traces')             # (the builder traces down to the floor: mesh floors' hulls too)
+    opts += ['--bodies-block-traces', '--terrain-two-sided']             # (the builder traces down to the floor: mesh floors' hulls too)
     levelinject(work, os.path.join(g3cooked, nav['slot'] + '.xxx'), sources, opts, g3cooked)
     raw = out + '.slot'
     slot_pylons = pylon_locations(os.path.join(work, 'GearGame', 'CookedXbox360', nav['slot'] + '.xxx'))

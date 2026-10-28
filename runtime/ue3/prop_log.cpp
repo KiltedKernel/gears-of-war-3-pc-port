@@ -4,8 +4,12 @@
 // StateFrame (UObject +20).
 // GOW3_WATCH_PROP=Class:Prop arms a write watchpoint (watch.cpp) on that property of the first live instance: each
 // hit names the guest function writing it.
+// GOW3_SET_PROPS (testing): "Class:Prop=Value,Prop=Value;Class2:..." holds those properties of every live instance at
+// those values, every second (an int, a float with a '.', a bool for a bool property): a scripted test run's god mode
+// (GearPC:bGodMode=1) or weak enemies (GearPawn_LocustDroneSavage:Health=1) to play a level's fights through.
 #include <stdafx.h>
 #include <ue3/reflection.h>
+#include <kernel/memory.h>
 #include <os/logger.h>
 #include <chrono>
 #include <sstream>
@@ -35,10 +39,59 @@ namespace
     }
 }
 
+void SetProps()
+{
+    const char* spec = getenv("GOW3_SET_PROPS");
+    if (!spec) return;
+    std::string s = spec;
+    std::thread([s] {
+        while (!ue3::Init()) std::this_thread::sleep_for(std::chrono::seconds(2));
+        struct Set { std::string cls; std::vector<std::pair<std::string, std::string>> values; };
+        std::vector<Set> sets;
+        std::stringstream ss(s); std::string part;
+        while (std::getline(ss, part, ';'))
+        {
+            Set w; const size_t c = part.find(':'); w.cls = part.substr(0, c);
+            if (c == std::string::npos) continue;
+            std::stringstream ps(part.substr(c + 1)); std::string kv;
+            while (std::getline(ps, kv, ','))
+                if (const size_t eq = kv.find('='); eq != std::string::npos) w.values.emplace_back(kv.substr(0, eq), kv.substr(eq + 1));
+            sets.push_back(w);
+        }
+        LOGFN("props: holding {} class(es) of GOW3_SET_PROPS", sets.size());
+        for (;;)
+        {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            for (auto& w : sets)
+            {
+                const uint32_t cls = ue3::FindClass(w.cls.c_str());
+                if (!cls) continue;
+                for (uint32_t o : ue3::FindInstancesOf(cls))
+                {
+                    const uint32_t oc = ue3::ClassOf(o);
+                    for (auto& [prop, value] : w.values)
+                    {
+                        const int off = ue3::PropertyOffset(oc, prop.c_str());
+                        if (off < 0 || !ue3::Readable(o + off, 4)) continue;
+                        uint32_t* at = (uint32_t*)g_memory.Translate(o + off);
+                        uint32_t v;
+                        if (const uint32_t mask = ue3::BoolMask(oc, prop.c_str()))
+                            v = atoi(value.c_str()) ? (ByteSwap(*at) | mask) : (ByteSwap(*at) & ~mask);
+                        else if (value.find('.') != std::string::npos) { const float f = float(atof(value.c_str())); memcpy(&v, &f, 4); }
+                        else v = uint32_t(atoi(value.c_str()));
+                        *at = ByteSwap(v);
+                    }
+                }
+            }
+        }
+    }).detach();
+}
+
 void Start()
 {
     const char* spec = getenv("GOW3_LOG_PROPS");
     const char* watchSpec = getenv("GOW3_WATCH_PROP");
+    SetProps();
     if (!spec && !watchSpec) return;
     std::string s = spec ? spec : "", ws = watchSpec ? watchSpec : "";
     std::thread([s, ws] {

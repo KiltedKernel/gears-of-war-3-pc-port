@@ -2699,3 +2699,12 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   no Gears 3 class).
 - Chapter 1 regression with these converter changes (built aside): no crash; the opening's colour 36.1/33.4/25.3
   against 36.4/33.7/25.5; Dom's line and the path choice as before.
+- **GOW3_SET_PROPS** (runtime/ue3/prop_log.cpp, testing): "Class:Prop=Value,...;..." holds those properties of every
+  live instance at those values, every second (int; float with a '.'; a bool property through its mask). Tried to
+  play Embry's first landing through with GearPC:bGodMode=1 and GearPawn_LocustDroneSavage:Health=1: the squad AI
+  never kills the Drones on its own (the same 4 at the same spots in every run: that fight is static without the
+  player); the player scripted to face each Drone and fire (trig L / trig R bursts) killed one or two of the four from
+  the start position (~4000 units, behind sandbags: the rest hit cover); 'look' accumulates pitch (aim drifted to the
+  sky); after aiming, teleports no longer moved the player (left in an aim / cover state). So the first landing stays
+  unfinished in scripted runs: the holes, the second landing and the Troika still need a playtest (or a closer
+  scripted firing position).

@@ -2708,3 +2708,15 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   sky); after aiming, teleports no longer moved the player (left in an aim / cover state). So the first landing stays
   unfinished in scripted runs: the holes, the second landing and the Troika still need a playtest (or a closer
   scripted firing position).
+
+## 2026-10-28: chapter 3, the House of Sovereigns: first build
+- Embry's map change names sp_hos_p (Gears 1's act 1 chapter 3, "Fish in a Barrel"); the House of Sovereigns'
+  ends in sp_tomb_p (chapter 4). tools/recipes/gears1_ch3.ini (chapter 34) from chapter 2's: 43 sections (Gears 1's
+  streaming list; SP_HOS_S18 is listed but not on the disc), the five no Kismet streams always loaded; its persistent
+  level's 40 squad factories (Dom, Minh, Gus, Carmine) get load_packages' multiplayer classes (persistent_pawn_classes,
+  + MPCH_COGGusG2MP_SF); carriers + SP_Oldshipyard_05e_S for the Wretch (PAWN_MAP Pawn_GeistWretch -> 
+  GearPawn_LocustWretch); the Troika's carrier as chapter 2's. Built in 311 s.
+- In game (Select Chapter): no crash; the corridor with the squad (Dom, Ben Carmine, a Redshirt), Kim's opening line
+  and subtitle, indoor lighting as the prison's. Not yet: the classic Marcus (the player swap after the opening's
+  SeqAct_Interp_1 did not happen), Hunters (Pawn_GeistHunter*: no class loaded) and Nemacysts, navmesh regions, the
+  cutscenes (Carmine's death), linking chapter 2's end to it.

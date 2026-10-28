@@ -69,7 +69,7 @@ PAWN_MAP = {
     'Pawn_GeistBoomer': 'GearPawn_LocustBoomer', 'Pawn_GeistTheron': 'GearPawn_LocustTheron',
     'Pawn_GeistHunterArmorNoGrenades': 'GearPawn_LocustHunterArmorNoGrenades',
     'Pawn_GeistHunterNoArmorNoGrenades': 'GearPawn_LocustHunterNoArmorNoGrenades',
-    'Pawn_GeistBerzerker': 'GearPawn_LocustBerserker', 'Pawn_GeistWretchContent': 'GearPawn_LocustWretch',
+    'Pawn_GeistBerzerker': 'GearPawn_LocustBerserker', 'Pawn_GeistWretchContent': 'GearPawn_LocustWretch', 'Pawn_GeistWretch': 'GearPawn_LocustWretch',
     'Pawn_GeistDarkWretch': 'GearPawn_LocustDarkWretch', 'Pawn_GeistDarkWretchSuicider': 'GearPawn_LocustDarkWretch',
     'Pawn_GeistNemacyst': 'GearPawn_LocustNemacyst', 'Pawn_GeistGeneralRaam': 'GearPawn_LocustGeneralRaam',
     'Pawn_COGDom': ['GearPawn_COGDom', 'GearPawn_COGDomG2'], 'Pawn_COGGus': 'GearPawn_COGGus',

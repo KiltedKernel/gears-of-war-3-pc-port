@@ -1507,6 +1507,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
                       and pk.exports[e['outer'] - 1]['name'] == 'GearGameContent'}
     offset = tuple(float(v) for v in offset_text.split(','))
     g3pkgs = [upk.Package(os.path.join(g3dir, f)) for f in ('Core.xxx', 'Engine.xxx', 'GameFramework.xxx', 'GearGame.xxx') if os.path.isfile(os.path.join(g3dir, f))]
+    # the chapter's carrier levels too (their content classes and class defaults: a Troika's component templates)
+    g3pkgs += [upk.Package(n_.strip()) for n_ in (content_names or '').split(',') if n_.strip() and os.path.isfile(n_.strip())]
     classes = objcopy.class_index(g3pkgs)
     script3 = objcopy.Script3(g3pkgs)
     level3 = next(i for i in range(len(p3.exports)) if cls(i) == 'Level' and p3.path(i) == 'TheWorld.PersistentLevel')

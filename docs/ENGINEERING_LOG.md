@@ -2686,3 +2686,16 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (always_loaded, a separate test folder) its ops still never ran: the input script's walkto left the player where the
   teleport put him (no touch), and some of these triggers start with collision off until scripted. Seeing Drones
   emerge needs the first landing played through (a scripted fight run, or the user's playtest).
+- **The Troika**: Gears 1's Turret_TroikaCabal (Embry Scripting_03 1, _05 2) copied as Gears 3's Turret_TroikaCabal
+  (a GearGameContent class: carrier SP_Airfield_01B_S added to the recipe) with Gears 3's look: its components' Gears 1
+  templates are cooked into its package as exports (WarfareGameContent.Default__Turret_TroikaCabal.SkelMeshComponent0,
+  CollisionCylinder), same names as Gears 3's; Copier.component_template now maps export templates too and finds
+  content classes' defaults in the carriers (Script3 / class_index: classes and defaults under a level's package
+  export; kismet() indexes the content packages that are files: the carriers). objcopy.OWNED_COMPONENT_DROP drops the
+  turret mesh component's SkeletalMesh, AnimSets, AnimTreeTemplate, PhysicsAsset, Materials, MorphSets: Gears 3's
+  template supplies them (OBJCOPY_NO_TROIKA=1: left out). In game: Gears 3's Troika model at Gears 1's spot
+  (6888,-21316,-749), no crash. Troika gunners / spotters: PAWN_MAP as the Drone (the classic one is Horde's only:
+  "none available" before). Not seen: the gunner using it (SeqAct_AIUseTurret; Gears 1's SeqAct_SetTroikaSpotter has
+  no Gears 3 class).
+- Chapter 1 regression with these converter changes (built aside): no crash; the opening's colour 36.1/33.4/25.3
+  against 36.4/33.7/25.5; Dom's line and the path choice as before.

@@ -64,7 +64,8 @@ EDITOR_COMPONENTS = {'DrawFrustumComponent', 'DrawLightConeComponent', 'DrawLigh
 PAWN_MAP = {
     # the classic Drone is cooked only into Horde's packages; the campaign's is the Savage Drone (a carrier level)
     'Pawn_GeistLocust': ['GearPawn_LocustDrone', 'GearPawn_LocustDroneSavage'], 'Pawn_GeistLocustSniper': 'GearPawn_LocustSniper',
-    'Pawn_GeistTroikaGunner': 'GearPawn_LocustDrone', 'Pawn_GeistTroikaSpotter': 'GearPawn_LocustDrone',
+    'Pawn_GeistTroikaGunner': ['GearPawn_LocustDrone', 'GearPawn_LocustDroneSavage'],
+    'Pawn_GeistTroikaSpotter': ['GearPawn_LocustDrone', 'GearPawn_LocustDroneSavage'],
     'Pawn_GeistBoomer': 'GearPawn_LocustBoomer', 'Pawn_GeistTheron': 'GearPawn_LocustTheron',
     'Pawn_GeistHunterArmorNoGrenades': 'GearPawn_LocustHunterArmorNoGrenades',
     'Pawn_GeistHunterNoArmorNoGrenades': 'GearPawn_LocustHunterNoArmorNoGrenades',
@@ -120,7 +121,10 @@ def class_index(packages):
     for p in packages:
         pkg = os.path.splitext(os.path.basename(p.filename))[0]
         for e in p.exports:
-            if p.class_name(e['class']) == 'Class' and e['outer'] == 0: out.setdefault(e['name'], pkg)
+            if p.class_name(e['class']) != 'Class': continue
+            if e['outer'] == 0: out.setdefault(e['name'], pkg)
+            elif p.class_name(p.exports[e['outer'] - 1]['class']) == 'Package':      # (a level's content class)
+                out.setdefault(e['name'], p.exports[e['outer'] - 1]['name'])
     return out
 
 
@@ -428,17 +432,25 @@ class Copier:
         default has a subobject of that name (else None: the component class's own default)"""
         e = self.s.exports[i]
         arch = struct.unpack_from('>i', self.s.data, e['entry'] + 20)[0]
-        if arch >= 0 or not self.g3: return 0
-        tname = self.s.imports[-arch - 1]['name']
-        douter = self.s.imports[-arch - 1]['outer']
-        if douter >= 0: return 0
-        dname = self.s.imports[-douter - 1]['name']                      # Default__Trigger
+        if arch == 0 or not self.g3: return 0
+        if arch > 0:                                    # a content class's default cooked into the package (Gears 1's
+            tname = self.s.exports[arch - 1]['name']    # Troika: WarfareGameContent.Default__Turret_TroikaCabal...)
+            douter = self.s.exports[arch - 1]['outer']
+            if douter <= 0: return 0
+            dname = self.s.exports[douter - 1]['name']
+        else:
+            tname = self.s.imports[-arch - 1]['name']
+            douter = self.s.imports[-arch - 1]['outer']
+            if douter >= 0: return 0
+            dname = self.s.imports[-douter - 1]['name']                  # Default__Trigger
+        if not dname.startswith('Default__'): return 0
         acls = self.g3_class(dname[9:])
         if acls + '' not in self.g3.defaults: return 0
         dp, di = self.g3.defaults[acls]
         kids = [j for j, f in enumerate(dp.exports) if f['outer'] == di + 1 and f['name'] == tname]
         if not kids: return 0
-        pkg = os.path.splitext(os.path.basename(dp.filename))[0]
+        douter_ = dp.exports[di]['outer']
+        pkg = dp.exports[douter_ - 1]['name'] if douter_ > 0 else os.path.splitext(os.path.basename(dp.filename))[0]
         pk = self.find_import('Core', 'Package', 0, pkg)
         d_imp = self.find_import(pkg, acls, pk, 'Default__' + acls)
         ccls = dp.class_name(dp.exports[kids[0]]['class'])
@@ -630,6 +642,9 @@ class Copier:
                 props = self.located(props, (x + 80 * (self.placed - 1), y, z))
             if kind == 'component' and cn in COMPONENT_DROP:
                 props = self.without(props, COMPONENT_DROP[cn])
+            if kind == 'component' and self.s.exports[i]['outer'] > 0:
+                owner_ = self.s.class_name(self.s.exports[self.s.exports[i]['outer'] - 1]['class'])
+                if cn in OWNED_COMPONENT_DROP.get(owner_, {}): props = self.without(props, OWNED_COMPONENT_DROP[owner_][cn])
             self.current_src = i
             if cn == 'SeqVar_Object' and OBJECT_VAR_OVERRIDES:
                 props = object_var_override(self, props)
@@ -764,7 +779,8 @@ class Script3:
         self.defaults = {}
         for p in packages:
             for i, e in enumerate(p.exports):
-                if e['outer'] != 0: continue
+                # (a level's content classes and defaults: under its GearGameContent package export)
+                if e['outer'] != 0 and p.class_name(p.exports[e['outer'] - 1]['class']) != 'Package': continue
                 if p.class_name(e['class']) == 'Class': self.classes.setdefault(e['name'], (p, i))
                 elif e['name'].startswith('Default__'): self.defaults.setdefault(e['name'][9:], (p, i))
         self.types = property_types(packages)
@@ -1303,6 +1319,13 @@ ACTOR_CLASSES |= PICKUP_CLASSES
 # overrode his hair with a Gears 1 instance whose parent did not resolve, drawn as the default material, a white cap)
 # and the native tail written (LODData: empty, no light map)
 COMPONENT_DROP = {'StaticMeshComponent': {'Materials'}, 'SkeletalMeshComponent': {'Materials'}}
+# Gears 1's Troika (Turret_TroikaCabal: Gears 3 has the class, a content class cooked into some levels: recipe carriers):
+# copied with Gears 3's look: its components keep their Gears 3 template's mesh, animation and physics (Gears 1's are
+# left out), so the turret is Gears 3's Troika where Gears 1 placed one. OBJCOPY_NO_TROIKA=1: left out
+OWNED_COMPONENT_DROP = {} if os.environ.get('OBJCOPY_NO_TROIKA') else {
+    'Turret_TroikaCabal': {'SkeletalMeshComponent': {'SkeletalMesh', 'AnimSets', 'AnimTreeTemplate', 'PhysicsAsset',
+                                                     'Materials', 'MorphSets', 'Animations'}}}
+if OWNED_COMPONENT_DROP and not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= set(OWNED_COMPONENT_DROP)
 COMPONENT_TAIL = {'StaticMeshComponent': bytes(4),
                   # a light component ends with its InclusionConvexVolumes / ExclusionConvexVolumes (empty arrays): written
                   # without them, Gears 3 read past the component and the campaign load crashed or hung

@@ -2803,3 +2803,10 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (empty in ours; SP_Azura2_02_S: 16 {GUID, actor} entries, cover links) and the engine's cross-level fixup (to be
   reverse-engineered). Also: Gears 1 CoverGroups now map to their nearest converted link (Gears 3's GearAI.OnAIMove
   drops CoverGroups: "COVERGROUPS ARE OBSOLETE"; any other actor target is a tether).
+- Installed build/mods/Gears1_Chapter1 rebuilt with all of the above (linked to chapter 2; previous copy in
+  build/scratch/Gears1_Chapter1_prev2). Smoke test: no crash, cover in the cell.
+- Open on the playthrough: Dom does not follow across pylons (cross-pylon edges never tested by the search); the
+  easy route's jammed cover-room door (Trigger_DoorInteraction_3 at -4522,79; SeqEvt_DoorOpen_3) did not open to the
+  scripted kick (X, A, X held), with Gears 1's "FIRE WEAPON" hint up the whole time; white floor patches on the easy
+  route's upper walkway; the yard and the ending (Cine_End: ChapterComplete, map change) not yet reached by a script.
+  Test harness for scripted runs: GOW3_SET_PROPS with the Drones' bCanDBNO=0 (a downed Drone outlived melee).

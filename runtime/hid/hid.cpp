@@ -507,6 +507,41 @@ namespace
         LOGFN("input: fight: ended after {:.0f} s", double(GetTickCount64() - t0) / 1000.0);
     }
 
+    // "shoot x y z <seconds>" (testing): aim (left trigger held) at a point with the right stick, fire (right trigger)
+    // while on it: shootable scenery (the prison's easy route: the window panels Gears 1 opens by damage)
+    void Shoot(double tx, double ty, double tz, double seconds)
+    {
+        static const uint32_t actor = ue3::FindClass("Actor");
+        const int loc = actor ? ue3::PropertyOffset(actor, "Location") : -1, rot = actor ? ue3::PropertyOffset(actor, "Rotation") : -1;
+        std::lock_guard<std::mutex> drive(g_driveLock);
+        const uint64_t t0 = GetTickCount64();
+        while (double(GetTickCount64() - t0) / 1000.0 < seconds)
+        {
+            const uint32_t pawn = LocalPawn();
+            if (!pawn || loc < 0) { Sleep(100); continue; }
+            // from the camera (PlayerController.PlayerCamera's Location: Gears aims from over the shoulder)
+            static const uint32_t pcClass = ue3::FindClass("PlayerController");
+            static const int camOff = pcClass ? ue3::PropertyOffset(pcClass, "PlayerCamera") : -1;
+            const uint32_t cam = camOff >= 0 ? ue3::Read32(g_localController + camOff) : 0;
+            const uint32_t from = cam ? cam : pawn;
+            const double px = ue3::ReadFloat(from + loc), py = ue3::ReadFloat(from + loc + 4), pz = ue3::ReadFloat(from + loc + 8) + (cam ? 0 : 60);
+            const double yaw = double(int32_t(ue3::Read32(g_localController + rot + 4)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
+            double pitch = double(int32_t(ue3::Read32(g_localController + rot)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
+            if (pitch > 3.14159265358979) pitch -= 2 * 3.14159265358979;
+            const double dyaw = std::remainder(std::atan2(ty - py, tx - px) - yaw, 2 * 3.14159265358979);
+            const double dpitch = std::atan2(tz - pz, std::hypot(tx - px, ty - py)) - pitch;
+            auto stick = [](double d) { return std::fabs(d) < 0.005 ? 0.0 : std::clamp(std::fabs(d) / 0.5, 0.45, 1.0) * (d > 0 ? 1 : -1); };
+            g_scriptRX = int16_t(std::lround(stick(dyaw) * 32000)); g_scriptRY = int16_t(std::lround(stick(dpitch) * 32000));
+            g_scriptLT = 255;
+            g_scriptRT = (std::fabs(dyaw) < 0.05 && std::fabs(dpitch) < 0.05) ? 255 : 0;
+            static uint64_t lastLog = 0;
+            if (GetTickCount64() - lastLog > 1000) { lastLog = GetTickCount64(); LOGFN("input: shoot: from {} yaw off {:.3f} pitch off {:.3f}", cam ? "camera" : "pawn", dyaw, dpitch); }
+            Sleep(30);
+        }
+        g_scriptLT = 0; g_scriptRT = 0; g_scriptRX = 0; g_scriptRY = 0;
+        LOGFN("input: shoot {:.0f},{:.0f},{:.0f}: done", tx, ty, tz);
+    }
+
     void ScriptThread(std::string path)
     {
         struct Ev { double t; std::string kind; double a, b, c; std::string text; };
@@ -533,6 +568,7 @@ namespace
             else if (e.kind == "face") { in >> e.a >> e.b; }
             else if (e.kind == "look") { in >> e.a >> e.b; if (!e.b) e.b = 300; }
             else if (e.kind == "fight") { in >> e.a >> e.b; }
+            else if (e.kind == "shoot") { double sec = 3; in >> e.a >> e.b >> e.c >> sec; e.text = std::to_string(sec); }
             else if (e.kind == "follow") { in >> e.text >> e.a >> e.b; if (!e.a) e.a = 60; }
             else if (e.kind == "route") { in >> e.text >> e.a; }
             evs.push_back(e);
@@ -611,6 +647,7 @@ namespace
                 std::thread([amount = e.a, hold = e.b] {
                     g_scriptRY = int16_t(std::lround(std::clamp(amount, -1.0, 1.0) * 32000)); Sleep(DWORD(hold)); g_scriptRY = 0; }).detach();
             else if (e.kind == "fight") std::thread(Fight, e.a, e.b).detach();
+            else if (e.kind == "shoot") std::thread(Shoot, e.a, e.b, e.c, atof(e.text.c_str())).detach();
             else if (e.kind == "follow") std::thread(Follow, e.text, e.a, e.b).detach();
             else if (e.kind == "route") std::thread(Route, e.text, e.a).detach();
         }

@@ -2793,3 +2793,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   mantle edges yet). TRILOGY_NO_NAVCROSS=1 skips it.
 - Test harness: fight melees (B) under 220 units; a route's vault attempt that leaves the player in cover pulls back
   out of it. Scratch tests: vault2.txt (barrier), gap.txt (hallway end), full_hard2.txt.
+- DOM still does not follow on the hard route (open). His orders run (domHard AIMove_27: Route_0's end, in the
+  hallway's pylon) but the search fails: NavigationHandle.LastPathError 3 (Gears 3's EPathFindingError has no NONE:
+  0 START, 1 GOAL, 2 ANCHORPYLON, 3 NOPATHFOUND, 4 COMPUTEVALIDFINALDEST, 5 GETNEXTMOVELOCATION). GOW3_NAV_TRACE
+  (runtime/ue3/cover_trace.cpp: FNavMeshEdgeBase::Supports, sub_825C25B0, counted per edge vtable) shows the search
+  testing only plain edges (8215E940), never a cross-pylon edge (8215EAC8): the joins are not resolved at runtime.
+  Tried: pylons in their level's CrossLevelActors (the array after CoverIndexPairs: SP_Azura2_02_S lists its pylon
+  and 26 cover links), own pylon by object reference. Not tried yet: the level's first array after the list ends
+  (empty in ours; SP_Azura2_02_S: 16 {GUID, actor} entries, cover links) and the engine's cross-level fixup (to be
+  reverse-engineered). Also: Gears 1 CoverGroups now map to their nearest converted link (Gears 3's GearAI.OnAIMove
+  drops CoverGroups: "COVERGROUPS ARE OBSOLETE"; any other actor target is a tether).

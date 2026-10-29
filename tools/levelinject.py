@@ -1578,6 +1578,30 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
             if isi == si and key in (new_mesh or {}): c.obj_map[iref] = new_mesh[key]
         for (csi, ci), ref in (cover_map or {}).items():    # cover links: the target's links holding their data
             if csi == si: c.obj_map[ci + 1] = ref
+        # Gears 1's CoverGroups (AIMove targets: Dom's "into that cover"): Gears 3 drops them ("COVERGROUPS ARE OBSOLETE",
+        # GearAI.OnAIMove) and tethers to any other actor; a reference to one becomes its converted link nearest to the
+        # group's centre (Dom then moves to that cover)
+        if not os.environ.get('LEVELINJECT_NO_COVERGROUPS'):
+            for gi, ge in enumerate(sp.exports):
+                if sp.class_name(ge['class']) != 'CoverGroup' or sp.path(gi).count('.') != 2: continue
+                try: ga = {n: v for n, t, k, v in props_at(sp, sp.export_data(gi))[1]}
+                except ValueError: continue
+                gloc = np.array(struct.unpack('>3f', ga['Location'][1])) if ga.get('Location') else np.zeros(3)
+                raw = ga.get('CoverLinkRefs')
+                if not isinstance(raw, (bytes, bytearray)): continue
+                best = None
+                n_ = struct.unpack_from('>i', raw, 0)[0]; q_ = 4
+                for _ in range(n_):
+                    el_, q_ = materialconv.raw_props(sp, raw, q_)
+                    actor_ = {x[0]: x[4] for x in el_}.get('Actor')
+                    lr = struct.unpack('>i', actor_[:4])[0] if actor_ else 0
+                    if lr <= 0 or lr not in c.obj_map or not c.obj_map[lr]: continue
+                    try: la = {n: v for n, t, k, v in props_at(sp, sp.export_data(lr - 1))[1]}
+                    except ValueError: continue
+                    lloc = np.array(struct.unpack('>3f', la['Location'][1])) if la.get('Location') else gloc
+                    dist = float(np.linalg.norm(lloc - gloc))
+                    if best is None or dist < best[0]: best = (dist, c.obj_map[lr])
+                if best: c.obj_map[gi + 1] = best[1]; stats['cover groups: their nearest link'] += 1
         todo = c.plan([main1]) if main1 is not None else []
         # the actors this Kismet refers to (triggers...): before it, so its references resolve to them
         new_actors = []

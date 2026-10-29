@@ -58,3 +58,28 @@ PPC_FUNC(sub_82A9BAD8)
     if (t_log) LOGFN("cover: FindCoverFromLocAndDir for {} -> {}", ue3::ObjectName(pawn), ctx.r3.u32);
     t_log = false;
 }
+
+// (debugging) GOW3_NAV_TRACE=1: the path search's edge tests (FNavMeshEdgeBase::Supports, sub_825C25B0, virtual slot 6
+// of every edge class: this = the edge, r3 = supported), counted per edge class (vtable at +0) with how many passed,
+// logged every 2 s while any ran: whether a search reaches a class at all (FNavMeshCrossPylonEdge: vtable 8215EAC8)
+#include <map>
+#include <mutex>
+extern "C" PPC_FUNC(__imp__sub_825C25B0);
+PPC_FUNC(sub_825C25B0)
+{
+    static const bool on = std::getenv("GOW3_NAV_TRACE") != nullptr;
+    if (!on) { __imp__sub_825C25B0(ctx, base); return; }
+    const uint32_t vt = ue3::Read32(ctx.r3.u32);
+    __imp__sub_825C25B0(ctx, base);
+    static std::mutex m; static std::map<uint32_t, std::pair<uint64_t, uint64_t>> counts; static uint64_t last = 0;
+    std::lock_guard<std::mutex> lock(m);
+    auto& c = counts[vt]; c.first++; if (ctx.r3.u32) c.second++;
+    if (GetTickCount64() - last > 2000)
+    {
+        last = GetTickCount64();
+        std::string s;
+        for (auto& [k, v] : counts) s += fmt::format(" {:08X}: {}/{}", k, v.second, v.first);
+        LOGFN("navtrace: edge tests (vtable: passed/tested){}", s);
+        counts.clear();
+    }
+}

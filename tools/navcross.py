@@ -118,7 +118,11 @@ def link(paths, log=print):
             base = {x: len(pyl[x]['m']['verts']) for x in (a, b)}
             for x, (new_verts, _) in out.items():
                 pyl[x]['m']['verts'] = list(pyl[x]['m']['verts']) + list(new_verts)
-            ref = lambda x, poly: struct.pack('>i', 0) + pyl[x]['guid'] + struct.pack('>I', 0xFFFF0000 | poly)
+            # a polygon reference: the pylon by object reference when it is in the edge's own package (as shipped
+            # meshes join their own pylons, SP_Bridge_01_S), by GUID with no object when in another (SP_Azura2_02_S)
+            def ref(x, poly, home):
+                if x[0] == home[0]: return struct.pack('>i', x[1] + 1) + bytes(16) + struct.pack('>I', 0xFFFF0000 | poly)
+                return struct.pack('>i', 0) + pyl[x]['guid'] + struct.pack('>I', 0xFFFF0000 | poly)
             for own, (_, edges) in out.items():
                 m = pyl[own]['m']; w = ws[own[0]]
                 for e, poly in edges:
@@ -126,7 +130,7 @@ def link(paths, log=print):
                     e = dict(e)
                     e['verts'] = tuple(base[own] + v[1] for v in e['verts'])
                     e['verts2'] = tuple(base[other] + v[2] for v in e['verts2'])
-                    e['poly_refs'] = [ref(own, e['poly_pair'][0]), ref(other, e['poly_pair'][1])]
+                    e['poly_refs'] = [ref(own, e['poly_pair'][0], own), ref(other, e['poly_pair'][1], own)]
                     for key in ('pylons', 'poly_pair'): e.pop(key)
                     n = len(m['edges'])
                     m['edges'].append(e)
@@ -138,6 +142,45 @@ def link(paths, log=print):
                 touched.add(own)
             log(f'  {os.path.basename(paths[a[0]])} {pk[a[0]].exports[a[1]]["name"]} <-> '
                 f'{os.path.basename(paths[b[0]])} {pk[b[0]].exports[b[1]]["name"]}: {len(out[a][1])} + {len(out[b][1])} edges')
+    # mantles over a border between pylons (the hard hallway's barrier: Pylon_4 one side, Pylon_8 the other): a
+    # mantle-able slot's polygon in one pylon, the landing (navedges.SPECIAL's offset) in another
+    import cover
+    for k, p in enumerate(pk):
+        mine = [x for x in keys if x[0] == k]
+        if not mine: continue
+        for ti, loc, rot, sl in cover.read_g3_links(p):
+            for j, pos in enumerate(cover.slot_positions(loc, rot, sl)):
+                fl = sl[j]['flags']
+                if not (fl.get('bEnabled', 1) and fl.get('bCanMantle') and sl[j]['type'] == 'CT_MidLevel'): continue
+                pos = np.asarray(pos, np.float64)
+                src = next(((x, q) for x in mine for q in [navedges.polygon_at(pyl[x]['V'], pyl[x]['m']['polys'], pos)] if q is not None), None)
+                if src is None: continue
+                yaw = (rot[1] + sl[j]['rotation'][1]) * 2 * np.pi / 65536
+                _, cls, kind, fwd, side, u252 = navedges.SPECIAL[0]
+                dest = pos + np.array([np.cos(yaw), np.sin(yaw), 0.0]) * fwd + np.array([0.0, 0.0, 23.0])
+                if navedges.polygon_at(pyl[src[0]]['V'], pyl[src[0]]['m']['polys'], dest) is not None: continue   # (navinject's)
+                dst = next(((x, q) for x in keys if x != src[0] for q in [navedges.polygon_at(pyl[x]['V'], pyl[x]['m']['polys'], dest)] if q is not None), None)
+                if dst is None: continue
+                def ref(x, poly, home):
+                    if x[0] == home[0]: return struct.pack('>i', x[1] + 1) + bytes(16) + struct.pack('>I', 0xFFFF0000 | poly)
+                    return struct.pack('>i', 0) + pyl[x]['guid'] + struct.pack('>I', 0xFFFF0000 | poly)
+                for own, edge in ((src, {'class': cls, 'b56': kind, 'poly_refs': [ref(*src, src[0]), ref(*dst, src[0])],
+                                         'actor': struct.pack('>i', ti + 1) + bytes(16), 'rel_item': j, 'object': 0,
+                                         'move_dir': tuple(dest), 'u252': u252}),
+                                  (dst, {'class': 'FNavMeshOneWayBackRefEdge', 'b56': 6, 'poly_refs': [ref(*dst, dst[0]), ref(*src, dst[0])]})):
+                    m = pyl[own[0]]['m']; w = ws[own[0][0]]
+                    vi = len(m['verts']); m['verts'] = list(m['verts']) + [(tuple(pos), ())]
+                    e = dict(edge, verts=(vi, vi), verts2=(vi, vi), polys=(0, 0), length=-1.0, center=tuple(pos), b64=255,
+                             perp=(0.0, 0.0, 0.0), u172=0xFFFF)
+                    n = len(m['edges']); m['edges'].append(e)
+                    name = w.name(e['class'])
+                    off = (m['edge_info'][-1][0] + m['edge_info'][-1][1]) if m['edge_info'] else 0
+                    m['edge_info'].append((off, navmesh.EDGE_MEMORY_SIZE[e['class']], name[0], name[1]))
+                    m['polys'][own[1]]['second'] = tuple(m['polys'][own[1]]['second']) + (n,)
+                    touched.add(own[0])
+                added += 2
+                log(f'  mantle {os.path.basename(paths[k])} {p.exports[ti]["name"]}#{j}: {pk[src[0][0]].exports[src[0][1]]["name"]} -> '
+                    f'{os.path.basename(paths[dst[0][0]])} {pk[dst[0][0]].exports[dst[0][1]]["name"]}')
     for x in touched:
         k, i = x
         m, w, p = pyl[x]['m'], ws[k], pk[k]
@@ -146,6 +189,29 @@ def link(paths, log=print):
         d = bytearray(w.current(i)); o, pr, end = levelinject.props_at(p, bytes(d), (26,))
         d = levelinject.set_property(p, w, d, o, 'bHasCrossLevelPaths', b'\x01', 'BoolProperty')
         w.replace(i, bytes(d))
+    # the joined pylons listed in their level's CrossLevelActors: the level's native data after the list ends holds an
+    # array (empty), CoverLinkRefs (count + refs), CoverIndexPairs (count + 5-byte records), then CrossLevelActors
+    # (count + refs; SP_Azura2_02_S: its pylon and 26 cover links), whose references the engine resolves by GUID as
+    # levels stream in. Without it the edges' pylon GUIDs were never resolved: Dom found no path (PATHERROR 3) from the
+    # cell block's pylon to the hallway's
+    import cover
+    for k in sorted({x[0] for x in touched}):
+        p, w = pk[k], ws[k]
+        lvl = next(i for i, e in enumerate(p.exports) if p.class_name(e['class']) == 'Level' and p.path(i) == 'TheWorld.PersistentLevel')
+        ld = bytearray(w.current(lvl))
+        L = cover.level_lists(p, bytes(ld), w)
+        o = L['pylon_end'] + 4
+        if struct.unpack_from('>i', ld, o)[0] != 0:
+            log(f'  {os.path.basename(paths[k])}: an unknown array before CoverLinkRefs: CrossLevelActors left as they are'); continue
+        o += 4
+        o += 4 + 4 * struct.unpack_from('>i', ld, o)[0]          # CoverLinkRefs
+        o += 4 + 5 * struct.unpack_from('>i', ld, o)[0]          # CoverIndexPairs
+        n = struct.unpack_from('>i', ld, o)[0]
+        have = set(struct.unpack_from(f'>{n}i', ld, o + 4))
+        add = [x[1] + 1 for x in sorted(touched) if x[0] == k and x[1] + 1 not in have]
+        ld = ld[:o] + struct.pack('>i', n + len(add)) + ld[o + 4:o + 4 + 4 * n] + b''.join(struct.pack('>i', r) for r in add) + ld[o + 4 + 4 * n:]
+        w.replace(lvl, bytes(ld))
+        log(f'  {os.path.basename(paths[k])}: CrossLevelActors {n} -> {n + len(add)}')
     for k in sorted({x[0] for x in touched}):
         open(paths[k], 'wb').write(ws[k].build())
     log(f'navcross: {added} edges between pylons of different packages ({len(touched)} pylons)')

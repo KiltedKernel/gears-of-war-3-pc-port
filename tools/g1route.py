@@ -24,7 +24,7 @@ import levelinject              # noqa: E402
 import materialconv             # noqa: E402
 
 SKIP_SPECS = set()
-COST = {'MantleReachSpec': 8.0}
+COST = {'MantleReachSpec': float(os.environ.get('G1ROUTE_MANTLE_COST', 8.0))}
 
 
 def network(packages):

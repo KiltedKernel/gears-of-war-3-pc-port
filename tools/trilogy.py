@@ -435,6 +435,13 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
             cls, at = (x.strip() for x in ch['player_pawn'].split('@'))     # Class @ Section: op: output
             options += ['--player-pawn', cls + ':' + at.split(':', 1)[1].strip()]
             if ch.get('player_spawn_at'): options += ['--player-spawn-at=' + ch['player_spawn_at'].replace(' ', '')]
+        # cover_into = A, B -> T; ...: sections A and B's cover links converted into section T (whose pylon's navmesh
+        # holds them: a player finds cover only through polygons of the pylon in the cover's own package)
+        for rule in [r for r in ch.get('cover_into', '').split(';') if '->' in r]:
+            froms, into = rule.split('->')
+            froms = [x.strip() for x in froms.split(',') if x.strip()]
+            if s in froms: options += ['--no-own-cover']
+            if s == into.strip(): options += ['--cover-from=' + ','.join(src(x) for x in froms)]
         if ch.get('track_offsets'): options += ['--track-offsets=' + ch['track_offsets'].replace(' ', '')]
         if ch.get('object_vars'): options += ['--object-vars=' + ch['object_vars'].replace(' ', '')]
         if ch.get('no_collision'): options += ['--actors-no-collision=' + ch['no_collision'].replace(' ', '')]

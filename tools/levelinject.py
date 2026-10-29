@@ -187,6 +187,12 @@ def main():
     ap.add_argument('--bsp', action='store_true', help="also the level's BSP (Gears 1), as static mesh chunks")
     ap.add_argument('--replace', action='store_true', help="the target's own static meshes go: every collection actor "
                     "keeps only the new components (its gameplay actors, volumes, cover and BSP stay)")
+    ap.add_argument('--cover-from', default='', help="with --cover: more Gears 1 packages (comma separated) whose "
+                    "CoverLinks are converted into this one: Gears 3 finds a player's cover through the navigation mesh "
+                    "polygons' cover references, object references into the pylon's own package, so cover standing on "
+                    "another section's navmesh goes into that section (the prison's cell: S01's cover, S02's pylon)")
+    ap.add_argument('--no-own-cover', action='store_true', help="with --cover: the sources' own CoverLinks left out "
+                    "(converted into another section with its --cover-from)")
     ap.add_argument('--cover', action='store_true', help="the source level's cover: the target's CoverLink actors take "
                     "its links (location, rotation, slots written in Gears 3's format); spare ones get no slots")
     ap.add_argument('--starts-at-cover', action='store_true', help="(test) with --cover: every player start 80 units "
@@ -1343,8 +1349,13 @@ def main():
     cover_map = {}                                     # (source index, source CoverLink export) -> target ref
     if args.cover and src.version == 374:
         from scipy.optimize import linear_sum_assignment
-        g1 = [link for sp in srcs for link in cover.read_g1_links(sp)]      # every sublevel's cover
-        g1_src = [si for si, sp in enumerate(srcs) for _ in cover.read_g1_links(sp)]
+        own = [] if args.no_own_cover else srcs
+        g1 = [link for sp in own for link in cover.read_g1_links(sp)]       # every sublevel's cover
+        g1_src = [si for si, sp in enumerate(own) for _ in cover.read_g1_links(sp)]
+        for path_ in [x for x in args.cover_from.split(',') if x.strip()]:   # (no Kismet of this package refers to them)
+            extra_ = cover.read_g1_links(upk.Package(path_.strip()))
+            g1 += extra_; g1_src += [None] * len(extra_)
+        if args.cover_from or args.no_own_cover: print(f'cover: {len(g1)} links ({len(g1) - sum(1 for x in g1_src if x is not None)} from --cover-from)')
         g3 = cover.read_g3_links(p3)
         A = [cover.slot_positions(loc + offset, rot, slots) for _, loc, rot, slots in g1]
         B = [cover.slot_positions(loc, rot, slots) for _, loc, rot, slots in g3]
@@ -1356,7 +1367,7 @@ def main():
         rows, cols = linear_sum_assignment(C)
         source_of = {g3[y][0]: x for x, y in zip(rows, cols)}             # target export -> source link
         for ti, x in source_of.items():                    # (Kismet referring to a source link: the target's link)
-            cover_map[(g1_src[x], g1[x][0])] = ti + 1
+            if g1_src[x] is not None: cover_map[(g1_src[x], g1[x][0])] = ti + 1
         set_prop = lambda *a, **k: set_property(p3, w, *a, **k)
         new_slots = {}                                     # target export -> world positions of its new slots
         for ti, _, _, _ in g3:
@@ -1394,7 +1405,7 @@ def main():
             new_links = cover.add_links(p3, w, len(spare))
             for ti, x in zip(new_links, spare):
                 _, loc, rot, slots = g1[x]
-                cover_map[(g1_src[x], g1[x][0])] = ti + 1
+                if g1_src[x] is not None: cover_map[(g1_src[x], g1[x][0])] = ti + 1
                 d = bytearray(w.current(ti)); o, pr, end = props_at(p3, bytes(d), (26,))
                 d = set_prop(d, o, 'Location', struct.pack('>3f', *(loc + offset)), struct_name='Vector')
                 o, pr, end = props_at(p3, bytes(d), (26,))

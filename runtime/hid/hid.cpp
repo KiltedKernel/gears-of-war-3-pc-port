@@ -432,7 +432,7 @@ namespace
 
     // "fight <seconds> [range]" (testing): aim at the nearest living Locust pawn (GearPawn_Locust*, Health > 0, within
     // range, default 4000) with the right stick (yaw and pitch, as face) and fire (left + right trigger) while on target;
-    // a target alive after 4 s of firing: 2 s of walking towards it (round cover). Ends when none is left in range or at
+    // a target alive after 5 s: 2 s of walking towards it (round cover). Ends when none is left in range or at
     // the time. With GOW3_SET_PROPS (GearPC:bGodMode=1; the enemies' Health=1) a scripted run plays a level's fights.
     void Fight(double seconds, double range)
     {
@@ -460,7 +460,7 @@ namespace
                 if (d < bestD) { bestD = d; best = o; }
             }
             if (!best) { if (target) { kills++; target = 0; } g_scriptLT = 0; g_scriptRT = 0; g_scriptRX = 0; g_scriptRY = 0; LOGFN("input: fight: none left in range ({} down)", kills); break; }
-            if (best != target) { if (target) kills++; target = best; onSince = 0; }
+            if (best != target) { if (target) kills++; target = best; onSince = GetTickCount64(); }
             const double tx = ue3::ReadFloat(best + loc), ty = ue3::ReadFloat(best + loc + 4), tz = ue3::ReadFloat(best + loc + 8) + 30;
             const double yaw = double(int32_t(ue3::Read32(g_localController + rot + 4)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
             double pitch = double(int32_t(ue3::Read32(g_localController + rot)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
@@ -476,13 +476,13 @@ namespace
             if (GetTickCount64() - lastLog > 2000) { lastLog = GetTickCount64(); LOGFN("input: fight: {} at {:.0f}: yaw off {:.2f}, pitch {:.2f} off {:.2f}", ue3::ObjectName(best), bestD, dyaw, pitch, dpitch); }
             g_scriptLT = 255;
             g_scriptRT = aimed ? 255 : 0;
-            if (aimed && !onSince) onSince = GetTickCount64();
-            if (onSince && GetTickCount64() - onSince > 4000)
+            // the same target 5 s on (behind cover, or the aim off): walk 2 s towards it, then aim again
+            if (GetTickCount64() - onSince > 5000)
             {
                 g_scriptRT = 0; g_scriptLT = 0; g_scriptRX = 0; g_scriptRY = 0;
                 LOGFN("input: fight: {} still up at {:.0f} units: closing in", ue3::ObjectName(best), bestD);
                 WalkStep(tx, ty, 2.0);
-                onSince = 0;
+                onSince = GetTickCount64();
             }
             Sleep(30);
         }

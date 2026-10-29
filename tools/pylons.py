@@ -57,6 +57,13 @@ def add_pylons(p, w, positions, radius, template=None):
             elif name == 'Base': continue
             elif r[1] == 'ObjectProperty' and struct.unpack('>i', r[4])[0] != 0: continue   # (other references: not carried)
             out.append(r)
+        # the expansion sphere written even when the template leaves it at the class default (Engine.Default__Pylon:
+        # ExpansionRadius 2048): the clones' meshes stopped 2048 units out (the builder explores within it), and in
+        # game the polygons and cover beyond it were not found (the hard hallway's barrier: no cover, no vault)
+        have = {r[0] for r in out}
+        if 'ExpansionRadius' not in have: out.append(['ExpansionRadius', 'FloatProperty', 0, b'', struct.pack('>f', radius)])
+        if 'ExpansionSphereCenter' not in have:
+            out.append(['ExpansionSphereCenter', 'StructProperty', 0, struct.pack('>ii', *w.name('Vector')), struct.pack('>3f', x, y, z)])
         tail = bytearray(d[end:])
         old_mesh_refs = [m + 1 for m in meshes]
         for k in range(0, len(tail) - 3, 4):            # the native data's mesh references -> the clones

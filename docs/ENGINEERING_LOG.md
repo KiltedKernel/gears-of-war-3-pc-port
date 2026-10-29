@@ -2734,3 +2734,40 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   S00_hallway, S01; seeds from Scripting_1 / Scripting_1_hallway's path nodes): Pylon_1 380 polygons, into
   GOW1_SP_HOS_Scripting_1 (build 1584 s). In game (500 s): no crash; the squad holds at the start, waiting on the
   player's triggers as in Gears 1.
+
+## 2026-10-28/29: the prison to its end (user: finish chapter 1 before later chapters)
+- Chapter 3's navmesh build stopped (it held the game for hours); chapter 3 waits. tools/navregions.py kept.
+- Scripted playthroughs past the path choice: new input verb `fight <s> [range]` (aims at the nearest living Locust
+  with the right stick, fires with LT+RT, closes in after 4 s on target), walkto / route / fight now take turns
+  (a mutex: script times are "not before"), a stuck route step first vaults (face, A into cover, forward + A).
+  tools/g1route.py: shortest routes over Gears 1's own path network (NavGuid points; ReachSpec End = NavReference:
+  `Nav` in the same package, `Guid` across packages; mantle specs weighted) printed as `route` lines.
+- FALL THROUGH THE WORLD in the hard hallway (reproduced: the player dropped from (-1152,4702) to z -12533): Gears 1
+  TriggerVolumes were converted to Trigger cylinders of radius max(extent x, y) with rotation ignored; the persistent
+  level's TriggerVolume_4 (2366 x 3934, yaw -90: the yard's streaming) became a circle reaching back to y 4938, its
+  streamYard sequence ran while the player stood in the hallway and S04 (the floor) went away. Now (objcopy
+  volume_as_box): a TriggerVolume on the target level's own box brush (its Model and BrushComponent data: Brush,
+  BrushAggGeom, shared), DrawScale3D = Gears 1 extent / template extent, PrePivot = the template box's centre,
+  Gears 1's Rotation; OBJCOPY_VOLUME_CYLINDERS=1 for the old cylinders. Verified: the run passes the strip at z 206.
+- "Green sheets" in the hard hallway = Gears 1's hanging grass (RB_Prison_Foliage_Grass_03_Mesh rolled 90 degrees,
+  scale 4, at z 656). Gears 1's material: texture x (0.65, 0.5, 0.5) x a root-to-tip gradient, NonDirectional (no
+  specular); the masked copies (the pickup master) drew the texture as it is plus Specular_01_Color 0.5 of it.
+  materialconv.g1_shading evaluates a Gears 1 DiffuseColor chain's mean multiplier (samples 1, texcoords 0.5) and
+  the copies get Diffuse_01_Color (dimming tints only: x2 detail multiplies are left alone) and Specular_01_Color 0
+  where Gears 1 had none. LEVELINJECT_NO_G1_SHADING=1 turns it off. Not yet compared against Gears 1 in a frame.
+- The hard hallway's waist-high rubble (y ~3643) and the barrier at y ~5180 are Gears 1 mantles (MantleReachSpec;
+  CoverLink_45 slot 0 at (-1198,5178) bCanMantle): a player vaults them; the scripted walker now does at the first.
+- COVER: the player found no cover anywhere in the converted prison (GOW3_LOG_PROPS: CurrentLink None, CoverType 0
+  after A at a wall). Gears 3 finds a player's cover only through the navigation mesh: GearPC.TryToRunToCover ->
+  CanRunToCover -> GearPawn.CanPrepareRun2Cover -> native FindCoverFromLocAndDir (registration table entry at
+  0x83390D28: exec sub_82A44A90 -> sub_82A9BAD8), which gathers the polygons within reach (sub_825A2228) and reads
+  each polygon's PolyCover entries (24 bytes: actor pointer, GUID, slot index) through a plain cast of the pointer
+  (sub_82352FF0: no GUID lookup). So a cover link must be referenced by a polygon of a pylon in its own package.
+  Three causes, all fixed: (1) the cell's cover is S01's / S01_Scripting's, the cell block's pylon S02_Scripting's:
+  recipe cover_into (levelinject --cover-from / --no-own-cover) converts it there; verified (Marcus in cover at
+  CoverLink_5099 slot 0). (2) The yard and s05 regions had built 1-2 pylons in 150 s: 900 s, path-node seeds.
+  (3) pylons.py's clones had no ExpansionRadius (Engine.Default__Pylon: 2048): the builder explored only 2048
+  around them and the game did not find their polygons beyond it (the hard hallway's barrier slot, 2180 out);
+  clones now carry the region's radius and sphere centre. Navmesh coverage of Gears 1's cover slots (before (3)):
+  S04 off-mesh 113 -> 11 of 171, S05 103 -> 21 of 326.
+- Same pylon fix applies to chapters 2 and 3 (their extra seeds are clones): their regions need regenerating.

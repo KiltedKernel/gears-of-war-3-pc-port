@@ -411,6 +411,62 @@ namespace
         LOGFN("input: face {:.0f},{:.0f}: {:.1f} degrees off", tx, ty, diff * 57.2958);
     }
 
+    // "fight <seconds> [range]" (testing): aim at the nearest living Locust pawn (GearPawn_Locust*, Health > 0, within
+    // range, default 4000) with the right stick (yaw and pitch, as face) and fire (left + right trigger) while on target;
+    // a target alive after 4 s of firing: 2 s of walking towards it (round cover). Ends when none is left in range or at
+    // the time. With GOW3_SET_PROPS (GearPC:bGodMode=1; the enemies' Health=1) a scripted run plays a level's fights.
+    void Fight(double seconds, double range)
+    {
+        static const uint32_t actor = ue3::FindClass("Actor"), gearPawn = ue3::FindClass("GearPawn");
+        const int loc = actor ? ue3::PropertyOffset(actor, "Location") : -1, rot = actor ? ue3::PropertyOffset(actor, "Rotation") : -1;
+        const int health = gearPawn ? ue3::PropertyOffset(gearPawn, "Health") : -1;
+        if (!gearPawn || loc < 0 || health < 0) { LOGFN("input: fight: no reflection"); return; }
+        if (range <= 0) range = 4000;
+        const uint64_t t0 = GetTickCount64();
+        uint32_t target = 0; uint64_t onSince = 0; int kills = 0;
+        while (double(GetTickCount64() - t0) / 1000.0 < seconds)
+        {
+            const uint32_t pawn = LocalPawn();
+            if (!pawn) { Sleep(200); continue; }
+            const double px = ue3::ReadFloat(pawn + loc), py = ue3::ReadFloat(pawn + loc + 4), pz = ue3::ReadFloat(pawn + loc + 8) + 60;
+            // the nearest living Locust
+            uint32_t best = 0; double bestD = range;
+            for (uint32_t o : ue3::FindInstancesOf(gearPawn))
+            {
+                if (ue3::ObjectName(ue3::ClassOf(o)).rfind("GearPawn_Locust", 0) != 0) continue;
+                if (int32_t(ue3::Read32(o + health)) <= 0) continue;
+                const double dx = ue3::ReadFloat(o + loc) - px, dy = ue3::ReadFloat(o + loc + 4) - py, dz = ue3::ReadFloat(o + loc + 8) - pz;
+                const double d = std::sqrt(dx * dx + dy * dy + dz * dz);
+                if (d < bestD) { bestD = d; best = o; }
+            }
+            if (!best) { if (target) { kills++; target = 0; } g_scriptLT = 0; g_scriptRT = 0; g_scriptRX = 0; g_scriptRY = 0; LOGFN("input: fight: none left in range ({} down)", kills); break; }
+            if (best != target) { if (target) kills++; target = best; onSince = 0; }
+            const double tx = ue3::ReadFloat(best + loc), ty = ue3::ReadFloat(best + loc + 4), tz = ue3::ReadFloat(best + loc + 8) + 30;
+            const double yaw = double(int32_t(ue3::Read32(g_localController + rot + 4)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
+            double pitch = double(int32_t(ue3::Read32(g_localController + rot)) & 0xFFFF) / 65536.0 * 2 * 3.14159265358979;
+            if (pitch > 3.14159265358979) pitch -= 2 * 3.14159265358979;
+            const double dyaw = std::remainder(std::atan2(ty - py, tx - px) - yaw, 2 * 3.14159265358979);
+            const double dpitch = std::atan2(tz - pz, std::hypot(tx - px, ty - py)) - pitch;
+            auto stick = [](double diff) { return std::fabs(diff) < 0.01 ? 0.0 : std::clamp(std::fabs(diff) / 0.6, 0.25, 1.0) * (diff > 0 ? 1 : -1); };
+            g_scriptRX = int16_t(std::lround(stick(dyaw) * 32000));
+            g_scriptRY = int16_t(std::lround(stick(dpitch) * 32000));
+            const bool aimed = std::fabs(dyaw) < 0.08 && std::fabs(dpitch) < 0.1;
+            g_scriptLT = 255;
+            g_scriptRT = aimed ? 255 : 0;
+            if (aimed && !onSince) onSince = GetTickCount64();
+            if (onSince && GetTickCount64() - onSince > 4000)
+            {
+                g_scriptRT = 0; g_scriptLT = 0; g_scriptRX = 0; g_scriptRY = 0;
+                LOGFN("input: fight: {} still up at {:.0f} units: closing in", ue3::ObjectName(best), bestD);
+                WalkStep(tx, ty, 2.0);
+                onSince = 0;
+            }
+            Sleep(30);
+        }
+        g_scriptLT = 0; g_scriptRT = 0; g_scriptRX = 0; g_scriptRY = 0;
+        LOGFN("input: fight: ended after {:.0f} s", double(GetTickCount64() - t0) / 1000.0);
+    }
+
     void ScriptThread(std::string path)
     {
         struct Ev { double t; std::string kind; double a, b, c; std::string text; };
@@ -436,6 +492,7 @@ namespace
             else if (e.kind == "teleport") { in >> e.a >> e.b >> e.c; }
             else if (e.kind == "face") { in >> e.a >> e.b; }
             else if (e.kind == "look") { in >> e.a >> e.b; if (!e.b) e.b = 300; }
+            else if (e.kind == "fight") { in >> e.a >> e.b; }
             else if (e.kind == "follow") { in >> e.text >> e.a >> e.b; if (!e.a) e.a = 60; }
             else if (e.kind == "route") { in >> e.text >> e.a; }
             evs.push_back(e);
@@ -513,6 +570,7 @@ namespace
             else if (e.kind == "look")
                 std::thread([amount = e.a, hold = e.b] {
                     g_scriptRY = int16_t(std::lround(std::clamp(amount, -1.0, 1.0) * 32000)); Sleep(DWORD(hold)); g_scriptRY = 0; }).detach();
+            else if (e.kind == "fight") std::thread(Fight, e.a, e.b).detach();
             else if (e.kind == "follow") std::thread(Follow, e.text, e.a, e.b).detach();
             else if (e.kind == "route") std::thread(Route, e.text, e.a).detach();
         }

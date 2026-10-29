@@ -2810,3 +2810,12 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   scripted kick (X, A, X held), with Gears 1's "FIRE WEAPON" hint up the whole time; white floor patches on the easy
   route's upper walkway; the yard and the ending (Cine_End: ChapterComplete, map change) not yet reached by a script.
   Test harness for scripted runs: GOW3_SET_PROPS with the Drones' bCanDBNO=0 (a downed Drone outlived melee).
+- EASY ROUTE: the jammed cover-room doors open by SHOOTING Gears 1's window panels (SeqEvent_TakeDamage on
+  StaticMeshActor_558 / _600, enabled while aiming by SeqEvt_Input L2; Switch_0's second hit enables both
+  SeqEvt_DoorOpen events): new harness verb `shoot x y z s` (aims from PlayerController.PlayerCamera); the scripted
+  run then passes the door. Gears 3 opens a door only while the player is inside its trigger (GearPC.OnEnterDoorTrigger).
+- FALL on the easy route at (-3254,2343): SeqEvent_Touch ClassProximityTypes Pawn_COGDom / Pawn_COGMarcus converted to
+  None, so every actor touching the persistent level's yard volume (the yard's Drones) fired streamYard. Now
+  (objcopy.touch_classes, Copier.ref): Dom's class through the pawn mapping (GearPawn_COGDomG2), Marcus (the player:
+  GearPawn_COGMarcusG2MP is not a GearPawn_COGMarcus) as bPlayerOnly. Touch filters on Marcus/Dom exist in P, S02, S04,
+  S05 and S06 scripting.

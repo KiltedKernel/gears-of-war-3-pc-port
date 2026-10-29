@@ -151,6 +151,12 @@ class Copier:
         if r < 0:                                           # an import: a class through the class mapping (War* -> Gear*,
             im = self.s.imports[-r - 1]                     # imported from its script package), else the same name
             if im['class'] == 'Class':
+                # a Gears 1 pawn class (a touch event's ClassProximityTypes: the prison's yard volume fires for Dom and
+                # for Marcus) -> the Gears 3 class standing for it; unmapped it became None, and every actor
+                # touching the volume (the yard's Drones) streamed the yard in early, the floor under the player out
+                if im['name'] in PAWN_MAP or im['name'] in PAWN_OVERRIDE:
+                    got = self.pawn_class(r)
+                    if got: return got
                 return self.class_ref(CLASS_RENAME.get(im['name'], im['name']))
             got = self.import_like(r)
             if not got and self.loc is not None: got = self.obj_map[r] = self.from_loc(r)
@@ -2428,6 +2434,39 @@ def door_interaction(c, props):
 
 
 FIXUPS['Trigger_DoorInteraction'] = door_interaction
+
+
+def touch_classes(c, props):
+    """SeqEvent_Touch: Gears 1's ClassProximityTypes name its pawn classes (the prison's yard volume: one event for
+    Pawn_COGDom, one for Pawn_COGMarcus). Dom's maps to his Gears 3 class (Copier.ref); the player's Marcus is a
+    multiplayer class outside GearPawn_COGMarcus, so a Marcus filter becomes bPlayerOnly. Unconverted entries
+    (None) are dropped: with a None filter every actor touching the volume fired it (the yard's Drones streamed the
+    yard in early and the floor under the player out)."""
+    s_ = c.s
+    a = {}
+    try: a = {k: v for k, t, kk, v in __import__('levelinject').props_at(s_, s_.export_data(c.current_src), (4, 8, 12))[1]}
+    except Exception: pass
+    g1 = a.get('ClassProximityTypes')
+    names = []
+    if isinstance(g1, (bytes, bytearray)):
+        n = struct.unpack_from('>i', g1, 0)[0]
+        names = [s_.imports[-r - 1]['name'] if r < 0 else '' for r in struct.unpack_from(f'>{n}i', g1, 4)]
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    out = []
+    for r in recs:
+        if r[0] == 'ClassProximityTypes':
+            n = struct.unpack_from('>i', r[4], 0)[0]
+            refs = [x for x in struct.unpack_from(f'>{n}i', r[4], 4) if x]
+            if refs: out.append([r[0], r[1], r[2], r[3], struct.pack('>i', len(refs)) + b''.join(struct.pack('>i', x) for x in refs)])
+            continue
+        if r[0] == 'bPlayerOnly' and 'Pawn_COGMarcus' in names: continue
+        out.append(r)
+    if 'Pawn_COGMarcus' in names: out.append(['bPlayerOnly', 'BoolProperty', 0, b'', b''])
+    return encode(c.w, out)
+
+
+FIXUPS['SeqEvent_Touch'] = touch_classes
 
 
 # Gears 3's SeqAct_DisplayChapterTitle sets GearGameSP_Base.CurrentChapter (and the replicated ChapterNum) to

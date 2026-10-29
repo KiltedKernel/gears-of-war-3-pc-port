@@ -12,7 +12,7 @@ Property encoding, 374 -> 828:
   Object/Class/Name/Delegate references remapped; Int/Float/Str copied.
 Exports: class -> a Gears 3 import of the same class name (War* -> Gear* when Gears 3 has only that); archetype 0 (the
 class default); NetIndex (the 4-byte prelude of a non-actor object) -1."""
-import os, struct, sys
+import os, re, struct, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import upk
 
@@ -911,6 +911,9 @@ class Upgrader:
                 mapping = {}
                 for k, e in enumerate(old):
                     d = LINK_ALIAS.get((src_class[ref], desc(e)), desc(e))
+                    # an AI factory's per spawn set output ("Spawn 1 [1]": that set spawned): Gears 3's "Spawned" (by
+                    # index it landed on "Entered Combat": the prison's god-moded Locust was toggled late)
+                    if src_class[ref] == 'SeqAct_AIFactory' and prop == 'OutputLinks' and re.match(r'spawn \d+ \[\d+\]$', d): d = 'spawned'
                     if passthrough and prop in ('InputLinks', 'OutputLinks') and new: mapping[k] = 0
                     elif d in nd: mapping[k] = nd.index(d)
                 # (then by index when the counts agree, onto links no name took: Gears 1's AIMoveToActor "Aborted",
@@ -939,6 +942,11 @@ class Upgrader:
                         tgt = new[mapping[k]]
                         prev = next((r for r in tgt if r[0] == conn), None)
                         if passthrough and prev is not None and struct.unpack_from('>i', prev[4], 0)[0]:
+                            n1, n2 = struct.unpack_from('>i', prev[4], 0)[0], struct.unpack_from('>i', c[4], 0)[0]
+                            merged = struct.pack('>i', n1 + n2) + prev[4][4:] + c[4][4:]
+                            tgt[:] = [r for r in tgt if r[0] != conn] + [[conn, c[1], c[2], c[3], merged]]
+                        elif prev is not None and conn != 'LinkedVariables' and struct.unpack_from('>i', prev[4], 0)[0]                                 and sum(1 for x in mapping.values() if x == mapping[k]) > 1:
+                            # (two Gears 1 outputs onto one Gears 3 output: both outputs' links kept)
                             n1, n2 = struct.unpack_from('>i', prev[4], 0)[0], struct.unpack_from('>i', c[4], 0)[0]
                             merged = struct.pack('>i', n1 + n2) + prev[4][4:] + c[4][4:]
                             tgt[:] = [r for r in tgt if r[0] != conn] + [[conn, c[1], c[2], c[3], merged]]

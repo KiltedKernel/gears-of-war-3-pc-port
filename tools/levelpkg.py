@@ -72,7 +72,8 @@ def unlink_navigation(p, w, li, kept):
     checkpoint restart, read its WorldInfo, None: a crash). Returns the count dropped."""
     import cover
     ld = bytearray(w.current(li))
-    at = cover.level_lists(p, bytes(ld), w)['nav_end'] - 4      # NavListStart, then NavListEnd
+    try: at = cover.level_lists(p, bytes(ld), w)['nav_end'] - 4      # NavListStart, then NavListEnd
+    except ValueError: return 0                                # (no navigation list found: SP_Wreckage_01_S_CombatDBrumak)
     chain, r, seen = [], struct.unpack_from('>i', ld, at)[0], set()
     while 0 < r <= len(p.exports) and r not in seen:
         seen.add(r); chain.append(r)

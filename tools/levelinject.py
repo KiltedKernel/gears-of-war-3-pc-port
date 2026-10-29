@@ -293,16 +293,19 @@ def main():
     if args.pawn_classes:
         import objcopy
         objcopy.PAWN_OVERRIDE = dict(x.strip().split('=', 1) for x in args.pawn_classes.split(',') if '=' in x)
-    if args.player_pawn and args.kit:
+    if args.player_pawn and (args.kit or args.player_spawn_at):
         import objcopy
         cls, op, out = (x.strip() for x in args.player_pawn.split(':'))
-        kp = upk.Package(args.kit)
+        # (the persistent level itself: no kit, it is the kit; its player start from the target)
+        kit_ = args.kit or args.target
+        kp = upk.Package(kit_)
         ps = next((e['name'] for e in kp.exports if kp.class_name(e['class']) == 'PlayerStart'), None)
-        if ps:
+        if ps or args.player_spawn_at:                 # (with player_spawn_at the player start is not used)
+            ps = ps or 'PlayerStart'
             base, num = (ps.rsplit('_', 1)[0], int(ps.rsplit('_', 1)[1]) + 1) if ps.rsplit('_', 1)[-1].isdigit() else (ps, 0)
             objcopy.PLAYER_PAWN = (cls, op, out)
             if args.player_spawn_at: objcopy.PLAYER_SPAWN_AT = tuple(float(x) for x in args.player_spawn_at.split(','))
-            objcopy.PLAYER_SPAWN = [('Core', 'Package', os.path.splitext(os.path.basename(args.kit))[0], 0), ('Engine', 'World', 'TheWorld', 0),
+            objcopy.PLAYER_SPAWN = [('Core', 'Package', os.path.splitext(os.path.basename(kit_))[0], 0), ('Engine', 'World', 'TheWorld', 0),
                                     ('Engine', 'Level', 'PersistentLevel', 0), ('Engine', 'PlayerStart', base, num)]
     if args.kismet_relink:
         import objcopy

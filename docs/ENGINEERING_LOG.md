@@ -2720,3 +2720,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   and subtitle, indoor lighting as the prison's. Not yet: the classic Marcus (the player swap after the opening's
   SeqAct_Interp_1 did not happen), Hunters (Pawn_GeistHunter*: no class loaded) and Nemacysts, navmesh regions, the
   cutscenes (Carmine's death), linking chapter 2's end to it.
+- Chapter 3's classic Marcus: the House of Sovereigns has no opening cutscene (SP_HOS_Scene1_CineLevel's
+  SeqAct_Interp_1 is a later scene, by remote event), so the player swap is at the persistent level's start
+  (player_pawn = ... @ SP_HOS_P: SeqEvent_LevelBeginning_1: Beginning of Level). trilogy.py passes --player-pawn to
+  the persistent level's conversion when the recipe names it; levelinject takes it there with no kit (the target is
+  the kit) and, with player_spawn_at, without a player start. In game: GearPawn_COGMarcusG2MP at the start, the squad.
+- Carriers for the Hunters (SP_Airfield_03B_S: ...ArmorNoGrenades; SP_Wreckage_01_S_CombatDBrumak: ...NoArmorNoGrenades).
+  Cloning some levels failed in their navigation unlinking: cover.level_cover_tables now treats a CoverLinkRefs
+  table running past the data as none (SP_Fort_Wave_Bloodmounts, SP_Wreckage_01_S_CombatDBrumak), and
+  levelpkg.unlink_navigation skips a level whose list ends are not found. Gears 3 has no Nemacyst: they are Hunter
+  stand-ins (PAWN_STANDIN) for now.

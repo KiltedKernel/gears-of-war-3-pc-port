@@ -365,6 +365,12 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         p_pawns = common + ['--pawn-classes', ','.join(f'{k}={v}' for k, v in merged.items())]
     # the sun for the characters (recipe sun_from: the section holding Gears 1's DirectionalLight), in the persistent level
     if ch.get('sun_from'): p_pawns = p_pawns + ['--sun-from', ','.join(src(x.strip()) for x in ch['sun_from'].split(',') if x.strip())]
+    # the player's classic pawn after an op of the persistent level (a chapter with no opening cutscene: its
+    # level start, recipe player_pawn = Class @ <persistent>: Op: Output)
+    if ch.get('player_pawn') and ch['player_pawn'].split('@')[-1].split(':')[0].strip() == persistent:
+        cls_, at_ = (x.strip() for x in ch['player_pawn'].split('@'))
+        p_pawns = p_pawns + ['--player-pawn', cls_ + ':' + at_.split(':', 1)[1].strip()]
+        if ch.get('player_spawn_at'): p_pawns = p_pawns + ['--player-spawn-at=' + ch['player_spawn_at'].replace(' ', '')]
     levelinject(folder, kit_target, [src(persistent)], ['--kismet', '--player-starts', '--replace'] + materials + p_pawns
                 + ch.get('persistent_options', '').split(), g3cooked)
     kit = os.path.join(out_dir, prefix + persistent + '.xxx')

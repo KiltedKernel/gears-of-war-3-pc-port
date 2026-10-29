@@ -144,7 +144,10 @@ def level_cover_tables(p, d):
         o = d.find(key, o + 1)
     if o < 0: raise ValueError('CoverLinkRefs not found in the level')
     q = o + 4 + 4 * n
-    count = struct.unpack_from('>i', d, q)[0]
+    count = struct.unpack_from('>i', d, q)[0] if q + 4 <= len(d) else -1
+    # (a table running past the data is no table: SP_Fort_Wave_Bloodmounts, SP_Wreckage_01_S_CombatDBrumak, cloned as
+    # carriers, failed here; level_lists then finds the list ends by their contents)
+    if count < 0 or q + 4 + 5 * count > len(d): raise ValueError('CoverLinkRefs pairs past the level data')
     pairs = [struct.unpack_from('>iB', d, q + 4 + 5 * k) for k in range(count)]
     return [r - 1 for r in refs], q + 4, pairs
 

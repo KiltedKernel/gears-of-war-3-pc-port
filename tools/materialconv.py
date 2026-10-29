@@ -240,6 +240,97 @@ def g1_unlit(p, mat):
     return 'EmissiveColor' in a and 'DiffuseColor' not in a
 
 
+def g1_shading(p, ref):
+    """(diffuse tint (r, g, b) or None, specular: bool) of a Gears 1 material reference: its DiffuseColor input's mean
+    multiplier over its texture (the chain evaluated with texture samples as 1, texture coordinates at their middle
+    0.5, vertex colours 1: constants, parameters' defaults, multiply / add / subtract / one-minus / clamp / lerp /
+    power / component masks), None when it is about 1, over 1 in any channel, or not followed; specular False when Gears 1 lit it
+    NonDirectional or unlit, or wired nothing to SpecularColor. Gears 1 dimmed and tinted texture colours in its
+    materials (the prison's hanging grass: the texture x (0.65, 0.5, 0.5) x a root-to-tip gradient, NonDirectional);
+    the converted materials draw the texture as it is unless the instance carries these"""
+    if ref <= 0: return None, True
+    mat = ref - 1
+    vec_over = {}
+    try:
+        for _ in range(8):
+            if p.class_name(p.exports[mat]['class']) != 'MaterialInstanceConstant': break
+            recs, _ = raw_props(p, p.export_data(mat), 4)
+            par = next((struct.unpack('>i', r[4][:4])[0] for r in recs if r[0] == 'Parent'), 0)
+            if par <= 0: return None, True
+            mat = par - 1
+        if p.class_name(p.exports[mat]['class']) != 'Material': return None, True
+        a = {n: v for n, t, k, v in levelinject.props_at(p, p.export_data(mat))[1]}
+    except Exception:
+        return None, True
+    lm = a.get('LightingModel', 0)
+    specular = 'SpecularColor' in a and lm not in (1, 2)
+    def props(r): return {n: v for n, t, k, v in levelinject.props_at(p, p.export_data(r - 1))[1]}
+    def inp(v):
+        d = {n: x for n, t, k, x in p.properties(v[1], 0)[0]}
+        masks = [c for c in ('MaskR', 'MaskG', 'MaskB', 'MaskA') if d.get(c)] if d.get('Mask') else []
+        return d.get('Expression', 0), masks
+    def pick(x, masks):
+        if not masks or x is None: return x
+        ch = {'MaskR': 0, 'MaskG': 1, 'MaskB': 2, 'MaskA': 2}
+        sel = [x[ch[m]] for m in masks]
+        return tuple(sel + [sel[-1]] * (3 - len(sel)))[:3] if len(sel) > 1 else (sel[0],) * 3
+    def ev(v, depth=0):
+        if v is None: return None
+        r, masks = inp(v)
+        return pick(node(r, depth), masks)
+    def node(r, depth):
+        if r <= 0 or depth > 16: return None
+        cn = p.class_name(p.exports[r - 1]['class'])[len('MaterialExpression'):]
+        b = props(r)
+        f = lambda k, d=0.0: float(b.get(k, d))
+        if cn == 'Constant': return (f('R'),) * 3
+        if cn in ('Constant2Vector', 'Constant3Vector', 'Constant4Vector'): return (f('R'), f('G'), f('B'))
+        if cn in ('TextureSample', 'TextureSampleParameter2D', 'VertexColor'): return (1.0, 1.0, 1.0)
+        if cn == 'TextureCoordinate': return (0.5, 0.5, 0.5)
+        if cn == 'ScalarParameter': return (f('DefaultValue'),) * 3
+        if cn == 'VectorParameter':
+            dv = b.get('DefaultValue')
+            return struct.unpack('>3f', dv[1][:12]) if isinstance(dv, tuple) else None
+        two = lambda: (ev(b.get('A'), depth + 1), ev(b.get('B'), depth + 1))
+        if cn in ('Multiply', 'Add', 'Subtract'):
+            x, y = two()
+            if x is None or y is None: return None
+            op = {'Multiply': lambda u, w_: u * w_, 'Add': lambda u, w_: u + w_, 'Subtract': lambda u, w_: u - w_}[cn]
+            return tuple(op(u, w_) for u, w_ in zip(x, y))
+        if cn == 'OneMinus':
+            x = ev(b.get('Input'), depth + 1)
+            return None if x is None else tuple(1 - u for u in x)
+        if cn == 'ComponentMask':
+            x = ev(b.get('Input'), depth + 1)
+            return pick(x, [m for m, k in (('MaskR', 'R'), ('MaskG', 'G'), ('MaskB', 'B'), ('MaskA', 'A')) if b.get(k)])
+        if cn == 'Clamp':
+            x = ev(b.get('Input'), depth + 1)
+            lo = ev(b.get('Min'), depth + 1) if 'Min' in b else (0.0,) * 3
+            hi = ev(b.get('Max'), depth + 1) if 'Max' in b else (1.0,) * 3
+            if x is None or lo is None or hi is None: return None
+            return tuple(min(max(u, l_), h_) for u, l_, h_ in zip(x, lo, hi))
+        if cn == 'LinearInterpolate':
+            x, y = two(); t = ev(b.get('Alpha'), depth + 1)
+            if x is None or y is None or t is None: return None
+            return tuple(u * (1 - k) + w_ * k for u, w_, k in zip(x, y, t))
+        if cn == 'Power':
+            x = ev(b.get('Base'), depth + 1); e = ev(b.get('Exponent'), depth + 1) if 'Exponent' in b else (f('ConstExponent', 2.0),) * 3
+            if x is None or e is None: return None
+            return tuple(max(u, 0.0) ** k for u, k in zip(x, e))
+        return None
+    tint = None
+    try:
+        if 'DiffuseColor' in a:
+            t = ev(a['DiffuseColor'])
+            if t is not None:
+                t = tuple(min(max(u, 0.0), 2.0) for u in t)
+                # dimming only: a multiplier over 1 is mostly a detail texture's x2 (its sample averaging 0.5, not 1)
+                if max(t) <= 1.0 and max(abs(u - 1.0) for u in t) > 0.05: tint = t
+    except Exception:
+        tint = None
+    return tint, specular
+
+
 def g1_emissive(p, mat):
     """(texture export index, (r, g, b) scale) a lit Gears 1 material's EmissiveColor draws: its texture times the
     constants multiplied onto it (Constant, Constant3/4Vector, a VectorParameter's default; the corridor tubes:

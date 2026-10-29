@@ -1515,6 +1515,86 @@ def kismet_actors(src, kismet_exports, extra=()):
     return sorted(out)
 
 
+# Gears 1's TriggerVolumes become TriggerVolumes of the target level's own box brush (box_volume_template): its Model
+# and its BrushComponent's data (Brush, the convex BrushAggGeom) shared, the box stretched onto Gears 1's brush bounds
+# by DrawScale3D, its centre put at Gears 1's by PrePivot, Gears 1's Rotation kept. The Trigger cylinders they were
+# before (radius: the larger horizontal half extent, rotation ignored) fired early: the prison's yard-streaming volume
+# (2366 x 3934, yawed 90 degrees) reached 2000 units back into the hard hallway, its streaming unloaded the floor the
+# player stood on and the player fell out of the world. OBJCOPY_VOLUME_CYLINDERS=1: the cylinders (also the fallback
+# when the target has no box volume)
+VOLUME_BOXES = not os.environ.get('OBJCOPY_VOLUME_CYLINDERS')
+
+
+def box_volume_template(c):
+    """(model ref, component export index, model centre, model half extent) of a TriggerVolume of the target level
+    whose brush is a box (its Polys: 6 four-sided faces), or None; cached on the copier"""
+    if hasattr(c, '_box_volume'): return c._box_volume
+    import materialconv
+    c._box_volume = None
+    p3 = c.p3
+    for i, e in enumerate(p3.exports):
+        if p3.class_name(e['class']) != 'TriggerVolume': continue
+        try: recs, _ = materialconv.raw_props(p3, p3.export_data(i), 26)
+        except Exception: continue
+        a = {r[0]: r[4] for r in recs}
+        if 'Brush' not in a or 'BrushComponent' not in a: continue
+        model, comp = struct.unpack('>i', a['Brush'])[0], struct.unpack('>i', a['BrushComponent'])[0]
+        if model <= 0 or comp <= 0: continue
+        try:
+            crecs, _ = materialconv.raw_props(p3, p3.export_data(comp - 1), 8)
+            if not any(r[0] == 'BrushAggGeom' for r in crecs): continue
+            md = p3.export_data(model - 1)
+            _, o = p3.properties(md, 4)
+            centre, ext = struct.unpack_from('>3f', md, o), struct.unpack_from('>3f', md, o + 12)
+        except Exception:
+            continue
+        polys = [j for j, f in enumerate(p3.exports) if f['outer'] == model and p3.class_name(f['class']) == 'Polys']
+        # (Polys: NetIndex, a None tag, then the element count and capacity)
+        if not polys or struct.unpack_from('>i', p3.export_data(polys[0]), 12)[0] != 6: continue
+        if min(ext) <= 0: continue
+        c._box_volume = (model, comp - 1, centre, ext)
+        break
+    return c._box_volume
+
+
+def volume_as_box(c, i, level_ref, loc, rot, pivot, sc, origin, extent):
+    """a Gears 3 TriggerVolume on the target's box brush standing for Gears 1 volume i, or 0 (no box template)"""
+    import levelinject
+    import numpy as np
+    t = box_volume_template(c)
+    if t is None: return 0
+    model, comp_t, tcentre, text = t
+    s = c.s
+    R = levelinject.rotation_matrix(*rot)
+    centre = np.asarray(loc) + (np.asarray(sc) * (np.asarray(origin) - np.asarray(pivot))) @ R + np.asarray(c.offset)
+    scale = [abs(sc[k] * extent[k]) / text[k] for k in range(3)]
+    cls = c.class_ref('TriggerVolume'); bcls = c.class_ref('BrushComponent')
+    if not cls or not bcls: return 0
+    name = s.exports[i]['name']
+    num = int(name.rsplit('_', 1)[1]) + 1 if name.rsplit('_', 1)[-1].isdigit() else 0
+    actor = c.w.add_export(cls, level_ref, c.unique_name('G1Volume', num), b'', flags=0x0207000100000000)
+    ce = c.p3.exports[comp_t]
+    comp = c.w.add_export(bcls, actor, ('BrushComponent', num), c.p3.export_data(comp_t),
+                          flags=ce['flags'], archetype=struct.unpack_from('>i', c.p3.data, ce['entry'] + 20)[0])
+    vec = lambda v: struct.pack('>3f', *[float(x) for x in v])
+    recs = [['Brush', 'ObjectProperty', 0, b'', struct.pack('>i', model)],
+            ['BrushComponent', 'ObjectProperty', 0, b'', struct.pack('>i', comp)],
+            ['Components', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, comp)],
+            ['Location', 'StructProperty', 0, struct.pack('>ii', *c.w.name('Vector')), vec(centre)],
+            ['Rotation', 'StructProperty', 0, struct.pack('>ii', *c.w.name('Rotator')), struct.pack('>3i', *rot)],
+            ['DrawScale3D', 'StructProperty', 0, struct.pack('>ii', *c.w.name('Vector')), vec(scale)],
+            ['PrePivot', 'StructProperty', 0, struct.pack('>ii', *c.w.name('Vector')), vec(tcentre)],
+            ['CollisionComponent', 'ObjectProperty', 0, b'', struct.pack('>i', comp)]]
+    sd = s.export_data(i)
+    import materialconv
+    srecs, _ = materialconv.raw_props(s, sd, 32)
+    sa = {r[0]: r[4] for r in srecs}
+    if 'Tag' in sa: recs.append(['Tag', 'NameProperty', 0, b'', struct.pack('>ii', *c.name(*struct.unpack('>ii', sa['Tag'])))])
+    c.w.replace(actor - 1, c.prelude_828('actor', cls) + encode(c.w, recs))
+    c.obj_map[i + 1] = actor
+    return actor
+
+
 def volume_as_trigger(c, i, level_ref):
     """a Gears 3 Trigger standing for Gears 1 volume i (bounds of its brush): returns the new actor's ref"""
     import materialconv
@@ -1532,6 +1612,10 @@ def volume_as_trigger(c, i, level_ref):
     _, o = s.properties(md, 4)
     origin = struct.unpack_from('>3f', md, o); extent = struct.unpack_from('>3f', md, o + 12)
     sc = [scale[k] * ds for k in range(3)]
+    if VOLUME_BOXES:
+        rot = struct.unpack('>3i', a['Rotation']) if 'Rotation' in a else (0, 0, 0)
+        got = volume_as_box(c, i, level_ref, loc, rot, pivot, sc, origin, extent)
+        if got: return got
     centre = [loc[k] + (origin[k] - pivot[k]) * sc[k] + c.offset[k] for k in range(3)]   # (rotation ignored)
     radius = max(abs(extent[0] * sc[0]), abs(extent[1] * sc[1]))
     height = abs(extent[2] * sc[2])

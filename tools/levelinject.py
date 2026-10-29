@@ -721,7 +721,15 @@ def main():
                 # a copy of the masked instance with its static permutation (a child of it draws the base material's
                 # default permutation: the fence drew uncut, or untextured). The template is a pickup's material:
                 # its ShimmerColor (70, 50, 40) pulsed a collectible's glint over the prison's paper and rubble, off
-                data = materialconv.clone_static_mic(w, p3, p3, masked_mic, refs, {}, vectors=MASKED_VECTORS)
+                # Gears 1's own shading of it: its diffuse tint (the hanging grass at about a third of its texture's
+                # brightness) and no specular where it had none (the pickup master's default 0.5 of the diffuse lit
+                # the grass bright green in the dark hallway)
+                vectors_ = dict(MASKED_VECTORS)
+                if not os.environ.get('LEVELINJECT_NO_G1_SHADING'):
+                    tint_, spec_ = materialconv.g1_shading(sp, gm + 1)
+                    if tint_: vectors_['Diffuse_01_Color'] = tuple(tint_) + (1.0,)
+                    if not spec_: vectors_['Specular_01_Color'] = (0.0, 0.0, 0.0, 1.0)
+                data = materialconv.clone_static_mic(w, p3, p3, masked_mic, refs, {}, vectors=vectors_)
                 mflags_m = struct.unpack_from('>Q', p3.data, p3.exports[masked_mic]['entry'] + 24)[0]
                 mic_of[(si, gm + 1)] = by_name[name] = w.add_export(p3.exports[masked_mic]['class'], 0, ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_m)
                 n_masked += 1

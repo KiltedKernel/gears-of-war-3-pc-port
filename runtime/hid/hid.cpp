@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cmath>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include "../../xe_glue/port_gpu.h"
 
@@ -277,7 +278,8 @@ namespace
     // controller's yaw: Gears moves relative to the camera). Stops within 100 units, when
     // stuck for 3 s, or after the time (default 20 s); logs where it ended. Positions: GOW3_LOG_POS / GOW3_LOG_ACTORS.
     bool WalkStep(double tx, double ty, double seconds);
-    void WalkTo(double tx, double ty, double seconds) { WalkStep(tx, ty, seconds); }
+    std::mutex& DriveLock();
+    void WalkTo(double tx, double ty, double seconds) { std::lock_guard<std::mutex> drive(DriveLock()); WalkStep(tx, ty, seconds); }
     bool WalkStep(double tx, double ty, double seconds)
     {
         static const uint32_t actor = ue3::FindClass("Actor");
@@ -312,8 +314,15 @@ namespace
     // source's path network: tools/levelroute.py --plan). A point the player cannot reach (stuck: a wall, or held
     // still by a cinematic or a door) is tried 3 more times, 2 s apart, then skipped; logs each point
     bool WalkStep(double tx, double ty, double seconds);
+    // walkto, route and fight take turns (in the order their script times start them): a step whose time comes while
+    // the previous one still runs waits for it, so a script's times are "not before"
+    std::mutex g_driveLock;
+    std::mutex& DriveLock() { return g_driveLock; }
+
+    void Face(double tx, double ty);
     void Route(std::string points, double seconds)
     {
+        std::lock_guard<std::mutex> drive(g_driveLock);
         if (seconds <= 0) seconds = 20;
         std::vector<std::pair<double, double>> pts;
         std::stringstream ss(points); std::string item;
@@ -326,16 +335,26 @@ namespace
         for (size_t k = 0; k < pts.size(); k++)
         {
             bool reached = false;
-            for (int attempt = 0; attempt < 4 && !reached; attempt++)
+            for (int attempt = 0; attempt < 5 && !reached; attempt++)
             {
                 reached = WalkStep(pts[k].first, pts[k].second, seconds);
                 if (reached) break;
-                // stuck (a straight line into a pillar, a closed door, a cinematic holding the player): use (X: a
-                // door's button, a pickup), then a step to the side, the other side, back (out of cover: A at a wall
-                // takes cover, and the stick then slides along it), with A (mantle over low cover) once in between
+                // stuck (low cover, a straight line into a pillar, a closed door, a cinematic holding the player):
+                // first a vault, then use (X: a door's button, a pickup) with a step to the side, the other side, back
+                // (out of cover: A at a wall takes cover, and the stick then slides along it)
                 auto stick = [](int16_t lx, int16_t ly, int ms) { g_scriptLX = lx; g_scriptLY = ly; Sleep(ms); g_scriptLX = 0; g_scriptLY = 0; };
+                auto tap = [](uint16_t b) { g_scriptPadButtons = b; Sleep(200); g_scriptPadButtons = 0; };
+                if (attempt == 0)
+                {
+                    // low cover in the way (Gears 1's mantle specs): face the point, A into cover, then forward + A
+                    // vaults it, as a player does
+                    Face(pts[k].first, pts[k].second);
+                    g_scriptLY = 32000; Sleep(300); tap(0x1000); Sleep(700);
+                    tap(0x1000); Sleep(1200); g_scriptLY = 0; Sleep(300);
+                    continue;
+                }
                 g_scriptPadButtons = 0x4000; Sleep(250); g_scriptPadButtons = 0; Sleep(400);
-                if (attempt == 0) stick(-32000, 0, 800);
+                if (attempt == 3) stick(-32000, 0, 800);
                 else if (attempt == 1) { g_scriptPadButtons = 0x1000; Sleep(250); g_scriptPadButtons = 0; Sleep(600); stick(32000, 0, 1600); }
                 else if (attempt == 2) stick(0, -32000, 1000);
                 Sleep(1000);
@@ -422,6 +441,7 @@ namespace
         const int health = gearPawn ? ue3::PropertyOffset(gearPawn, "Health") : -1;
         if (!gearPawn || loc < 0 || health < 0) { LOGFN("input: fight: no reflection"); return; }
         if (range <= 0) range = 4000;
+        std::lock_guard<std::mutex> drive(g_driveLock);
         const uint64_t t0 = GetTickCount64();
         uint32_t target = 0; uint64_t onSince = 0; int kills = 0;
         while (double(GetTickCount64() - t0) / 1000.0 < seconds)
@@ -447,10 +467,13 @@ namespace
             if (pitch > 3.14159265358979) pitch -= 2 * 3.14159265358979;
             const double dyaw = std::remainder(std::atan2(ty - py, tx - px) - yaw, 2 * 3.14159265358979);
             const double dpitch = std::atan2(tz - pz, std::hypot(tx - px, ty - py)) - pitch;
-            auto stick = [](double diff) { return std::fabs(diff) < 0.01 ? 0.0 : std::clamp(std::fabs(diff) / 0.6, 0.25, 1.0) * (diff > 0 ? 1 : -1); };
+            // (at least 0.4: aiming, smaller deflections sat in the dead zone and the aim stopped ~0.2 rad off)
+            auto stick = [](double diff) { return std::fabs(diff) < 0.01 ? 0.0 : std::clamp(std::fabs(diff) / 0.5, 0.4, 1.0) * (diff > 0 ? 1 : -1); };
             g_scriptRX = int16_t(std::lround(stick(dyaw) * 32000));
             g_scriptRY = int16_t(std::lround(stick(dpitch) * 32000));
             const bool aimed = std::fabs(dyaw) < 0.08 && std::fabs(dpitch) < 0.1;
+            static uint64_t lastLog = 0;
+            if (GetTickCount64() - lastLog > 2000) { lastLog = GetTickCount64(); LOGFN("input: fight: {} at {:.0f}: yaw off {:.2f}, pitch {:.2f} off {:.2f}", ue3::ObjectName(best), bestD, dyaw, pitch, dpitch); }
             g_scriptLT = 255;
             g_scriptRT = aimed ? 255 : 0;
             if (aimed && !onSince) onSince = GetTickCount64();

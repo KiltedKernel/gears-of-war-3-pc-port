@@ -2730,3 +2730,7 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   table running past the data as none (SP_Fort_Wave_Bloodmounts, SP_Wreckage_01_S_CombatDBrumak), and
   levelpkg.unlink_navigation skips a level whose list ends are not found. Gears 3 has no Nemacyst: they are Hunter
   stand-ins (PAWN_STANDIN) for now.
+- Chapter 3's first navmesh region ([navmesh hallway]: the start, the hallway, the first courtyard; sources P, S00,
+  S00_hallway, S01; seeds from Scripting_1 / Scripting_1_hallway's path nodes): Pylon_1 380 polygons, into
+  GOW1_SP_HOS_Scripting_1 (build 1584 s). In game (500 s): no crash; the squad holds at the start, waiting on the
+  player's triggers as in Gears 1.

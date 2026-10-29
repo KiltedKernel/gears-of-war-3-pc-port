@@ -2771,3 +2771,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   clones now carry the region's radius and sphere centre. Navmesh coverage of Gears 1's cover slots (before (3)):
   S04 off-mesh 113 -> 11 of 171, S05 103 -> 21 of 326.
 - Same pylon fix applies to chapters 2 and 3 (their extra seeds are clones): their regions need regenerating.
+- COVER (cont.): the added pylons were still invisible to the game. GOW3_COVER_TRACE (new, runtime/ue3/cover_trace.cpp:
+  wraps sub_82A9BAD8 and its polygon query sub_825A2228) showed 0 polygons near the hallway's barrier against ~10 in
+  the cell block. The query walks the pylon octree (+648 NavMeshPtr, +720 bit 0x00400000 bDisabled); pylons reach
+  it through the level's navigation list. levelinject's cover step rewrote exports from the template's ORIGINAL data
+  (p3.export_data): the Level (putting the pylon and navigation list ends back) and the template's last navigation
+  point, a CoverLink (its nextNavigationPoint emptied: S02_Scripting's list stopped after 18 of 141 points). Every
+  later rewrite now starts from w.current. GOW3_LOG_PROPS takes a bare number as an object offset ("Pylon:648,720").
+  Verified: Marcus takes the barrier's mid-level cover (CoverLink_5027 slot 0) and vaults it (y 5180 -> 5419).
+  The added pylons, cover links and path nodes of every converted level were off these lists before: chapters 2
+  and 3 need rebuilding too.

@@ -1292,7 +1292,7 @@ def main():
         for i in range(len(p3.exports)):
             cn = cls(i)
             if not ('PlayerStart' in cn or 'EnemyStart' in cn) or not p3.path(i).startswith('TheWorld'): continue
-            d = bytearray(p3.export_data(i))
+            d = bytearray(w.current(i))
             try:
                 o, pr, end = props_at(p3, bytes(d), (26,) + tuple(range(0, 120, 2)))
             except ValueError:
@@ -1311,7 +1311,7 @@ def main():
         placed = 0
         for i in range(len(p3.exports)):
             if 'PlayerStart' not in cls(i) or not p3.path(i).startswith('TheWorld'): continue
-            d = bytearray(p3.export_data(i))
+            d = bytearray(w.current(i))
             try:
                 o, pr, end = props_at(p3, bytes(d), (26,) + tuple(range(0, 120, 2)))
             except ValueError:
@@ -1324,7 +1324,7 @@ def main():
         x, y, z = (float(v) for v in args.pylon_at.split(','))
         for i in range(len(p3.exports)):
             if cls(i) != 'Pylon' or not p3.path(i).startswith('TheWorld'): continue
-            d = bytearray(p3.export_data(i)); o, pr, end = props_at(p3, bytes(d), (26,))
+            d = bytearray(w.current(i)); o, pr, end = props_at(p3, bytes(d), (26,))
             d = set_property(p3, w, d, o, 'Location', struct.pack('>3f', x, y, z), struct_name='Vector')
             # the exploration is bounded by the pylon's expansion sphere (MP_GridlockG3: an override centred on its
             # own map, radius 6,017): it moves with the pylon, radius --pylon-radius
@@ -1371,7 +1371,11 @@ def main():
         set_prop = lambda *a, **k: set_property(p3, w, *a, **k)
         new_slots = {}                                     # target export -> world positions of its new slots
         for ti, _, _, _ in g3:
-            d = bytearray(p3.export_data(ti))
+            # (every rewrite here starts from the export as rewritten so far, not the template's original: the pylons
+            # (--pylons-at) were appended to the navigation list after the template's last point, a CoverLink, and
+            # rewriting that link from its original data cut the list there: the added pylons never reached the
+            # navigation octree, the game found no polygons and no cover on them)
+            d = bytearray(w.current(ti))
             o, pr, end = props_at(p3, bytes(d), (26,))
             if ti in source_of:
                 _, loc, rot, slots = g1[source_of[ti]]
@@ -1384,7 +1388,10 @@ def main():
             d = set_prop(d, o, 'Slots', value, 'ArrayProperty')
             w.replace(ti, bytes(d))
         lvl = next(i for i in range(len(p3.exports)) if cls(i) == 'Level' and p3.path(i) == 'TheWorld.PersistentLevel')
-        ld = bytearray(p3.export_data(lvl))
+        # (the Level as rewritten so far: --pylons-at has already appended its pylons to the level's pylon and
+        # navigation lists and Actors; the original's data put the list ends back, and the game, splicing the level's
+        # pylon list into the world's at its end, never saw the added pylons: no polygons there, so no cover)
+        ld = bytearray(w.current(lvl))
         L = cover.level_lists(p3, bytes(ld), w)
         link_refs, pairs_at, pairs = L['refs'], L['pairs_at'], L['pairs']
         old_pos = {g[0]: B[k] for k, g in enumerate(g3)}
@@ -1419,7 +1426,7 @@ def main():
             placed = 0
             for i in range(len(p3.exports)):
                 if 'PlayerStart' not in cls(i) or not p3.path(i).startswith('TheWorld'): continue
-                d = bytearray(p3.export_data(i))
+                d = bytearray(w.current(i))
                 try:
                     o, pr, end = props_at(p3, bytes(d), (26,) + tuple(range(0, 120, 2)))
                 except ValueError:
@@ -1697,7 +1704,7 @@ def environment(src, p3, w, cls):
         a = {n: v for n, t, k, v in pr}
         color = a['LightColor'][1] if 'LightColor' in a else bytes((255, 255, 255, 0))
         bright = a.get('LightBrightness', 1.0)
-        d = bytearray(p3.export_data(ef)); o, pr, end = props_at(p3, bytes(d), (8, 4, 12))
+        d = bytearray(w.current(ef)); o, pr, end = props_at(p3, bytes(d), (8, 4, 12))
         for name, value in (('OppositeLightColor', color), ('LightInscatteringColor', color),
                             ('OppositeLightBrightness', struct.pack('>f', bright)),
                             ('LightInscatteringBrightness', struct.pack('>f', bright * 0.5))):

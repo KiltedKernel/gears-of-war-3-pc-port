@@ -1,6 +1,6 @@
 // GOW3_LOG_PROPS (development): every 2 s, log chosen properties and the current UnrealScript state of every live
 // instance of chosen classes, through UE3 reflection. Format: "Class:Prop,Prop;Class2:Prop" (subclasses included);
-// each value is shown as int/float (bools as 0/1; "Prop@" an object reference by name); "Prop#" shows an array's count, "Prop+N" the dword N bytes in. The state: a State object referenced from the object's
+// each value is shown as int/float (bools as 0/1; "Prop@" an object reference by name); "Prop#" shows an array's count, "Prop+N" the dword N bytes in, "N" alone the object's dword at +N. The state: a State object referenced from the object's
 // StateFrame (UObject +20).
 // GOW3_WATCH_PROP=Class:Prop arms a write watchpoint (watch.cpp) on that property of the first live instance: each
 // hit names the guest function writing it.
@@ -155,7 +155,8 @@ void Start()
                         std::string p = (count || ref) ? p0.substr(0, p0.size() - 1) : p0;
                         int extra = 0;
                         if (const size_t plus = p.find('+'); plus != std::string::npos) { extra = atoi(p.c_str() + plus + 1); p = p.substr(0, plus); }
-                        int off = ue3::PropertyOffset(oc, p.c_str());
+                        // "N" (a number): the dword N bytes into the object itself (native fields: Pylon +648 NavMeshPtr)
+                        int off = (!p.empty() && isdigit((unsigned char)p[0])) ? atoi(p.c_str()) : ue3::PropertyOffset(oc, p.c_str());
                         if (extra && off >= 0) { off += extra; p = p0; }
                         if (count && off >= 0) { line += fmt::format(" {}={}", p0, int32_t(ue3::Read32(o + off + 4))); continue; }
                         if (off < 0) { line += " " + p + "=?"; continue; }

@@ -2781,3 +2781,15 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   Verified: Marcus takes the barrier's mid-level cover (CoverLink_5027 slot 0) and vaults it (y 5180 -> 5419).
   The added pylons, cover links and path nodes of every converted level were off these lists before: chapters 2
   and 3 need rebuilding too.
+- PYLONS JOINED (tools/navcross.py, run by trilogy.py after the regions): no region's pylons were joined (navinject's
+  cross-pylon edges need exactly shared borders: 0 everywhere), and nothing joined regions in different sections:
+  Dom stayed at the hard route's start (-1426,1947) and later fell out of the world there as S02 streamed out.
+  Gears 3's streaming levels join pylons of different levels with FNavMeshCrossPylonEdge, both polygon references
+  by GUID (object 0, NavGuid, 0xFFFF0000 | polygon) and bHasCrossLevelPaths on the pylons (SP_Azura2_02_S). navcross
+  does the same for every pair of active pylons: shared borders (navedges.cross_edges), else overlaps (one mesh's
+  outer side lying over the other's polygon; the walls lying over the other mesh, in 16-unit pieces, not counted).
+  The prison: 106 edges, 10 pylons (the cell block to the hallway, the upper corridor, S04 to S05, S05's own five,
+  S05 to S06). Not joined: the hard hallway's two pylons either side of its barrier (a mantle; no cross-pylon
+  mantle edges yet). TRILOGY_NO_NAVCROSS=1 skips it.
+- Test harness: fight melees (B) under 220 units; a route's vault attempt that leaves the player in cover pulls back
+  out of it. Scratch tests: vault2.txt (barrier), gap.txt (hallway end), full_hard2.txt.

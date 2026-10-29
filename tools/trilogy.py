@@ -473,6 +473,12 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
             else:
                 print(f'  navmesh {name}: no walkable ground found from its pylons (pylon_at / pylons_at must be standing '
                       'room on the converted floor): left without a navmesh', flush=True)
+        # the regions' pylons joined where their meshes meet or overlap, across sections too (tools/navcross.py: an AI
+        # could not leave its region's pylon: Dom stayed at the hard route's start)
+        if len(navs) and not os.environ.get('TRILOGY_NO_NAVCROSS'):
+            import navcross
+            navcross.link(sorted({os.path.join(out_dir, prefix + nav['section'] + '.xxx') for nav in navs.values()}),
+                          log=lambda m: print('  ' + m, flush=True))
     # the chapter
     os.makedirs(os.path.join(folder, 'config'), exist_ok=True)
     run([sys.executable, '-P', os.path.join(HERE, 'campaign.py'), 'fragment', '--chapter', ch['number'], '--act', ch['act'],

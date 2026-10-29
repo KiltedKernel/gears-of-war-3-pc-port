@@ -351,6 +351,14 @@ namespace
                     Face(pts[k].first, pts[k].second);
                     g_scriptLY = 32000; Sleep(300); tap(0x1000); Sleep(700);
                     tap(0x1000); Sleep(1200); g_scriptLY = 0; Sleep(300);
+                    // still in cover (no vault there): out of it (the stick pulled back), or the next steps slide along it
+                    static const uint32_t gearPawn = ue3::FindClass("GearPawn");
+                    static const int coverType = gearPawn ? ue3::PropertyOffset(gearPawn, "CoverType") : -1;
+                    if (const uint32_t pawn = LocalPawn(); pawn && coverType >= 0 && ue3::Read32(pawn + coverType) >> 24)
+                    {
+                        LOGFN("input: route: in cover after the vault attempt: leaving it");
+                        stick(0, -32000, 700); Sleep(300);
+                    }
                     continue;
                 }
                 g_scriptPadButtons = 0x4000; Sleep(250); g_scriptPadButtons = 0; Sleep(400);
@@ -474,6 +482,15 @@ namespace
             const bool aimed = std::fabs(dyaw) < 0.08 && std::fabs(dpitch) < 0.1;
             static uint64_t lastLog = 0;
             if (GetTickCount64() - lastLog > 2000) { lastLog = GetTickCount64(); LOGFN("input: fight: {} at {:.0f}: yaw off {:.2f}, pitch {:.2f} off {:.2f}", ue3::ObjectName(best), bestD, dyaw, pitch, dpitch); }
+            // close up: melee (B) instead of firing (a Drone at arm's length outlived seconds of point-blank fire)
+            if (bestD < 220)
+            {
+                static uint64_t lastMelee = 0;
+                g_scriptLT = 0; g_scriptRT = 0;
+                if (GetTickCount64() - lastMelee > 700) { lastMelee = GetTickCount64(); g_scriptPadButtons = 0x2000; Sleep(150); g_scriptPadButtons = 0; }
+                Sleep(30);
+                continue;
+            }
             g_scriptLT = 255;
             g_scriptRT = aimed ? 255 : 0;
             // the same target 5 s on (behind cover, or the aim off): walk 2 s towards it, then aim again

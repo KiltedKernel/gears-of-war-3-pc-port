@@ -2462,13 +2462,13 @@ def touch_classes(c, props):
             continue
         if r[0] == 'bPlayerOnly' and 'Pawn_COGMarcus' in names: continue
         out.append(r)
-    if 'Pawn_COGMarcus' in names:
-        out.append(['bPlayerOnly', 'BoolProperty', 0, b'', bytes([1])])
-        # ... but Gears 3's bPlayerOnly passes the squad AI too (Dom: the prison's door counter, one event for Dom and
-        # one for Marcus, reached 2 with Dom alone in the room and shut the door before Marcus), so Dom's class is
-        # ignored by it
+    if 'Pawn_COGMarcus' in names: out.append(['bPlayerOnly', 'BoolProperty', 0, b'', bytes([1])])
+    # a player-only event (Gears 1's default, or a Marcus filter): Gears 3's bPlayerOnly passes the squad AI too, so
+    # Dom's class is ignored by it (Dom ahead of the player touched the prison's S04 checkpoint trigger, Trigger_3,
+    # and its door counter's Marcus event: the S02 door shut before Marcus reached it)
+    if ('Pawn_COGMarcus' in names or a.get('bPlayerOnly', True)) and 'Pawn_COGDom' not in names:
         cands = PAWN_MAP['Pawn_COGDom']; avail = getattr(c, 'available_pawns', None)
-        g3 = next((x for x in cands if avail is None or x in avail), None)
+        g3 = PAWN_OVERRIDE.get('Pawn_COGDom') or next((x for x in cands if avail is None or x in avail), None)   # (pawn_class's)
         if g3:
             dom = c.find_import('Core', 'Class', c.find_import('Core', 'Package', 0, 'GearGameContent'), g3)
             out = [r for r in out if r[0] != 'IgnoredClassProximityTypes']

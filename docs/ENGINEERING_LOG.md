@@ -2851,3 +2851,11 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
      beyond it. The Marcus filter had become bPlayerOnly, which in Gears 3 passes squad AI as well, so Dom alone ran
      the count to 2 and the door shut before Marcus. Marcus filters now also carry IgnoredClassProximityTypes =
      Dom's class.
+- Player-only touch events. Gears 1's SeqEvent_Touch defaults to bPlayerOnly and Gears 1's Dom is not a "player";
+  Gears 3's bPlayerOnly passes the squad AI (Dom). Dom ahead of the player touched S04's Trigger_3 (checkpoint +
+  loadEasyCheckpoint; its second firing opens P's Gate_0 and fires shutS02Door), so the S02 door (S04_Scripting
+  InterpActor_12) shut in front of Marcus. objcopy touch_classes: every player-only touch event without a Dom filter
+  now ignores Dom's class (IgnoredClassProximityTypes; the class pawn_class gives, PAWN_OVERRIDE first:
+  GearPawn_COGDomG2, not GearPawn_COGDom, which does not match him). The scripted easy route then passes the door.
+- Next on the easy route: the catwalk bridge north of (-3320,4800) (S04_Scripting InterpActor_19/_22,
+  RB_Prison_Floors_Catwalks_Straight_1024; hard route's bridgeChopper blows it up) is not there for Marcus.

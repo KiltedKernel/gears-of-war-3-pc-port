@@ -160,6 +160,8 @@ void Start()
                         if (extra && off >= 0) { off += extra; p = p0; }
                         if (count && off >= 0) { line += fmt::format(" {}={}", p0, int32_t(ue3::Read32(o + off + 4))); continue; }
                         if (off < 0) { line += " " + p + "=?"; continue; }
+                        static const bool showOff = getenv("GOW3_LOG_PROPS_OFFSETS") != nullptr;   // (RE: "Prop[+off]=...")
+                        if (showOff) line += fmt::format(" [+{}]", off);
                         const uint32_t raw = ue3::Read32(o + off);
                         if (ref)
                         {

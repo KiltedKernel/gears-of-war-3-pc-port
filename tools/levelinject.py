@@ -1334,6 +1334,21 @@ def main():
             d = set_property(p3, w, d, o, 'ExpansionRadius', struct.pack('>f', args.pylon_radius), 'FloatProperty')
             w.replace(i, bytes(d))
             print(f'pylon-at: {p3.path(i)} at ({x:g}, {y:g}, {z:g}), expansion radius {args.pylon_radius:g}')
+    # navigation points' NavGuids unique per converted package: every section is a clone of the same template level,
+    # so its pylons and cover links repeated one set of GUIDs in every section, and a reference by GUID (the cross-
+    # level navmesh joins, tools/navcross.py) named several pylons at once. (uuid5 of the package and the actor's path:
+    # the same on every build)
+    import uuid as _uuid
+    _pkg = os.path.basename(args.target).lower()
+    for i in range(len(p3.exports)):
+        if not p3.path(i).startswith('TheWorld.PersistentLevel.') or p3.path(i).count('.') != 2: continue
+        d = bytearray(w.current(i))
+        try: o, pr, end = props_at(p3, bytes(d), (26,))
+        except ValueError: continue
+        v, size = tag_value_offset(p3, bytes(d), o, 'NavGuid')
+        if v is None or size != 16: continue
+        d[v:v + 16] = _uuid.uuid5(_uuid.NAMESPACE_URL, _pkg + '/' + p3.path(i)).bytes
+        w.replace(i, bytes(d))
     if args.pylons_at:
         import pylons
         pts = [tuple(float(v) for v in t.split(',')) for t in args.pylons_at.split(';') if t.strip()]

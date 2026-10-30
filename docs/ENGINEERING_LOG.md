@@ -2819,3 +2819,15 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (objcopy.touch_classes, Copier.ref): Dom's class through the pawn mapping (GearPawn_COGDomG2), Marcus (the player:
   GearPawn_COGMarcusG2MP is not a GearPawn_COGMarcus) as bPlayerOnly. Touch filters on Marcus/Dom exist in P, S02, S04,
   S05 and S06 scripting.
+- NavGuids made unique per converted package (levelinject: uuid5 of the package and actor path): every section is a
+  clone of one template, and its pylons and cover links repeated the same GUIDs in every section, so GUID references
+  between sections were ambiguous. With that the engine resolves the cross-level joins itself (FNavMeshCrossPylonEdge
+  accessors, sub_825BEBA0/BEBC8, return polygons; GOW3_NAV_TRACE logs them; a runtime fill-in by GUID, on unless
+  GOW3_NAV_NO_FIXCROSS=1, turned out unnecessary). Runtime layout found: polygon reference = {pylon +0, GUID +4,
+  polygon +20 (0xFFFF0000 | index), cached polygon +24}; edge refs at +116 / +144; mesh edge pointer array at +0x68;
+  Pylon NavGuid +608, NavMeshPtr +648.
+- DOM STILL BLOCKED: his search (expansion in sub_8259CCC8: edges by sub_825D9B90 / sub_825D9C20, GetOtherPoly, type 6
+  back-references skipped, then predecessor-group checks) reaches cross edges only ~26 times in a run and never calls
+  Supports on them; the cell block mesh is connected from Dom's polygon to the crossing polygon. On the easy route he
+  then stands in the doorway into S04's corridor (-3222,2566) and the scripted player cannot pass. Next: follow
+  sub_8259CCC8 past the predecessor checks (where a cross edge is dropped).

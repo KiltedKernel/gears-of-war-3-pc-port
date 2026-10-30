@@ -2439,7 +2439,7 @@ FIXUPS['Trigger_DoorInteraction'] = door_interaction
 def touch_classes(c, props):
     """SeqEvent_Touch: Gears 1's ClassProximityTypes name its pawn classes (the prison's yard volume: one event for
     Pawn_COGDom, one for Pawn_COGMarcus). Dom's maps to his Gears 3 class (Copier.ref); the player's Marcus is a
-    multiplayer class outside GearPawn_COGMarcus, so a Marcus filter becomes bPlayerOnly. Unconverted entries
+    multiplayer class outside GearPawn_COGMarcus, so a Marcus filter becomes bPlayerOnly with Dom's class ignored. Unconverted entries
     (None) are dropped: with a None filter every actor touching the volume fired it (the yard's Drones streamed the
     yard in early and the floor under the player out)."""
     s_ = c.s
@@ -2462,7 +2462,17 @@ def touch_classes(c, props):
             continue
         if r[0] == 'bPlayerOnly' and 'Pawn_COGMarcus' in names: continue
         out.append(r)
-    if 'Pawn_COGMarcus' in names: out.append(['bPlayerOnly', 'BoolProperty', 0, b'', b''])
+    if 'Pawn_COGMarcus' in names:
+        out.append(['bPlayerOnly', 'BoolProperty', 0, b'', bytes([1])])
+        # ... but Gears 3's bPlayerOnly passes the squad AI too (Dom: the prison's door counter, one event for Dom and
+        # one for Marcus, reached 2 with Dom alone in the room and shut the door before Marcus), so Dom's class is
+        # ignored by it
+        cands = PAWN_MAP['Pawn_COGDom']; avail = getattr(c, 'available_pawns', None)
+        g3 = next((x for x in cands if avail is None or x in avail), None)
+        if g3:
+            dom = c.find_import('Core', 'Class', c.find_import('Core', 'Package', 0, 'GearGameContent'), g3)
+            out = [r for r in out if r[0] != 'IgnoredClassProximityTypes']
+            out.append(['IgnoredClassProximityTypes', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, dom)])
     return encode(c.w, out)
 
 

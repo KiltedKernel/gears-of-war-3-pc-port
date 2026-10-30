@@ -2841,3 +2841,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   package by GUID, same package by object reference), mantle-only joins included. Dom then leaves the start and
   follows Marcus into the hallway (traces: sub_825BEAB8 callers, sub_825C1F48 costs, sub_825D9B90 expanded
   polygons, sub_82595380 result/error/anchor/goal, all under GOW3_NAV_TRACE).
+- Easy route doorway (-3222,2566), two converter bugs behind "Dom blocks the door":
+  1. CoverGroup references never converted: Gears 1 stores a group's links as NavReferences {Nav, Guid}, the code
+     read `Actor`. Dom's AIMove to CoverGroup_5 (the cover past the doorway) had no target, so Gears 3 tethered him
+     where he stood, in the 120-unit doorway; AICmd_StepAside moved him when bumped and AICmd_MoveToTether brought
+     him back. Fixed (and a group whose links are in another package takes this target's nearest link, 600 units).
+  2. The S02 door (S04_Scripting InterpActor_12, open at its placed pose; Matinee lowers it 384) is shut by P's
+     shutS02Door once a counter hits 2: one SeqEvent_Touch for Pawn_COGDom, one for Pawn_COGMarcus, on a volume far
+     beyond it. The Marcus filter had become bPlayerOnly, which in Gears 3 passes squad AI as well, so Dom alone ran
+     the count to 2 and the door shut before Marcus. Marcus filters now also carry IgnoredClassProximityTypes =
+     Dom's class.

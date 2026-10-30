@@ -1608,7 +1608,8 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
                 n_ = struct.unpack_from('>i', raw, 0)[0]; q_ = 4
                 for _ in range(n_):
                     el_, q_ = materialconv.raw_props(sp, raw, q_)
-                    actor_ = {x[0]: x[4] for x in el_}.get('Actor')
+                    r_ = {x[0]: x[4] for x in el_}
+                    actor_ = r_.get('Nav') or r_.get('Actor')      # (Gears 1: a NavReference {Nav, Guid})
                     lr = struct.unpack('>i', actor_[:4])[0] if actor_ else 0
                     if lr <= 0 or lr not in c.obj_map or not c.obj_map[lr]: continue
                     try: la = {n: v for n, t, k, v in props_at(sp, sp.export_data(lr - 1))[1]}
@@ -1616,6 +1617,17 @@ def kismet(srcs, names, p3, w, cls, offset_text='0,0,0', new_mesh=None, cover_ma
                     lloc = np.array(struct.unpack('>3f', la['Location'][1])) if la.get('Location') else gloc
                     dist = float(np.linalg.norm(lloc - gloc))
                     if best is None or dist < best[0]: best = (dist, c.obj_map[lr])
+                if best is None:
+                    # its links in another package (by GUID only): this package's converted link nearest to the
+                    # group's centre, within 600 units (CoverGroup_5, the prison's doorway: Dom tethered to the
+                    # doorway itself and blocked it)
+                    for (csi, ci), ref in (cover_map or {}).items():
+                        if not ref: continue           # (any of the target's sources: a section's links)
+                        try: la = {n: v for n, t, k, v in props_at(srcs[csi], srcs[csi].export_data(ci))[1]}
+                        except ValueError: continue
+                        if not la.get('Location'): continue
+                        dist = float(np.linalg.norm(np.array(struct.unpack('>3f', la['Location'][1])) - gloc))
+                        if dist < 600 and (best is None or dist < best[0]): best = (dist, ref)
                 if best: c.obj_map[gi + 1] = best[1]; stats['cover groups: their nearest link'] += 1
         todo = c.plan([main1]) if main1 is not None else []
         # the actors this Kismet refers to (triggers...): before it, so its references resolve to them

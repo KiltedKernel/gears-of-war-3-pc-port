@@ -2831,3 +2831,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   Supports on them; the cell block mesh is connected from Dom's polygon to the crossing polygon. On the easy route he
   then stands in the doorway into S04's corridor (-3222,2566) and the scripted player cannot pass. Next: follow
   sub_8259CCC8 past the predecessor checks (where a cross edge is dropped).
+- DOM FIXED: Gears 3 plans over a pylon graph before any polygon search. The path search entry (sub_82595380) calls the
+  NavigationHandle's vtable+308 (sub_8259D858) with the anchor's and the goal's pylon (each mesh's cached
+  Cast<Pylon>(Outer) at mesh +496); that is a UE3 path-node A* over each pylon's PathList ReachSpecs (spec +80 Start,
+  +84 End actor, +64 Distance, +124 flags; pylon +720 bit 0x00400000 bDisabled; open list +544/+548, cost +532) and
+  its failure is PATHERROR 3, before the polygons. Shipped maps give every joined pylon a ForcedReachSpec to its
+  neighbour (SP_Azura2_02_S: Distance, Start, End = ActorReference {actor 0, GUID}, CollisionRadius 123,
+  CollisionHeight 320, bAddToNavigationOctree false). navcross.py now writes one each way per joined pair (cross-
+  package by GUID, same package by object reference), mantle-only joins included. Dom then leaves the start and
+  follows Marcus into the hallway (traces: sub_825BEAB8 callers, sub_825C1F48 costs, sub_825D9B90 expanded
+  polygons, sub_82595380 result/error/anchor/goal, all under GOW3_NAV_TRACE).

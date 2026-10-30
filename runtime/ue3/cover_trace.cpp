@@ -9,6 +9,7 @@
 #include <os/logger.h>
 #include <ue3/reflection.h>
 #include <cstdlib>
+#include <set>
 #include <atomic>
 
 namespace
@@ -136,6 +137,36 @@ namespace
                 if (!mesh) continue;
                 if (g_edgeArrayOff < 0) { g_edgeArrayOff = FindEdgeArray(mesh); if (g_edgeArrayOff >= 0) LOGFN("navcross: edge pointer array at mesh +0x{:X}", g_edgeArrayOff); }
                 if (g_edgeArrayOff < 0) continue;
+                if (std::getenv("GOW3_NAV_TRACE"))
+                {
+                    static std::unordered_map<uint32_t, uint32_t> shown;
+                    {
+                        // a polygon's own edge list (poly +20 u16 indices, +24 count; polys at mesh +0x9C, 136 bytes)
+                        uint32_t top = p; for (int k = 0; k < 8 && ue3::Read32(top + 40); k++) top = ue3::Read32(top + 40);
+                        static bool done = false;
+                        if (!done && ue3::ObjectName(p) == "Pylon_6" && ue3::ObjectName(top) == "GOW1_SP_Prison_S02_Scripting")
+                        {
+                            done = true;
+                            const uint32_t poly = ue3::Read32(mesh + 0x9C) + 104 * 136, ed = ue3::Read32(poly + 20), en = ue3::Read32(poly + 24);
+                            std::string l;
+                            for (uint32_t j = 0; j < en && j < 40; j++)
+                            {
+                                const uint32_t idx = (ue3::Read32(ed + 2 * (j & ~1u)) >> ((j & 1) ? 0 : 16)) & 0xFFFF;
+                                const uint32_t e = ue3::Read32(ue3::Read32(mesh + g_edgeArrayOff) + 4 * idx);
+                                l += fmt::format(" {}:{:08X}", idx, e ? ue3::Read32(e) : 0);
+                            }
+                            LOGFN("navcross: S02 Pylon_6 poly 104: {} edges:{}", en, l);
+                        }
+                    }
+                    const uint32_t md = ue3::Read32(mesh + 184), mn = ue3::Read32(mesh + 188);
+                    if (shown[mesh] != mn + 1)
+                    {
+                        shown[mesh] = mn + 1;
+                        std::string raw;
+                        for (uint32_t j = 0; j < 24 && md; j++) raw += fmt::format("{:08X} ", ue3::Read32(md + 4 * j));
+                        LOGFN("navcross: {} mesh {:08X} +184: data {:08X} num {} max {} | {}", ue3::ObjectName(p), mesh, md, mn, ue3::Read32(mesh + 192), raw);
+                    }
+                }
                 const uint32_t data = ue3::Read32(mesh + g_edgeArrayOff), n = ue3::Read32(mesh + g_edgeArrayOff + 4);
                 if (data < 0x40000000 || n > 100000) continue;
                 for (uint32_t k = 0; k < n; k++)
@@ -201,17 +232,96 @@ extern "C" PPC_FUNC(__imp__sub_825BEAB8);
 PPC_FUNC(sub_825BEAB8)
 {
     static const bool on = std::getenv("GOW3_NAV_TRACE") != nullptr;
-    const uint32_t caller = uint32_t(ctx.lr);
+    const uint32_t caller = uint32_t(ctx.lr), xedge = ctx.r3.u32;
     __imp__sub_825BEAB8(ctx, base);
+    if (on)
+    {
+        const uint32_t p0 = ue3::Read32(xedge + 116), p1 = ue3::Read32(xedge + 144);
+        static int n = 0;
+        if (p0 != p1 && n++ < 100)
+            LOGFN("navtrace: join {:08X} {}#{} -> {}#{} other {:08X}", xedge, p0 ? ue3::ObjectName(p0) : "null", ue3::Read32(xedge + 136) & 0xFFFF,
+                  p1 ? ue3::ObjectName(p1) : "null", ue3::Read32(xedge + 164) & 0xFFFF, ctx.r3.u32);
+    }
     if (!on) return;
     static std::mutex m; static std::map<uint32_t, std::pair<uint64_t, uint64_t>> by; static uint64_t last = 0;
     std::lock_guard<std::mutex> lock(m);
     auto& c = by[caller]; c.first++; if (!ctx.r3.u32) c.second++;
+    {
+        const uint32_t edge = uint32_t(ctx.r31.u32);   // (restored by the callee: unused)
+        (void)edge;
+    }
     if (GetTickCount64() - last > 2000)
     {
         last = GetTickCount64();
         std::string s;
         for (auto& [k, v] : by) s += fmt::format(" {:08X}: {} ({} null)", k, v.first, v.second);
         LOGFN("navtrace: cross GetOtherPoly callers{}", s);
+    }
+}
+
+// (debugging, GOW3_NAV_TRACE) FNavMeshCrossPylonEdge's cost (slot 5, sub_825C1F48): each call's caller and result
+extern "C" PPC_FUNC(__imp__sub_825C1F48);
+PPC_FUNC(sub_825C1F48)
+{
+    static const bool on = std::getenv("GOW3_NAV_TRACE") != nullptr;
+    const uint32_t caller = uint32_t(ctx.lr), edge = ctx.r3.u32;
+    __imp__sub_825C1F48(ctx, base);
+    if (!on) return;
+    static int n = 0;
+    if (n++ < 200)
+    {
+        const uint32_t p0 = ue3::Read32(edge + 116), p1 = ue3::Read32(edge + 144);
+        auto nm = [](uint32_t a) { return a ? ue3::ObjectName(ue3::Read32(a + 40)) + "." + ue3::ObjectName(a) : std::string("null"); };
+        uint32_t top0 = p0; for (int k = 0; k < 8 && top0 && ue3::Read32(top0 + 40); k++) top0 = ue3::Read32(top0 + 40);
+        uint32_t top1 = p1; for (int k = 0; k < 8 && top1 && ue3::Read32(top1 + 40); k++) top1 = ue3::Read32(top1 + 40);
+        LOGFN("navtrace: cross edge {:08X} {}[{}] #{} -> {}[{}] #{} cost {}", edge, nm(p0), p0 ? ue3::ObjectName(top0) : "", ue3::Read32(edge + 136) & 0xFFFF,
+              nm(p1), p1 ? ue3::ObjectName(top1) : "", ue3::Read32(edge + 164) & 0xFFFF, int32_t(ctx.r3.u32));
+    }
+}
+
+// (debugging, GOW3_NAV_TRACE) polygons the path search expands (sub_825D9B90: a polygon's edge count, r3 = polygon;
+// its mesh at +0, index at +4): per mesh, how many distinct and whether the watched ones (GOW3_NAV_WATCH=104,106,...)
+extern "C" PPC_FUNC(__imp__sub_825D9B90);
+PPC_FUNC(sub_825D9B90)
+{
+    static const bool on = std::getenv("GOW3_NAV_TRACE") != nullptr;
+    const uint32_t poly = ctx.r3.u32;
+    __imp__sub_825D9B90(ctx, base);
+    if (!on || !poly) return;
+    static std::mutex m; static std::map<uint32_t, std::set<uint32_t>> seen; static uint64_t last = 0;
+    std::lock_guard<std::mutex> lock(m);
+    seen[ue3::Read32(poly)].insert(ue3::Read32(poly + 4) >> 16);
+    if (GetTickCount64() - last > 3000)
+    {
+        last = GetTickCount64();
+        static std::vector<uint32_t> watch = [] { std::vector<uint32_t> w; if (const char* e = std::getenv("GOW3_NAV_WATCH")) { std::string s(e); size_t a = 0; while (a < s.size()) { w.push_back(atoi(s.c_str() + a)); size_t c = s.find(',', a); if (c == std::string::npos) break; a = c + 1; } } return w; }();
+        for (auto& [mesh, set] : seen)
+        {
+            std::string w;
+            for (uint32_t x : watch) w += fmt::format(" {}:{}", x, set.count(x) ? "y" : "n");
+            LOGFN("navtrace: mesh {:08X}: {} polygons expanded, max {}{}", mesh, set.size(), set.empty() ? 0 : *set.rbegin(), w);
+        }
+    }
+}
+
+// (debugging, GOW3_NAV_TRACE) the path search entry (sub_82595380, r4 = the NavigationHandle): its result and error,
+// and the handle's vtable+308 (the anchor-to-goal pylon check whose failure is error 3)
+extern "C" PPC_FUNC(__imp__sub_82595380);
+PPC_FUNC(sub_82595380)
+{
+    static const bool on = std::getenv("GOW3_NAV_TRACE") != nullptr;
+    const uint32_t handle = ctx.r4.u32, search = ctx.r3.u32;
+    __imp__sub_82595380(ctx, base);
+    if (!on) return;
+    static int n = 0;
+    const uint8_t err = uint8_t(ue3::Read32(handle + 204) >> 24);
+    if (n++ < 40)
+    {
+        const uint32_t ap = ue3::Read32(handle + 64), gp = ue3::Read32(search + 104);
+        auto pyl = [](uint32_t poly) { const uint32_t mesh = poly ? ue3::Read32(poly) : 0, o = mesh ? ue3::Read32(mesh + 40) : 0;
+            uint32_t top = o; for (int k = 0; k < 8 && top && ue3::Read32(top + 40); k++) top = ue3::Read32(top + 40);
+            return o ? ue3::ObjectName(top) + "." + ue3::ObjectName(o) + fmt::format("#{}", ue3::Read32(poly + 4) >> 16) : std::string("none"); };
+        LOGFN("navtrace: search {} -> {} err {} anchor {} goal {} vt308 {:08X}", ue3::ObjectName(ue3::Read32(handle + 40)), ctx.r3.u32, err,
+              pyl(ap), pyl(gp), ue3::Read32(ue3::Read32(handle) + 308));
     }
 }

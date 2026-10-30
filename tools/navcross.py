@@ -104,7 +104,7 @@ def link(paths, log=print):
                            'V': np.array([v[0] for v in m['verts']], np.float64),
                            'walls': navedges.Walls(np.array([v[0] for v in om['verts']], np.float64), om['polys'])}
     keys = sorted(pyl)
-    added, touched = 0, set()
+    added, touched, joined = 0, set(), set()
     for ia, a in enumerate(keys):
         for b in keys[ia + 1:]:
             # (same package too: navinject.py's joins need exactly shared borders, and the pylons of one region,
@@ -140,6 +140,7 @@ def link(paths, log=print):
                     m['polys'][poly]['second'] = tuple(m['polys'][poly]['second']) + (n,)
                     added += 1
                 touched.add(own)
+            joined.add((a, b))
             log(f'  {os.path.basename(paths[a[0]])} {pk[a[0]].exports[a[1]]["name"]} <-> '
                 f'{os.path.basename(paths[b[0]])} {pk[b[0]].exports[b[1]]["name"]}: {len(out[a][1])} + {len(out[b][1])} edges')
     # mantles over a border between pylons (the hard hallway's barrier: Pylon_4 one side, Pylon_8 the other): a
@@ -179,6 +180,7 @@ def link(paths, log=print):
                     m['polys'][own[1]]['second'] = tuple(m['polys'][own[1]]['second']) + (n,)
                     touched.add(own[0])
                 added += 2
+                joined.add(tuple(sorted((src[0], dst[0]))))
                 log(f'  mantle {os.path.basename(paths[k])} {p.exports[ti]["name"]}#{j}: {pk[src[0][0]].exports[src[0][1]]["name"]} -> '
                     f'{os.path.basename(paths[dst[0][0]])} {pk[dst[0][0]].exports[dst[0][1]]["name"]}')
     for x in touched:
@@ -189,6 +191,49 @@ def link(paths, log=print):
         d = bytearray(w.current(i)); o, pr, end = levelinject.props_at(p, bytes(d), (26,))
         d = levelinject.set_property(p, w, d, o, 'bHasCrossLevelPaths', b'\x01', 'BoolProperty')
         w.replace(i, bytes(d))
+    # the pylon graph: Gears 3 plans a path over pylons first (the handle's vtable+308, sub_8259D858: an A* over each
+    # pylon's PathList ReachSpecs, Start -> End pylon, Distance the cost), and only then over the polygons; a goal in
+    # another pylon with no ReachSpec chain to it fails there (PATHERROR 3, before any polygon search). Shipped maps
+    # give each joined pylon a ForcedReachSpec to its neighbour (SP_Azura2_02_S: End an ActorReference by GUID).
+    # Each joined pair here gets one each way, in the Start pylon's package
+    for p, w in zip(pk, ws): p.names = w.names              # (names added for the new properties: parsed back)
+    loc = {}
+    for x in keys:
+        o, pr, end = levelinject.props_at(pk[x[0]], ws[x[0]].current(x[1]), (26,))
+        l = {k_: v for k_, t, kk, v in pr}.get('Location')
+        loc[x] = np.array(struct.unpack('>3f', l[1])) if l else pyl[x]['V'].mean(0)
+    specs = {}
+    for a, b in sorted(joined):
+        for s_, e_ in ((a, b), (b, a)):
+            specs.setdefault(s_, []).append(e_)
+    for x, ends in specs.items():
+        k, i = x
+        p, w = pk[k], ws[k]
+        cls = next((-j - 1 for j, im in enumerate(p.imports) if im['name'] == 'ForcedReachSpec' and im['class'] == 'Class'), None)
+        if cls is None:
+            eng = next(-j - 1 for j, im in enumerate(p.imports) if im['name'] == 'Engine' and im['class'] == 'Package' and im['outer'] == 0)
+            cls = w.add_import('Core', 'Class', eng, 'ForcedReachSpec')
+            p.imports.append({'class_package': 'Core', 'class': 'Class', 'outer': eng, 'name': 'ForcedReachSpec'})
+        lvl = next(j for j, e in enumerate(p.exports) if p.class_name(e['class']) == 'Level' and p.path(j) == 'TheWorld.PersistentLevel')
+        refs = []
+        for y in ends:
+            end_ref = struct.pack('>i', y[1] + 1) + bytes(16) if y[0] == k else struct.pack('>i', 0) + pyl[y]['guid']
+            d = bytearray(struct.pack('>i', -1)) + struct.pack('>ii', *w.name('None'))
+            d = levelinject.set_property(p, w, d, 4, 'Distance', struct.pack('>i', int(np.linalg.norm(loc[y] - loc[x]))), 'IntProperty')
+            d = levelinject.set_property(p, w, d, 4, 'Start', struct.pack('>i', i + 1), 'ObjectProperty')
+            d = levelinject.set_property(p, w, d, 4, 'End', end_ref, 'StructProperty', 'ActorReference')
+            d = levelinject.set_property(p, w, d, 4, 'CollisionRadius', struct.pack('>i', 123), 'IntProperty')
+            d = levelinject.set_property(p, w, d, 4, 'CollisionHeight', struct.pack('>i', 320), 'IntProperty')
+            d = levelinject.set_property(p, w, d, 4, 'bAddToNavigationOctree', bytes(1), 'BoolProperty')
+            refs.append(w.add_export(cls, lvl + 1, ('ForcedReachSpec', 7000 + len(w.exports)), bytes(d), flags=0x0007000400000000))
+        d = bytearray(w.current(i)); o, pr, end = levelinject.props_at(p, bytes(d), (26,))
+        have = {k_: v for k_, t, kk, v in pr}.get('PathList')
+        old = list(struct.unpack_from(f'>{struct.unpack_from(">i", have)[0]}i', have, 4)) if have else []
+        d = levelinject.set_property(p, w, d, o, 'PathList', struct.pack(f'>i{len(old) + len(refs)}i', len(old) + len(refs), *old, *refs), 'ArrayProperty')
+        w.replace(i, bytes(d))
+        touched.add(x)
+        log(f'  {os.path.basename(paths[k])} {p.exports[i]["name"]}: ForcedReachSpecs to ' +
+            ', '.join(f'{os.path.basename(paths[y[0]])} {pk[y[0]].exports[y[1]]["name"]}' for y in ends))
     # the joined pylons listed in their level's CrossLevelActors: the level's native data after the list ends holds an
     # array (empty), CoverLinkRefs (count + refs), CoverIndexPairs (count + 5-byte records), then CrossLevelActors
     # (count + refs; SP_Azura2_02_S: its pylon and 26 cover links), whose references the engine resolves by GUID as

@@ -2859,3 +2859,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   GearPawn_COGDomG2, not GearPawn_COGDom, which does not match him). The scripted easy route then passes the door.
 - Next on the easy route: the catwalk bridge north of (-3320,4800) (S04_Scripting InterpActor_19/_22,
   RB_Prison_Floors_Catwalks_Straight_1024; hard route's bridgeChopper blows it up) is not there for Marcus.
+- OPEN: the easy route's catwalk bridge (S04_Scripting InterpActor_19 at -3328,4800,752 and _22 at -3328,5488,752;
+  yaw 90, DrawScale3D x 0.672; mesh RB_Prison_Floors_Catwalks_Straight_1024, 52 verts, 36 tris, 1024x384x18, two
+  elements) neither draws nor collides: Marcus stops at its near end (y ~4783) and, teleported onto it at y 5000,
+  falls to z 395. At runtime the actor is at its placed location, bHidden 0, Physics 7, in the level's actor list;
+  its StaticMeshComponent has the mesh, HiddenGame 0, CollideActors/BlockActors 1; the mesh converted with
+  UseSimple*Collision false (as the working door, SizedDoor1_DR) and element index ranges match Gears 1. Not yet
+  explained; next: compare the converted mesh byte for byte with a working two-element mover, or convert it through
+  the static mesh (merge) path instead.
+- kismet_trace: the per-op package filter is re-evaluated when an op's outermost object changes (an address reused by
+  a newly loaded level kept the old answer). S04_Scripting ops still did not log in the bridge runs: unresolved.

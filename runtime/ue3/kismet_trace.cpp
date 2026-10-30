@@ -56,7 +56,9 @@ void Start()
         if (!opClass) { LOGN_WARNING("kismet: SequenceOp not found"); return; }
         std::unordered_map<uint32_t, int> opOff, evOff;     // per class: ActivateCount / TriggerCount offsets
         std::unordered_map<uint32_t, uint32_t> last;        // op -> last count
-        std::unordered_map<uint32_t, bool> wanted;          // op -> in the filtered packages
+        // op -> (its outermost object, in the filtered packages): an address freed with its level and reused by
+        // another level's op is judged again (cached by address alone, S04's ops were never traced after the menu's)
+        std::unordered_map<uint32_t, std::pair<uint32_t, bool>> wanted;
         int logged = 0;
         LOGFN("kismet: tracing sequence ops{}", filter.empty() ? "" : " in packages with \"" + filter + "\"");
         for (;;)
@@ -64,9 +66,16 @@ void Start()
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             for (uint32_t o : ue3::FindInstancesOf(opClass))
             {
+                uint32_t top = o;
+                for (int k = 0; k < 24 && ue3::Read32(top + 40); k++) top = ue3::Read32(top + 40);
                 auto w = wanted.find(o);
-                if (w == wanted.end()) w = wanted.emplace(o, filter.empty() || PackageOf(o).find(filter) != std::string::npos).first;
-                if (!w->second) continue;
+                if (w == wanted.end() || w->second.first != top)
+                {
+                    wanted[o] = { top, filter.empty() || PackageOf(o).find(filter) != std::string::npos };
+                    last.erase(o);
+                    w = wanted.find(o);
+                }
+                if (!w->second.second) continue;
                 const uint32_t cls = ue3::ClassOf(o);
                 const bool isEvent = eventClass && ue3::IsA(o, eventClass);
                 auto& offs = isEvent ? evOff : opOff;

@@ -57,6 +57,22 @@ and having Claude plan the combination from all repos. We agreed. So the runtime
 **COGBox's Gears 3** (Title Update 6 by default), through its `--ue3_mods` overlay (`Gears3-Native/src/layer2_ue3/
 config_install.cpp`) and its launcher's mod list (`Gears2-Native/cogbox/src/mods.cpp`).
 
+## Tested: the trilogy mod on COGBox 0.2.5 (2026-10-31)
+
+COGBox's release, Gears 3 Title Update 6 build (`Gears3\port-tu6\gow3.exe`), started as its launcher starts it
+(`--game_data_root`, `--user_data_root`, `--update_data_root` = the update's files with `default.xexp`,
+`--gow2_dxc_dir=<release>\shared`, `--ue3_mods=<mod folder>`), with the Gears 1 chapter 1 mod:
+- [V] the XEX patch applies (0.0.0.11 -> 0.0.6.11); `ue3_mods` takes the mod's 30 files: 6 replaced, 28 added, 34
+  TOC lines in each of the three TOCs; the game reaches the title screen and runs (150 s, no crash).
+- [V] the mod's `config\*.ini` fragments are skipped ("the game has no folder 'config'"): COGBox has no fragment
+  merge, so the trilogy's chapter entry (chapter 32) and objectives never reach the configuration.
+- [V] COGBox starts a chapter as `--ue3_launch="GearGame_P?loadcheckpoint=0?chapter=N -nostartupmovies"`; the map comes
+  from `Default__GearTypes.ChapterLevelNames[N]`, which holds no chapter 32 without our campaign-chapter hook.
+  `--ue3_launch=GOW1_SP_Prison_P` alone stayed on the title screen.
+So the adapter needs, in this order: fragment merge into the Coalesced copy COGBox already serves (its overlay, TOC
+and SHA-1 table then cover it), the chapter hook (TU6: FName constructor 823135B0), content packages (TU6:
+LoadPackageAsync 822C7870, LoadPawnClass 82A3BC48), and a Select Chapter / launcher entry for chapters 32+.
+
 ## Direction that follows
 
 Whatever runtime the merged package keeps, our mod features should arrive as **a portable core plus thin adapters**

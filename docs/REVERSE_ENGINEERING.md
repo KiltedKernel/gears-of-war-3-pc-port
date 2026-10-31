@@ -227,3 +227,19 @@ A crash report names the UE3 objects held in the guest registers. Recompiled fun
 `tools/find_refs.py` finds code forming an address, `tools/ppcdis.py` / `tools/xdis.py` disassemble,
 `tools/class_vtable.py` finds a native class's vtable, `tools/match_function.py` finds a function from another game
 by shape.
+
+## Title Update 6 addresses of the mod hooks
+
+Title Update 6 relinks the executable (COGBox and gow3-recomp default to it). Mapped with gow3-recomp's
+`tools/map_tu6_addresses.py` (functions matched by their instructions with addresses blanked), base -> TU6:
+
+| Function | Base (0.0.0.11) | TU6 | Used by |
+|---|---|---|---|
+| UObject::LoadPackageAsync | 822B7328 | 822C7870 | content_packages.cpp |
+| (class default lookup, see campaign_chapters.cpp) | 822C3C20 | 822D3B68 | campaign_chapters.cpp |
+| FName constructor (FName*, const TCHAR*, EFindName) | 82302F28 | 823135B0 | campaign_chapters.cpp |
+| GearMPCharacterStore LoadPawnClass | 82A29D98 | 82A3BC48 | content_packages.cpp |
+
+TU6 also ships `GearGame\Patches\ScriptPatch_<package>.bin` (Core, Engine, GearGame, IpDrv...): script bytecode
+patches the engine applies when those packages load, so a mod's level that relies on script behaviour may differ
+between base and TU6.

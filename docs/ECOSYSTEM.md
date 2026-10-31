@@ -48,6 +48,15 @@ texture packs, `GOW2_VFS_OVERRIDES` / `GOW3_VFS_OVERLAY` file serving, Coalesced
    Gears 1, UE3 package formats for versions 374/575/828 (docs/ENGINEERING_LOG.md, REVERSE_ENGINEERING.md).
 4. **Test tooling**: scripted playtests (walk, route, shoot, fight), property / Kismet / navigation tracing.
 
+## The merger (2026-10-31)
+
+Flippage proposed, by email to Shagg, Santiago and us ("Gears Definitive Collection"), merging the projects into
+**Shagg's COGBox** and working on that together (DLSS/FSR with the HUD kept out of the upscaler from gow3-recomp,
+Android and 3+ player co-op from the Gears 2 port, pre-game shader compilation from COGBox), coordinating on Discord,
+and having Claude plan the combination from all repos. We agreed. So the runtime our mod features target is
+**COGBox's Gears 3** (Title Update 6 by default), through its `--ue3_mods` overlay (`Gears3-Native/src/layer2_ue3/
+config_install.cpp`) and its launcher's mod list (`Gears2-Native/cogbox/src/mods.cpp`).
+
 ## Direction that follows
 
 Whatever runtime the merged package keeps, our mod features should arrive as **a portable core plus thin adapters**

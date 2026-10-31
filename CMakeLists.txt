@@ -20,7 +20,7 @@ target_compile_options(gow3_ppc PRIVATE -march=x86-64-v3 -Wno-everything -fno-st
 set(RT ${CMAKE_SOURCE_DIR}/runtime)
 file(GLOB_RECURSE RT_SOURCES CONFIGURE_DEPENDS ${RT}/*.cpp)
 list(FILTER RT_SOURCES EXCLUDE REGEX ".*/thirdparty/.*")
-add_executable(gow3 ${RT_SOURCES} ${RT}/thirdparty/o1heap/o1heap.c)
+add_executable(gow3 ${RT_SOURCES} ${CMAKE_SOURCE_DIR}/modcore/modcore.cpp ${RT}/thirdparty/o1heap/o1heap.c)
 target_include_directories(gow3 PRIVATE ${RT} ${RT}/thirdparty/o1heap ${RT}/thirdparty/unordered_dense
     ${XENON}/XenonUtils ${XENON}/thirdparty/fmt/include ${XENON}/thirdparty/xxHash)
 target_compile_definitions(gow3 PRIVATE FMT_HEADER_ONLY NOMINMAX GOW3_VERSION="${GOW3_VERSION}")

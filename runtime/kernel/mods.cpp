@@ -3,7 +3,6 @@
 #include "mods.h"
 #include <os/logger.h>
 #include <user/paths.h>
-#include <bcrypt.h>
 #include <algorithm>
 #include <fstream>
 #include <map>
@@ -11,8 +10,6 @@
 #include <set>
 #include <sstream>
 #include <unordered_map>
-
-#pragma comment(lib, "bcrypt.lib")
 
 namespace mods
 {
@@ -47,26 +44,19 @@ namespace
         static std::once_flag once;
         std::call_once(once, [] {
             s.mods = modinfo::Scan(ModsRoot());
-            std::map<std::string, std::vector<std::string>> owners;
             for (const Mod& m : s.mods)
-            {
                 LOGFN("mods: {} {}{}{} (priority {}, {}){}", m.name, m.version, m.author.empty() ? "" : " by ", m.author,
                       m.priority, modinfo::SideName(m.side), !m.enabled ? " - disabled" : !m.problem.empty() ? " - off: " + m.problem : "");
-                if (!m.Active()) continue;
-                for (const auto& [rel, path] : modinfo::Files(m))
-                {
-                    s.files[rel] = path;                                    // later (higher priority) wins
-                    owners[rel].push_back(m.name);
-                }
-                for (const auto& f : modinfo::Fragments(m)) s.fragments.emplace_back(&m, f);
+            modcore::Index ix = modcore::BuildIndex(s.mods);
+            s.files.insert(ix.files.begin(), ix.files.end());
+            for (const auto& [mod, f] : ix.fragments)
+                s.fragments.emplace_back(&*std::find_if(s.mods.begin(), s.mods.end(), [&](const Mod& m) { return m.name == mod && m.Active(); }), f);
+            for (const auto& [rel, who] : ix.conflicts)
+            {
+                std::string list;
+                for (const auto& n : who) list += (list.empty() ? "" : ", ") + n;
+                LOGFN("mods: conflict on {}: {} (the last wins)", rel, list);
             }
-            for (const auto& [rel, who] : owners)
-                if (who.size() > 1)
-                {
-                    std::string list;
-                    for (const auto& n : who) list += (list.empty() ? "" : ", ") + n;
-                    LOGFN("mods: conflict on {}: {} (the last wins)", rel, list);
-                }
             s.net = modinfo::ForMultiplayer(s.mods);
             LOGFN("mods: {} mods, {} files, {} configuration fragments{}", s.mods.size(), s.files.size(), s.fragments.size(),
                   s.net.fingerprint ? "; multiplayer sessions need: " + s.net.summary : "");
@@ -74,72 +64,32 @@ namespace
         return s;
     }
 
-    std::string Md5Hex(const std::filesystem::path& file, uint64_t& size)
-    {
-        size = 0;
-        BCRYPT_ALG_HANDLE alg = nullptr; BCRYPT_HASH_HANDLE h = nullptr;
-        if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_MD5_ALGORITHM, nullptr, 0) != 0) return {};
-        BCryptCreateHash(alg, &h, nullptr, 0, nullptr, 0, 0);
-        std::ifstream in(file, std::ios::binary);
-        std::vector<char> buf(1 << 20);
-        while (in)
-        {
-            in.read(buf.data(), buf.size());
-            const auto n = in.gcount();
-            if (n <= 0) break;
-            BCryptHashData(h, (PUCHAR)buf.data(), ULONG(n), 0);
-            size += uint64_t(n);
-        }
-        uint8_t digest[16]{};
-        BCryptFinishHash(h, digest, sizeof(digest), 0);
-        BCryptDestroyHash(h); BCryptCloseAlgorithmProvider(alg, 0);
-        return fmt::format("{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
-                           digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7], digest[8],
-                           digest[9], digest[10], digest[11], digest[12], digest[13], digest[14], digest[15]);
-    }
-
     // the disc's TOC with every mod file under GearGame\CookedXbox360 listed by its size and MD5 (replaced or added)
     std::filesystem::path MergedToc(State& s, const std::string& rel, const std::filesystem::path& gameRoot)
     {
         if (auto it = s.tocs.find(rel); it != s.tocs.end()) return it->second;
-        std::vector<std::string> lines;
+        std::string toc;
         {
             std::ifstream in(gameRoot / rel, std::ios::binary);
-            std::string line;
-            while (std::getline(in, line)) { if (!line.empty() && line.back() == '\r') line.pop_back(); lines.push_back(line); }
+            toc.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         }
-        std::map<std::string, std::filesystem::path> modded;   // lower-case file name -> the winning mod's file
+        std::map<std::string, modcore::TocFile> modded;   // lower-case file name -> what the winning mod serves
         for (const auto& [frel, path] : s.files)
-            if (frel.starts_with("geargame\\cookedxbox360\\")) modded[Lower(path.filename().string())] = path;
-        std::set<std::string> seen;
-        for (auto& line : lines)
-        {
-            std::istringstream ls(line);
-            std::string size, zero, path, md5;
-            if (!(ls >> size >> zero >> path >> md5)) continue;
-            const std::string name = Lower(path.substr(path.find_last_of('\\') + 1));
-            if (auto it = modded.find(name); it != modded.end())
+            if (frel.starts_with("geargame\\cookedxbox360\\"))
             {
-                uint64_t n = 0; const std::string h = Md5Hex(it->second, n);
-                line = fmt::format("{} 0 {} {}", n, path, h);
-                seen.insert(name);
+                modcore::TocFile f; f.name = path.filename().string();
+                f.md5 = modcore::Md5HexFile(path, &f.size);
+                modded[Lower(f.name)] = f;
             }
-        }
         // files new to the game are listed in the main TOC only (the language TOCs list localized files)
-        std::vector<std::string> added;
-        for (const auto& [name, file] : modded)
-            if (!seen.count(name) && rel == "geargame\\xbox360toc.txt")
-            {
-                uint64_t n = 0; const std::string h = Md5Hex(file, n);
-                added.push_back(fmt::format("{} 0 ..\\GearGame\\CookedXbox360\\{} {}", n, file.filename().string(), h));
-            }
-        lines.insert(lines.begin(), added.begin(), added.end());
+        int changed = 0, added = 0;
+        const std::string merged = modcore::MergeToc(toc, modded, rel == "geargame\\xbox360toc.txt", "..\\GearGame\\CookedXbox360\\", &changed, &added);
         const auto out = GetUserPath() / "mods_toc" / rel;
         std::error_code ec;
         std::filesystem::create_directories(out.parent_path(), ec);
         std::ofstream o(out, std::ios::binary);
-        for (const auto& line : lines) o << line << "\r\n";
-        LOGFN("mods: merged {} ({} entries changed, {} added) -> {}", rel, seen.size(), added.size(), out.string());
+        o << merged;
+        LOGFN("mods: merged {} ({} entries changed, {} added) -> {}", rel, changed, added, out.string());
         return s.tocs[rel] = out;
     }
 }

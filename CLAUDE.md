@@ -16,13 +16,15 @@ code), whose real deliverables are:
 **Direction (2026-10-30):** gow3-recomp becomes the Gears 3 base; this repository narrows to mod support and the
 trilogy. Our mod runtime files are offered to gow3-recomp under BSD-3 (its issue #25). The plan, their extension
 points and the file-by-file mapping: **docs/REXGLUE_PORT.md**. Our runtime stays the trilogy's test bed until the
-trilogy plays the same on gow3-recomp.
+trilogy plays the same on gow3-recomp. Flippage has since proposed one merged package with the Gears 2 port and
+COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-runtime adapters.
 
 ## Where the knowledge is
 
 | File | What |
 |---|---|
-| docs/REXGLUE_PORT.md | the move onto gow3-recomp: plan, mapping, steps |
+| docs/ECOSYSTEM.md | the other Gears projects (COGBox, Gears 2 port, gow3-recomp), the proposed merger, what we bring |
+| docs/REXGLUE_PORT.md | the move onto a ReXGlue runtime: portable mod core + adapters, mapping, steps |
 | docs/TRILOGY.md | the converter, recipes, what each chapter needs |
 | docs/ENGINEERING_LOG.md | every finding, newest at the end (long: search it, e.g. for "Pylon", "CoverLink", "Kismet") |
 | docs/REVERSE_ENGINEERING.md | game facts: addresses, layouts, formats |

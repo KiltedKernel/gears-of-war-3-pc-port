@@ -1,5 +1,11 @@
 # Moving mod support and the trilogy onto gow3-recomp
 
+**Revised 2026-10-31:** Flippage proposed merging gow3-recomp, the Gears 2 port and COGBox into one package
+(docs/ECOSYSTEM.md). COGBox already serves mods (overlay device, merged TOC, SHA-1 table) under MIT, so our part is a
+**portable core** (`modcore/`, standard C++, BSD-3: manifests, load order, file mapping, config fragment merge,
+merged TOC lines, multiplayer fingerprint) plus thin **adapters** per runtime and the **game hooks** (campaign
+chapters, content packages) for the base disc and Title Update 6. The gow3-recomp mapping below is one adapter.
+
 Plan for running this project's mods on [Flippage/gears-of-war-3-recomp](https://github.com/Flippage/gears-of-war-3-recomp)
 (ReXGlue SDK, BSD-3), proposed in its [issue #25](https://github.com/Flippage/gears-of-war-3-recomp/issues/25).
 That project becomes the Gears 3 base; this repository keeps the mod tools, the trilogy converter and the runtime
@@ -25,7 +31,12 @@ Our runtime stays the trilogy's test bed until the trilogy plays the same on gow
 | Ours | On gow3-recomp |
 |---|---|
 | `kernel/mods.cpp`, `mods.h`, `mod_manifest.h` (discovery, load order, merged TOC) | at start, before the VFS reads its variables: discover `mods\`, write the merged `Xbox360TOC.txt` (and per-language TOCs) to a cache folder, and hand every mod file plus the TOC to `GOW2_VFS_OVERRIDES` (replaced files) and an overlay folder (new files). No kernel hooks needed. |
-| `kernel/mod_config.cpp` (config fragments into `Coalesced_<LANG>.bin`) | build on `gow3_coalesced.cpp`, which already rewrites bundles and patches HashSec; the size limit (a copy may not grow past its TOC size) goes away once the TOC entry is ours (merged TOC) |
+| `kernel/mod_config.cpp` (config fragments into `Coalesced_<LANG>.bin`) | build on `gow3_coalesced.cpp`, which already rewrites bundles and patches HashSec; the size limit (a copy may not grow past its TOC size) goes away once the TOC entry is ours (merged TOC). Our runtime stubs XeCryptSha, so the HashSec check never failed here; ReXGlue hashes for real, so every merged bundle's SHA-1 must go through `PatchCoalescedHashes` |
+
+Files: `GOW2_VFS_OVERRIDES` only replaces files the game folder has (it is consulted while a folder is listed);
+new files (the trilogy's packages) need the overlay (`GOW3_VFS_OVERLAY`, one overlay folder): build one cache
+folder of the new files (hard links where the volume allows, else copies), replaced files and the merged TOCs as
+overrides pointing straight at the mod folders / cache.
 | `ue3/campaign_chapters.cpp` (chapters 32+ into `Default__GearTypes.ChapterLevelNames`) | same logic on the game thread through a `SetFunction` hook; FName construction `sub_82302F28` (base). TU6 addresses still to find |
 | `ue3/content_packages.cpp` (load and root `MPCH_*_SF` packages) | same, calling `UObject::LoadPackageAsync` (`sub_822B7328`, base) from a game-thread hook |
 

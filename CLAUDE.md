@@ -75,7 +75,8 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
 
 - Port the six mod files and the debug tooling onto gow3-recomp (docs/REXGLUE_PORT.md).
 - Trilogy, Gears 1 chapter 1 (prison), easy route: scripted runs pass the cell, the cover room, the S02 door, the
-  Drone fight and the S04 catwalk (fixed 2026-11-02: two converter bugs, ENGINEERING_LOG "the catwalk"). Next: the
-  security buttons (Trigger_ButtonInteraction at y 4675 / 6259), S05, the yard.
+  Drone fight, the S04 catwalk (fixed 2026-11-02: two converter bugs, ENGINEERING_LOG "the catwalk") and the
+  roadie-run door (button at y 4675, hold A); S05's scripting starts. Next: S05 to the yard (script:
+  build/scratch/buttons8.txt, extend it).
 - Not yet verified: the hard route end to end, the yard fight, the Corpser ending, the hand-off to chapter 2.
   Chapters 2 and 3 need rebuilding with the converter fixes.

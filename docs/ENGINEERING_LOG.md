@@ -2897,3 +2897,10 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   checkpoint (the chapter's first) runs its events on the save too.
 - Verified (scripted easy route, bridge1): the door stays open, Marcus goes through, fights the Drone, crosses the
   catwalk at floor height (z 846, y 4469 -> 5192); the catwalk draws with its railings.
+- **S04's roadie-run door works as in Gears 1.** The first security button (Trigger_ButtonInteraction_0 at
+  (-3197, 4675), radius 96) fires easyPath.SeqEvt_ButtonPush_1 -> Gate_1 -> Interp_1 (InterpData_3, 10.4 s: goDom at
+  0.97 s, the door open from 0.5 s to about 7 s, doorShutDialog at 8.5 s). Scripted (build/scratch/buttons8.txt): press
+  X within reach and facing it, then hold A (roadie run) on a straight route north: Marcus passes the door (y 6166 ->
+  6467) and S05's scripting starts (easyRoute.SeqEvent_Touch_0, domEasy.SeqEvent_Touch_1). Walking, or a route with
+  close waypoints (the walker overshoots about 90 units and turns back), misses the window. The second button
+  (y 6259, radius 48) is past the door.

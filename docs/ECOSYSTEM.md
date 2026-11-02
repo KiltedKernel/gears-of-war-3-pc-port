@@ -86,3 +86,26 @@ Whatever runtime the merged package keeps, our mod features should arrive as **a
 
 Licenses: MIT and BSD-3 mix freely; our GPL-3 runtime code that descends from UnleashedRecomp
 (`kernel/io/file_system.cpp`) never goes into the merged package.
+
+## Building COGBox's Gears 3 from source (2026-11-01, no third_party from Shagg's PC)
+
+COGBox's scripts expect `Gears2-Native\third_party` from Shagg's PC (not in the repo). Rebuilt from the repo alone:
+1. ReXGlue SDK: `git clone --branch nightly-20261002-bd833a2a https://github.com/rexglue/rexglue-sdk` (+ submodules);
+   apply `Gears2-Native/patches/rexglue-sdk-full.diff` (LF line endings: the Windows checkout turns the .diff files to
+   CRLF), then 46 (`patch -p3`), 47 and 48 (`patch -p0` in `src/kernel/xam`), 49b, 50, 52, 53 (`git apply`); move the
+   submodules to `sdk-pins.txt`; replace git symlinks checked out as text files with their targets (libmspack's
+   lzxd.c and others); configure single-config Ninja Release with clang (`-DCMAKE_CXX_STANDARD=23
+   -DCMAKE_CXX_SCAN_FOR_MODULES=OFF -DREXGLUE_USE_VULKAN=ON`; the preset's Ninja Multi-Config failed on duplicate
+   module outputs with CMake 4.3), build, install.
+2. `Gears2-Native\third_party`: `dxc-1.9.2607` (Microsoft's dxc_2026_07_29.zip), `flip` (NVlabs/flip),
+   `vulkan-headers-v1.4.0` (the SDK's `thirdparty/vulkan-headers/include`). Optional SDKs (DLSS, FSR, XeSS, NVAPI, Anti-Lag,
+   Agility, Catch2) are left out: the build skips them (`-DGN_BUILD_TESTS=OFF`).
+3. `Gears3-Native\game\tu6\patched`: the disc's `default.xex` + the update's `default.xexp` (gow3-recomp's
+   `tools/stfs_extract.py` takes it out of the TU package). Configure `Gears3-Native` with Ninja, clang/clang++,
+   `-DCMAKE_PREFIX_PATH=<sdk install> -Drexglue_DIR=<sdk install>/lib/cmake/rexglue -DGN_THIRD_PARTY=<third_party>
+   -DGN_GAME_VERSION=tu6 -DGN_BUILD_TESTS=OFF`; build target `gow3_codegen`, configure again, build.
+4. Run: `gow3.exe --game_data_root=<disc> --user_data_root=<folder> --update_data_root=<TU files> --ue3_mods=<mod>`.
+VS 2022 must be 17.10+ (MSVC 14.40+): the prebuilt SDK's spdlog wants newer STL symbols than 14.37 has.
+
+Our mod support on COGBox: branch `kiltedkernel/mod-extras`, draft PR https://github.com/Shagg88/COGBox/pull/122
+(Gears3-Native/notes/28-mod-support.md there).

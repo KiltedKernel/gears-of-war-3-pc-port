@@ -108,6 +108,8 @@ namespace modcore
         return m;
     }
 
+    inline void CheckProblems(std::vector<Manifest>& mods, const std::string& game);
+
     // every mod under a mods folder, in load order, with each one's problem set: made for another game, or a required
     // mod that is missing or off. Order: by priority, then name ("(loose files)" sorts by that name); or, when `order`
     // is given (a launcher's list of folder or mod names, first loaded first, as COGBox keeps it), the listed mods in
@@ -136,6 +138,23 @@ namespace modcore
             const size_t ra = rank(a), rb = rank(b);
             if (ra != rb) return ra < rb;
             return a.priority != b.priority ? a.priority < b.priority : a.name < b.name; });
+        CheckProblems(mods, game);
+        return mods;
+    }
+
+    // mods given as an explicit list of folders, already in load order (a launcher's list: COGBox's --ue3_mods), each
+    // read from its mod.ini when it has one (a folder alone is a mod named after it), with problems set as Scan sets them
+    inline std::vector<Manifest> FromFolders(const std::vector<std::filesystem::path>& dirs, const std::string& game = "gears3")
+    {
+        std::vector<Manifest> mods;
+        for (const auto& d : dirs) mods.push_back(Read(d));
+        CheckProblems(mods, game);
+        return mods;
+    }
+
+    // made for another game, or a required mod that is missing or off
+    inline void CheckProblems(std::vector<Manifest>& mods, const std::string& game)
+    {
         for (auto& m : mods)
             if (m.game != game)
                 m.problem = "made for " + std::string(m.game == "gears3" ? "Gears of War 3" : m.game == "gears2" ? "Gears of War 2" : m.game == "gears1" ? "Gears of War" : m.game);
@@ -156,7 +175,6 @@ namespace modcore
                 }
             }
         }
-        return mods;
     }
 
     // where a mod's file goes in the game, from its path in the mod (lower case, backslashes). Mods made for the Xbox

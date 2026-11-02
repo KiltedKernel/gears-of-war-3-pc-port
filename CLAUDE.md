@@ -68,6 +68,10 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
 
 ## Open work (keep this current)
 
+- COGBox (the merged project's home): mod support PR https://github.com/Shagg88/COGBox/pull/122 (draft; local clone
+  `../cogbox`, branch kiltedkernel/mod-extras; build recipe in docs/ECOSYSTEM.md). Open: start the trilogy chapter from
+  Select Chapter on COGBox; the disc build; launcher entries for chapters 32+; the test tooling as a COGBox patch set.
+
 - Port the six mod files and the debug tooling onto gow3-recomp (docs/REXGLUE_PORT.md).
 - Trilogy, Gears 1 chapter 1 (prison), easy route: scripted runs pass the cell, the cover room (shoot the two window
   panels to unjam the doors) and the S02 door; Dom follows across sections. **Blocked** at the catwalk bridge north

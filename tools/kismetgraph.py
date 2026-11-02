@@ -41,6 +41,23 @@ def describe(p, i):
     except Exception as ex: return f'  (unreadable: {ex})'
     a = {r[0]: r for r in recs}
     lines = []
+    # streaming actions: the levels they act on (LevelName, LevelNames[] / Levels[].LevelName)
+    if 'EventName' in a: lines.append(f'    EventName: {p.names[struct.unpack_from(upk.E + "i", a["EventName"][4], 0)[0]]}')
+    for key in ('LevelName', 'LevelNames'):
+        if key in a:
+            raw = a[key][4]
+            if key == 'LevelName': idx = [struct.unpack_from(upk.E + 'i', raw, 0)[0]]
+            else:
+                n = struct.unpack_from(upk.E + 'i', raw, 0)[0]
+                idx = [struct.unpack_from(upk.E + 'i', raw, 4 + 8 * k)[0] for k in range(n)]
+            lines.append(f'    {key}: {", ".join(p.names[k] for k in idx)}')
+    if 'Levels' in a:
+        names = []
+        for el in elements(p, a['Levels'][4]):
+            if 'LevelName' in el: names.append(p.names[struct.unpack_from(upk.E + 'i', el['LevelName'][4], 0)[0]])
+        if names: lines.append(f'    Levels: {", ".join(names)}')
+    for key in ('bShouldBeVisible', 'bShouldBlockOnLoad', 'bMakeVisibleAfterLoad'):
+        if key in a: lines.append(f'    {key}: {a[key][4].hex() if isinstance(a[key][4], bytes) else a[key][4]}')
     if 'OutputLinks' in a:
         for el in elements(p, a['OutputLinks'][4]):
             desc = str_of(el['LinkDesc'][4]) if 'LinkDesc' in el else '?'

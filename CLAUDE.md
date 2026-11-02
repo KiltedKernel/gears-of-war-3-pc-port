@@ -74,9 +74,8 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
   loads, then a loading screen forever; same mod works here); launcher entries for chapters 32+; test tooling.
 
 - Port the six mod files and the debug tooling onto gow3-recomp (docs/REXGLUE_PORT.md).
-- Trilogy, Gears 1 chapter 1 (prison), easy route: scripted runs pass the cell, the cover room (shoot the two window
-  panels to unjam the doors) and the S02 door; Dom follows across sections. **Blocked** at the catwalk bridge north
-  of (-3330, 4800): S04_Scripting InterpActor_19 / _22 neither draw nor collide, though actor and component look
-  right at run time and a swapped-in working mesh does not show either (ENGINEERING_LOG, "catwalk").
+- Trilogy, Gears 1 chapter 1 (prison), easy route: scripted runs pass the cell, the cover room, the S02 door, the
+  Drone fight and the S04 catwalk (fixed 2026-11-02: two converter bugs, ENGINEERING_LOG "the catwalk"). Next: the
+  security buttons (Trigger_ButtonInteraction at y 4675 / 6259), S05, the yard.
 - Not yet verified: the hard route end to end, the yard fight, the Corpser ending, the hand-off to chapter 2.
   Chapters 2 and 3 need rebuilding with the converter fixes.

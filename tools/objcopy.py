@@ -2466,13 +2466,15 @@ def touch_classes(c, props):
     # a player-only event (Gears 1's default, or a Marcus filter): Gears 3's bPlayerOnly passes the squad AI too, so
     # Dom's class is ignored by it (Dom ahead of the player touched the prison's S04 checkpoint trigger, Trigger_3,
     # and its door counter's Marcus event: the S02 door shut before Marcus reached it)
+    # Ignored by Dom's base class, GearGame.GearPawn_COGDomBase (GearPawn_COGDomG2 < GearPawn_COGDom < it; the player's
+    # GearPawn_COGMarcusG2MP is a GearPawn_HumanBaseMP): GearGame is always loaded. Dom's own class is cooked into a
+    # carrier streamed in after the persistent level, whose import of it was None, and ClassIsChildOf(x, None) is true:
+    # every pawn was ignored, so the prison's persistent touch events never fired (S04_Scripting and S05's sections were
+    # never made visible: the catwalk, InterpActor_19, neither drew nor collided)
     if ('Pawn_COGMarcus' in names or a.get('bPlayerOnly', True)) and 'Pawn_COGDom' not in names:
-        cands = PAWN_MAP['Pawn_COGDom']; avail = getattr(c, 'available_pawns', None)
-        g3 = PAWN_OVERRIDE.get('Pawn_COGDom') or next((x for x in cands if avail is None or x in avail), None)   # (pawn_class's)
-        if g3:
-            dom = c.find_import('Core', 'Class', c.find_import('Core', 'Package', 0, 'GearGameContent'), g3)
-            out = [r for r in out if r[0] != 'IgnoredClassProximityTypes']
-            out.append(['IgnoredClassProximityTypes', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, dom)])
+        dom = c.find_import('Core', 'Class', c.find_import('Core', 'Package', 0, 'GearGame'), 'GearPawn_COGDomBase')
+        out = [r for r in out if r[0] != 'IgnoredClassProximityTypes']
+        out.append(['IgnoredClassProximityTypes', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, dom)])
     return encode(c.w, out)
 
 
@@ -2574,10 +2576,11 @@ if not os.environ.get('OBJCOPY_NO_RENAME'):
 # ---- checkpoints ----
 # Gears 1's SeqAct_WarCheckPoint ("Set Active Checkpoint") has no outputs: what follows a checkpoint hangs on the
 # SeqEvt_CheckpointActivated of the same checkpoint actor (its Originator), which fires when the checkpoint is
-# activated, saved as well as loaded. Gears 3's SeqAct_Checkpoint ("Save") fires "Out" after saving, and
-# SeqEvent_CheckpointLoaded (the event's Gears 3 class) only on a load. So each event's targets are linked from the
-# "Out" of the checkpoint actions that activate its checkpoint as well (else, on a fresh start, the prison's
-# initialPlayerStuff never teleported the player to the cell: the player stayed at the stub map's start, the origin).
+# loaded (a fresh start loads the chapter's first checkpoint). Gears 3's SeqAct_Checkpoint ("Save") fires "Out" after
+# saving, and SeqEvent_CheckpointLoaded (the event's Gears 3 class) only on a load. So in the persistent level, each
+# event's targets are linked from the "Out" of the checkpoint actions that activate its checkpoint as well (else, on a
+# fresh start, the prison's initialPlayerStuff never teleported the player to the cell: the player stayed at the stub
+# map's start, the origin).
 def checkpoint_events(up, made):
     import materialconv
     c, s, w = up.c, up.c.s, up.w
@@ -2602,6 +2605,7 @@ def checkpoint_events(up, made):
     actions = [(i, ref) for i, ref in made.items() if s.class_name(s.exports[i]['class']) == 'SeqAct_WarCheckPoint']
     events = [(i, ref) for i, ref in made.items() if s.class_name(s.exports[i]['class']) == 'SeqEvt_CheckpointActivated']
     if not actions or not events: return 0
+    persistent = os.path.splitext(os.path.basename(s.filename))[0].lower().endswith('_p')
     def checkpoint_name(ref):       # a name for Gears 1's checkpoint actor: its package's and its own
         while ref < 0 and s.imports[-ref - 1]['outer']: ref = s.imports[-ref - 1]['outer']
         pkg = s.imports[-ref - 1]['name'] if ref < 0 else os.path.splitext(os.path.basename(s.filename))[0]
@@ -2623,6 +2627,11 @@ def checkpoint_events(up, made):
             set_name(eref, 'FindCheckPointName', checkpoint_name(origin))
             for ai, aref in mine: set_name(aref, 'CheckpointName', checkpoint_name(origin))
         if not mine: mine = [(ai, aref) for ai, aref in actions if s.exports[ai]['outer'] == s.exports[ei]['outer']]
+        # only the persistent level's checkpoint (the chapter's first, which a fresh start loads in Gears 1) runs its
+        # events on a save too; a later one's are for a load only (the prison's S04 easy checkpoint: its event shuts
+        # the S02 door behind a restarted player and clears the objectives; run on the save, its trigger, reaching
+        # south of the door, slammed the door shut in front of the player)
+        if not persistent: continue
         # the event's converted output links
         erecs, _ = parse828(w.current(eref - 1), 4, up.wname)
         links, k = b'', 0

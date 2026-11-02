@@ -150,9 +150,14 @@ void Start()
                         // "Name#": a dynamic array's element count (the int after its data pointer)
                         // "Name+N": the dword N bytes into the property (a struct's later field: Rotation+4 = yaw)
                         // "Name@": an object reference, shown by name (outer.name: which package's copy it is)
+                        // "Name$": a name property, shown as text
                         const bool count = !p0.empty() && p0.back() == '#';
                         const bool ref = !p0.empty() && p0.back() == '@';
-                        std::string p = (count || ref) ? p0.substr(0, p0.size() - 1) : p0;
+                        const bool fname = !p0.empty() && p0.back() == '$';
+                        std::string p = (count || ref || fname) ? p0.substr(0, p0.size() - 1) : p0;
+                        // "Name*@": a dynamic array's first element (an object reference: "None" when it did not load)
+                        const bool first = !p.empty() && p.back() == '*';
+                        if (first) p.pop_back();
                         int extra = 0;
                         if (const size_t plus = p.find('+'); plus != std::string::npos) { extra = atoi(p.c_str() + plus + 1); p = p.substr(0, plus); }
                         // "N" (a number): the dword N bytes into the object itself (native fields: Pylon +648 NavMeshPtr)
@@ -162,7 +167,9 @@ void Start()
                         if (off < 0) { line += " " + p + "=?"; continue; }
                         static const bool showOff = getenv("GOW3_LOG_PROPS_OFFSETS") != nullptr;   // (RE: "Prop[+off]=...")
                         if (showOff) line += fmt::format(" [+{}]", off);
-                        const uint32_t raw = ue3::Read32(o + off);
+                        uint32_t raw = ue3::Read32(o + off);
+                        if (first) raw = (raw && ue3::Read32(o + off + 4) > 0) ? ue3::Read32(raw) : 0;
+                        if (fname) { line += fmt::format(" {}={}", p, ue3::Name(raw)); continue; }
                         if (ref)
                         {
                             line += fmt::format(" {}={}", p, raw ? ue3::ObjectName(ue3::Read32(raw + 40)) + "." + ue3::ObjectName(raw) : "None");

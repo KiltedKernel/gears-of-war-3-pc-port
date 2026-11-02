@@ -2869,3 +2869,31 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   the static mesh (merge) path instead.
 - kismet_trace: the per-op package filter is re-evaluated when an op's outermost object changes (an address reused by
   a newly loaded level kept the old answer). S04_Scripting ops still did not log in the bridge runs: unresolved.
+
+## 2026-11-02: the catwalk: the persistent level's touch events ignored every pawn
+- The S04 catwalk (S04_Scripting InterpActor_19 / _22) drew and collided nowhere because its whole level was never made
+  visible: S04_Scripting, S04_Audio and S05's Meshes / Scripting / Audio stayed loaded but hidden (every component in
+  them bAttached=0, Owner None; the ammo too). Gears 1 shows them from the persistent level's Kismet: on the easy
+  route `outsideStuff` (SeqEvent_Touch_17 on TriggerVolume_14, the corridor at x -3504) and `s05stuff` (Touch_18 on
+  TriggerVolume_1); on the hard route the `makeVisible` remote event from S02_Scripting's hardRouteDoor.
+- The converted volume (G1Volume_14) was touched (Touching# went to 1 as Marcus crossed) and had its event registered
+  (GeneratedEvents# 1), but Touch_17's TriggerCount stayed 0. objcopy.touch_classes ignores Dom's class on player-only
+  touch events (Gears 3's bPlayerOnly passes the squad AI); Dom's class, GearPawn_COGDomG2, is cooked into a carrier
+  (GOW1_Carrier_SP_Nightmare_P) streamed in after the persistent level, so the persistent level's import of it was
+  None, and ClassIsChildOf(x, None) is true: every pawn was ignored. The sections' own events (S01, S02) load after the
+  carrier and resolved it, which is why they worked.
+- Now ignored by GearGame.GearPawn_COGDomBase (GearPawn_COGDomG2 < GearPawn_COGDom < it; the player's
+  GearPawn_COGMarcusG2MP is a GearPawn_HumanBaseMP), in a package that is always loaded. Touch_17 fires, outsideStuff
+  runs, S04_Scripting and S04_Audio become visible.
+- Tools: GOW3_LOG_PROPS `Name$` (a name property as text), `Name*@` (a dynamic array's first element, None when it
+  did not load); kismetgraph.py prints streaming actions' levels and events' EventName.
+- **Then the S02 door shut in front of the player.** With S04_Scripting visible, its InterpActor_12 (SizedDoor1_DR,
+  the doorway at y 2368 on the way north) blocked: S04's easy checkpoint trigger (Trigger_5, radius 187 at y 2518)
+  reaches south of the door; its WarCheckPoint saved, and objcopy.checkpoint_events had linked the checkpoint's
+  SeqEvt_CheckpointActivated targets from the save's Out (Gate_0 -> loadEasyCheckpoint -> the persistent level's
+  shutS02Door -> easyPath.Interp_2, 0.08 s, the door down 384). Gears 1 runs those events on a load (a restart from
+  that checkpoint shuts the door behind the player and clears the objectives); a fresh start loads the chapter's
+  first checkpoint, which is why initialPlayerStuff needed them on the save. Now only the persistent level's
+  checkpoint (the chapter's first) runs its events on the save too.
+- Verified (scripted easy route, bridge1): the door stays open, Marcus goes through, fights the Drone, crosses the
+  catwalk at floor height (z 846, y 4469 -> 5192); the catwalk draws with its railings.

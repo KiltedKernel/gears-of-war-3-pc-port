@@ -77,7 +77,7 @@ LoadPackageAsync 822C7870, LoadPawnClass 82A3BC48), and a Select Chapter / launc
 
 Whatever runtime the merged package keeps, our mod features should arrive as **a portable core plus thin adapters**
 (docs/REXGLUE_PORT.md):
-- core, standard C++ only, BSD-3 (MIT-compatible): manifests (ours and COGBox's `[Mod]` keys), load order, file
+- core, standard C++ only, MIT: manifests (ours and COGBox's `[Mod]` keys), load order, file
   mapping, config fragment merge, merged TOC lines, multiplayer fingerprint;
 - an adapter per runtime: COGBox's overlay device and `--ue3_mods`, or gow3-recomp's overrides/overlay;
 - game hooks (campaign chapters, content packages) with addresses for the base disc **and Title Update 6**, the

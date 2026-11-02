@@ -2,7 +2,7 @@
 
 **Revised 2026-10-31:** Flippage proposed merging gow3-recomp, the Gears 2 port and COGBox into one package
 (docs/ECOSYSTEM.md). COGBox already serves mods (overlay device, merged TOC, SHA-1 table) under MIT, so our part is a
-**portable core** (`modcore/`, standard C++, BSD-3: manifests, load order, file mapping, config fragment merge,
+**portable core** (`modcore/`, standard C++, MIT: manifests, load order, file mapping, config fragment merge,
 merged TOC lines, multiplayer fingerprint) plus thin **adapters** per runtime and the **game hooks** (campaign
 chapters, content packages) for the base disc and Title Update 6. The gow3-recomp mapping below is one adapter.
 

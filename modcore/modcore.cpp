@@ -1,5 +1,5 @@
 // modcore (modcore.h): the index of the mods' files, configuration fragments, merged tables of contents, hashes.
-// BSD-3 (modcore/LICENSE).
+// MIT (modcore/LICENSE).
 #include "modcore.h"
 #include <cstring>
 #include <set>

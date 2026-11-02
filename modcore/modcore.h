@@ -1,5 +1,5 @@
 #pragma once
-// modcore: Gears of War (Unreal Engine 3, Xbox 360) mod rules, independent of any runtime. BSD-3 (modcore/LICENSE).
+// modcore: Gears of War (Unreal Engine 3, Xbox 360) mod rules, independent of any runtime. MIT (modcore/LICENSE).
 //
 // A mod is a folder with a mod.ini and game files at the paths the disc uses (docs/MODDING.md). This header reads the
 // manifests and decides the load order and which file wins; modcore.cpp merges mods' configuration fragments into the

@@ -34,7 +34,7 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
 ## Layout
 
 - `runtime/`: the port's runtime. Mod pieces: `kernel/mods.cpp`, `mods.h`, `mod_manifest.h`, `kernel/mod_config.cpp`,
-  `ue3/campaign_chapters.cpp`, `ue3/content_packages.cpp` (all original to this project: offered under BSD-3).
+  `ue3/campaign_chapters.cpp`, `ue3/content_packages.cpp` (all original to this project; their portable core is `modcore/`, MIT).
   `kernel/io/file_system.cpp` descends from UnleashedRecomp: GPL only, never copy it into a BSD project.
   Debug tooling: `hid/hid.cpp` (scripted input), `ue3/prop_log.cpp`, `ue3/kismet_trace.cpp`, `ue3/cover_trace.cpp`.
 - `tools/`: Python. `trilogy.py` (chapter builds from recipes in `tools/recipes/`), `levelinject.py` (Gears 1 levels

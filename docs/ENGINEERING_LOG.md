@@ -2947,3 +2947,38 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - In-session reload test, not yet possible: teleporting Marcus to z -40000 (to die below KillZ and reload) left him
   standing in the void at -41200, no death, no reload: the converted level's KillZ does not trigger (to check:
   WorldInfo.KillZ in GOW1_SP_Prison_P, levelpkg `persistent` sets it). Another way to die on cue is needed.
+
+## 2026-11-03: Continue - the checkpoint restore drops the chapter's converted Kismet
+- **How Gears 3 raises checkpoint load events** (decompiled with tools/uscript.py): native code calls
+  GearGameSP_Base.CheckpointLoadComplete, which takes the primary GearPC_SP's LastCheckpointSaveName, collects every
+  SeqEvent_CheckpointLoaded under WorldInfo.GetGameSequence() (GearGame_P's root) with FindSeqObjectsByClass(.., true)
+  and calls CheckActivate on those named None or that name. Its first statement replaces AIVisMan, a handy marker:
+  `GOW3_WATCH_PROP=GearGameSP_Base:AIVisMan` logs the moment it runs. bClientLoadingCheckpoint is set only there.
+- **The native search** (USequence::FindSeqObjectsByClass, 82651D80; its exec 82653058, found with the class dump's
+  new function dwords): in game it adds matching objects from SequenceObjects (+176) and recurses only through
+  NestedSequences (+200), not into subsequences listed in SequenceObjects. Streamed sections' root sequences are nested
+  into the chapter's Main_Sequence as they stream in.
+- **Measured on Continue at the S04 checkpoint** (snapshot saves made by the same build, mod passed as its own folder):
+  - the name is right: LastCheckpointSaveName = G1_SP_Prison_S04_Scripting_WarCheckpoint0, written before
+    CheckpointLoadComplete runs; the events carry the same name, default bPlayerOnly False and MaxTriggerCount 0;
+  - CheckpointLoadComplete runs before some sections join the game's sequence (S04_Scripting's root about one sample
+    later), so a section's own event can be missed; a relay in the persistent Kismet that first makes the section
+    visible (SeqAct_LevelVisibility, Finished) and then fires a remote event would cover that
+    (build/scratch/checkpoint_relay_visibility.diff), but:
+  - **the restore empties the chapter's Main_Sequence of our objects.** GOW1_SP_Prison_P's Main_Sequence holds
+    G1_SP_Prison_P (all of Gears 1's persistent Kismet) and TrilogySharedTextures, then the sections' roots as they
+    stream in (20). During the load the checkpoint archive rewrites its SequenceObjects (count 0, then 20, from
+    822E4718 under 8231F798), and a sequence initializer (8264F930) deletes the None entries: our two come back None,
+    the 18 sections' roots (other packages) resolve. Watched with
+    `GOW3_WATCH_PROP=Sequence:SequenceObjects+4@Main_Sequence/GOW1_SP_Prison_P`. After Continue nothing in
+    G1_SP_Prison_P runs (GOW3_KISMET_TRACE): its relays, objectives, music and any other persistent logic are gone,
+    not only the checkpoint events.
+- **Ruled out** (each built and tested, then reverted): the checkpoint name's FName number (fixed earlier), the
+  section timing alone (relays in the persistent Kismet never fired either), G1_SP_Prison_P owned by the level instead
+  of Main_Sequence (re-owned: still None), and the package's net object count (generation NetObjectCount 2403 of 8703
+  exports, raised to 8703: still None). A stock Continue tested here resumed at a chapter start (no checkpoint restore),
+  so stock behaviour under a restore is not yet compared.
+- **Next:** read how the checkpoint archive writes and resolves an object reference (the serializer under 82A0E2BC /
+  8230F608; watch an element of the restored array, or the save's bytes for G1_SP_Prison_P's reference), and a stock
+  save at a named checkpoint to compare. Until then a quit-and-continue inside a converted chapter loses its persistent
+  Kismet; play from a chapter start works.

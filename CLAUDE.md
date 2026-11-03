@@ -68,17 +68,20 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
 
 ## Open work (keep this current)
 
-- COGBox (the merged project's home): mod support PR https://github.com/Shagg88/COGBox/pull/122 (still draft; local
-  clone `../cogbox`, branch kiltedkernel/mod-extras rebased on 0.4.1; build recipe and status in docs/ECOSYSTEM.md and
-  COGBox's Gears3-Native/notes/28-mod-support.md). **The trilogy's chapter 1 loads and plays on COGBox** with SDK patch
-  60 (ours, in the PR). Open: Shagg's review; launcher entries for chapters 32+; test tooling.
+- COGBox (the merged project's home, local clone `../cogbox`): our mod support (PR #122) is merged in COGBox 0.4.3
+  (SDK patch 61, renumbered from our 60); fixes for its issues #146 (PR #148, merged) and #145 (PR #156, Gears 2
+  voice-language twins). Build recipe and status in docs/ECOSYSTEM.md and COGBox's Gears3-Native/notes/28-mod-support.md.
+  **The trilogy's chapter 1 loads and plays on COGBox.** Open: launcher entries for chapters 32+; test tooling.
 
 - Port the six mod files and the debug tooling onto gow3-recomp (docs/REXGLUE_PORT.md).
 - Trilogy, Gears 1 chapter 1 (prison), easy route: scripted runs pass the cell, the cover room, the S02 door, the
   Drone fight, the S04 catwalk (fixed 2026-11-02: two converter bugs, ENGINEERING_LOG "the catwalk") and the
   roadie-run door (button at y 4675, hold A); S05's scripting starts. Next: S05 to the yard (script:
   build/scratch/buttons8.txt, extend it).
-  **Bug: Continue does not fire the converted checkpoint-loaded events** (ENGINEERING_LOG 2026-11-02): after a
-  quit-and-continue at S04, S05 stays hidden. Checkpoint-start tests: build/scratch/snap_s05 + resume.txt.
+  **Bug: Continue loses the chapter's converted Kismet** (ENGINEERING_LOG 2026-11-02 and 2026-11-03): the checkpoint
+  restore rewrites the chapter Main_Sequence's SequenceObjects and our G1_<level> sequence comes back None (dropped), so
+  no checkpoint event or other persistent Gears 1 logic runs after Continue. Next: how the checkpoint archive resolves
+  object references. Checkpoint-start tests: build/scratch/snap_s04e (current build's save) + resume.txt; pass -Mods the
+  mod folder itself (build/scratch/ch1relay/Gears1_Chapter1), not its parent.
 - Not yet verified: the hard route end to end, the yard fight, the Corpser ending, the hand-off to chapter 2.
   Chapters 2 and 3 need rebuilding with the converter fixes.

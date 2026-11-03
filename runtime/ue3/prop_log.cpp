@@ -2,8 +2,12 @@
 // instance of chosen classes, through UE3 reflection. Format: "Class:Prop,Prop;Class2:Prop" (subclasses included);
 // each value is shown as int/float (bools as 0/1; "Prop@" an object reference by name); "Prop#" shows an array's count, "Prop+N" the dword N bytes in, "N" alone the object's dword at +N. The state: a State object referenced from the object's
 // StateFrame (UObject +20).
-// GOW3_WATCH_PROP=Class:Prop arms a write watchpoint (watch.cpp) on that property of the first live instance: each
-// hit names the guest function writing it.
+// "Prop**@" lists every element of an object array (up to 64) as Package:Outer.Name.
+// GOW3_WATCH_PROP=Class:Prop[+N][@Name[/Package]] arms a write watchpoint (watch.cpp) on that property (N bytes in: an
+// array's count is +4) of the first live instance, or of the one with that name (in that package: names such as
+// Main_Sequence repeat across levels): each hit logs the value, the guest return address and the guest call chain.
+// GOW3_DUMP_CLASSES also prints each function's object address and its dwords +72..+152: a native function's pointer
+// (0x82...) is among them (FindSeqObjectsByClass's exec at 82653058).
 // GOW3_SET_PROPS (testing): "Class:Prop=Value,Prop=Value;Class2:..." holds those properties of every live instance at
 // those values, every second (an int, a float with a '.', a bool for a bool property): a scripted test run's god mode
 // (GearPC:bGodMode=1) or weak enemies (GearPawn_LocustDroneSavage:Health=1) to play a level's fights through.
@@ -108,7 +112,13 @@ void Start()
                 for (uint32_t f = ue3::Read32(cls + 68), n = 0; f && n < 4000; f = ue3::Read32(f + 60), n++)
                 {
                     const std::string kind = ue3::ObjectName(ue3::ClassOf(f));
-                    if (kind == "Function") LOGFN("class dump:   function {}", ue3::ObjectName(f));
+                    if (kind == "Function")
+                    {
+                        // the dwords from +72 to +156: a native function's pointer (0x82...) is among them
+                        std::string words;
+                        for (uint32_t o = 72; o < 156; o += 4) words += fmt::format(" {:08X}", ue3::Read32(f + o));
+                        LOGFN("class dump:   function {} at {:08X}:{}", ue3::ObjectName(f), f, words);
+                    }
                     else LOGFN("class dump:   {} {} +{}", kind, ue3::ObjectName(f), ue3::Read32(f + 84));
                 }
             }
@@ -136,7 +146,7 @@ void Start()
             std::this_thread::sleep_for(std::chrono::milliseconds(intervalMs));
             if (!armed)
             {
-                // Class:Prop[@ObjectName][,rw]: that instance (else the first), reads too with ,rw
+                // Class:Prop[@ObjectName[/Package]][,rw]: that instance (else the first), reads too with ,rw
                 std::string spec = ws;
                 const bool reads = spec.size() > 3 && spec.substr(spec.size() - 3) == ",rw";
                 if (reads) spec.resize(spec.size() - 3);
@@ -146,9 +156,22 @@ void Start()
                 const uint32_t cls = ue3::FindClass(spec.substr(0, c).c_str());
                 for (uint32_t o : cls ? ue3::FindInstancesOf(cls) : std::vector<uint32_t>{})
                 {
-                    if (!objName.empty() && ue3::ObjectName(o) != objName) continue;
-                    const int off = ue3::PropertyOffset(ue3::ClassOf(o), spec.substr(c + 1).c_str());
+                    // @Name/Package: that package's object of that name (names repeat across levels: Main_Sequence)
+                    std::string name = objName, pkg;
+                    if (const size_t sl = name.find('/'); sl != std::string::npos) { pkg = name.substr(sl + 1); name.resize(sl); }
+                    if (!name.empty() && ue3::ObjectName(o) != name) continue;
+                    if (!pkg.empty())
+                    {
+                        uint32_t top = o;
+                        for (int k = 0; k < 16 && ue3::Read32(top + 40); k++) top = ue3::Read32(top + 40);
+                        if (ue3::ObjectName(top) != pkg) continue;
+                    }
+                    std::string prop = spec.substr(c + 1);
+                    int extra = 0;   // Prop+N: N bytes in (an array's count: +4)
+                    if (const size_t plus = prop.find('+'); plus != std::string::npos) { extra = atoi(prop.c_str() + plus + 1); prop.resize(plus); }
+                    int off = ue3::PropertyOffset(ue3::ClassOf(o), prop.c_str());
                     if (off < 0) continue;
+                    off += extra;
                     armed = watch::Add(o + off, 4, reads);
                     LOGFN("props: watching {} of {} at {:08X}: {}", ws, ue3::ObjectName(o), o + off, armed ? "armed" : "failed");
                     break;
@@ -177,8 +200,11 @@ void Start()
                         const bool fname = !p0.empty() && p0.back() == '$';
                         std::string p = (count || ref || fname) ? p0.substr(0, p0.size() - 1) : p0;
                         // "Name*@": a dynamic array's first element (an object reference: "None" when it did not load)
-                        const bool first = !p.empty() && p.back() == '*';
+                        bool first = !p.empty() && p.back() == '*';
                         if (first) p.pop_back();
+                        // "Name**@": every element (up to 64), by name
+                        const bool all = first && !p.empty() && p.back() == '*';
+                        if (all) { p.pop_back(); first = false; }
                         int extra = 0;
                         if (const size_t plus = p.find('+'); plus != std::string::npos) { extra = atoi(p.c_str() + plus + 1); p = p.substr(0, plus); }
                         // "N" (a number): the dword N bytes into the object itself (native fields: Pylon +648 NavMeshPtr)
@@ -189,6 +215,20 @@ void Start()
                         static const bool showOff = getenv("GOW3_LOG_PROPS_OFFSETS") != nullptr;   // (RE: "Prop[+off]=...")
                         if (showOff) line += fmt::format(" [+{}]", off);
                         uint32_t raw = ue3::Read32(o + off);
+                        if (all && ref)
+                        {
+                            const uint32_t data = raw, n = std::min<uint32_t>(ue3::Read32(o + off + 4), 64);
+                            std::string items;
+                            for (uint32_t k = 0; data && k < n; k++)
+                            {
+                                const uint32_t e = ue3::Read32(data + 4 * k);
+                                uint32_t pk = e;   // and its package: names repeat across levels
+                                for (int j = 0; j < 16 && pk && ue3::Read32(pk + 40); j++) pk = ue3::Read32(pk + 40);
+                                items += (k ? "," : "") + (e ? ue3::ObjectName(pk) + ":" + ue3::ObjectName(ue3::Read32(e + 40)) + "." + ue3::ObjectName(e) : std::string("None"));
+                            }
+                            line += fmt::format(" {}=[{}]", p, items);
+                            continue;
+                        }
                         if (first) raw = (raw && ue3::Read32(o + off + 4) > 0) ? ue3::Read32(raw) : 0;
                         if (fname)   // an FName: index, then number (n > 0 prints as "_<n-1>", "Foo" 2 = Foo_1)
                         {

@@ -381,6 +381,10 @@ uint32_t NtSetInformationFile(uint32_t fileHandle, XIO_STATUS_BLOCK* io, uint8_t
         if (f->handle != INVALID_HANDLE_VALUE)
         {
             FILE_END_OF_FILE_INFO e; e.EndOfFile.QuadPart = int64_t(uint64_t(*(be<uint64_t>*)in));
+            // GOW3_LOG_SAVE_SIZES (COGBox checkpoint deaths): what the game asks of a save file's size. The ReXGlue SDK
+            // sets the length for class 19 too; Windows (and this runtime) only for 20
+            static const bool logSizes = getenv("GOW3_LOG_SAVE_SIZES") != nullptr;
+            if (logSizes) LOGFN("save size: class {} value {} on {}", infoClass, e.EndOfFile.QuadPart, f->guestPath);
             if (infoClass == 20) SetFileInformationByHandle(f->handle, FileEndOfFileInfo, &e, sizeof(e));
         }
         break;

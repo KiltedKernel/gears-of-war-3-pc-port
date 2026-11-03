@@ -2904,3 +2904,15 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   6467) and S05's scripting starts (easyRoute.SeqEvent_Touch_0, domEasy.SeqEvent_Touch_1). Walking, or a route with
   close waypoints (the walker overshoots about 90 units and turns back), misses the window. The second button
   (y 6259, radius 48) is past the door.
+
+## 2026-11-02: COGBox's Gears 3 checkpoint deaths, compared with this runtime
+- COGBox #55 / #68 (sudden death or squad fire after a checkpoint reload) were fixed in COGBox 0.4.0 / 0.4.1 by SDK
+  patch 58: `NetDll_XNetRandom` filled buffers with a constant (0xBB) in the SDK, and `XamUserGetSigninInfo` answered
+  the online-XUID request differently from the local one (Gears 3 signs its saves with it). This runtime never showed
+  the deaths in the chapters tested: its `NetDll_XNetRandom` has always returned `rand()` bytes (kernel/x360_net.cpp)
+  and `XamUserGetSigninInfo` one XUID for every request (kernel/x360_xam.cpp).
+- Checked and ruled out here: Gears 3 makes no FileAllocationInformation / FileEndOfFileInformation call on its
+  checkpoint files (GOW3_LOG_SAVE_SIZES=1 logs them; the SDK sets the length for class 19 as well, Windows only for 20);
+  it opens the package with XamContentCreateEx mode 4 (OPEN_ALWAYS) and rewrites GearsCheckpoint<N>.sav in place.
+- Still open on COGBox: #79 (Raam's Shadow, Raam dies after Continue) and #120 (Act 4 hangar, characters missing after a
+  checkpoint load). Both need the reporters' saves to reproduce.

@@ -68,10 +68,10 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
 
 ## Open work (keep this current)
 
-- COGBox (the merged project's home): mod support PR https://github.com/Shagg88/COGBox/pull/122 (draft; local clone
-  `../cogbox`, branch kiltedkernel/mod-extras; build recipe in docs/ECOSYSTEM.md; status in COGBox's
-  Gears3-Native/notes/28-mod-support.md). Open: on COGBox the trilogy chapter's map package is never opened (GearGame_P
-  loads, then a loading screen forever; same mod works here); launcher entries for chapters 32+; test tooling.
+- COGBox (the merged project's home): mod support PR https://github.com/Shagg88/COGBox/pull/122 (still draft; local
+  clone `../cogbox`, branch kiltedkernel/mod-extras rebased on 0.4.1; build recipe and status in docs/ECOSYSTEM.md and
+  COGBox's Gears3-Native/notes/28-mod-support.md). **The trilogy's chapter 1 loads and plays on COGBox** with SDK patch
+  60 (ours, in the PR). Open: Shagg's review; launcher entries for chapters 32+; test tooling.
 
 - Port the six mod files and the debug tooling onto gow3-recomp (docs/REXGLUE_PORT.md).
 - Trilogy, Gears 1 chapter 1 (prison), easy route: scripted runs pass the cell, the cover room, the S02 door, the

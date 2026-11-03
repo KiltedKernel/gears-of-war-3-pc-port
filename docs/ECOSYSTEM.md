@@ -109,3 +109,13 @@ VS 2022 must be 17.10+ (MSVC 14.40+): the prebuilt SDK's spdlog wants newer STL 
 
 Our mod support on COGBox: branch `kiltedkernel/mod-extras`, draft PR https://github.com/Shagg88/COGBox/pull/122
 (Gears3-Native/notes/28-mod-support.md there).
+
+**2026-11-02: the trilogy plays on COGBox.** Branch rebased on COGBox 0.4.1 (Shagg took the 4-field TOC fix into
+main as 8a5cefd). The chapter map never loaded because of an SDK bug: `VirtualFileSystem::OpenFile` checked a cached
+entry at the parent folder's host path / name, and the overlay's folders are the game's own folders, so a file only
+in a mod was deleted on first open (NO_SUCH_FILE). Fixed as COGBox SDK patch 60
+(`Gears2-Native/patches/sdk-patch60-overlay-added-files.diff`: an entry with its own host file is checked there).
+With it, chapter 32 from the title screen loads the prison and the opening plays. Apply patch 60 to the SDK source
+(`cogbox-tp/rexglue-src`), rebuild it (sdkbuild3), then the game. Test travel: `--ue3_exec_at="45s:open
+GearGame_P?game=geargamecontent.GearGameSP?chapter=32?listen"` (not at the first tick: the content packages must be
+kept before the map change, or the first spawn reads a None class, guest 0xEC).

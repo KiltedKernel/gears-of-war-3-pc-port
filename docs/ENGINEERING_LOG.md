@@ -2916,3 +2916,17 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   it opens the package with XamContentCreateEx mode 4 (OPEN_ALWAYS) and rewrites GearsCheckpoint<N>.sav in place.
 - Still open on COGBox: #79 (Raam's Shadow, Raam dies after Continue) and #120 (Act 4 hangar, characters missing after a
   checkpoint load). Both need the reporters' saves to reproduce.
+
+## 2026-11-02: checkpoint-start tests; Continue does not run the checkpoint's load events
+- Test runs can start from a checkpoint: snapshot `build\testdata` after a run (build/scratch/snap_s05 holds the S04
+  easy checkpoint), restore it, then the menu path START, A (Campaign), A (Standard), A (Continue) and A to start
+  (build/scratch/resume.txt; cp_s04_yard.txt continues the route). Marcus and Dom load at the checkpoint about 90 s
+  after launch, against 7 to 8 minutes from the cell.
+- **Found with it: on Continue, the converted checkpoint-loaded events never fire.** Every SeqEvent_CheckpointLoaded
+  (Gears 1's SeqEvt_CheckpointActivated) keeps TriggerCount 0, the S04 ones included, though S04_Scripting is visible
+  from the first frame. Gears 1 puts its restart logic there (clear objectives, `loadEasyCheckpoint`, re-open gates),
+  so after Continue the objectives are the chapter's first ones, the button / roadie-run sequence stays closed and
+  S05's sections are never shown (`s05visible` comes from that sequence): the S05 stairs are missing and the route
+  stops. A player who quits and continues at S04 hits the same. Next: how Gears 3 records the checkpoint name in the
+  save and matches FindCheckPointName on load (the events are named G1_<package>_<checkpoint actor>), and whether an
+  in-session reload fires them.

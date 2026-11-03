@@ -78,5 +78,7 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
   Drone fight, the S04 catwalk (fixed 2026-11-02: two converter bugs, ENGINEERING_LOG "the catwalk") and the
   roadie-run door (button at y 4675, hold A); S05's scripting starts. Next: S05 to the yard (script:
   build/scratch/buttons8.txt, extend it).
+  **Bug: Continue does not fire the converted checkpoint-loaded events** (ENGINEERING_LOG 2026-11-02): after a
+  quit-and-continue at S04, S05 stays hidden. Checkpoint-start tests: build/scratch/snap_s05 + resume.txt.
 - Not yet verified: the hard route end to end, the yard fight, the Corpser ending, the hand-off to chapter 2.
   Chapters 2 and 3 need rebuilding with the converter fixes.

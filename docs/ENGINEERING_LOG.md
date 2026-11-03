@@ -2930,3 +2930,17 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   stops. A player who quits and continues at S04 hits the same. Next: how Gears 3 records the checkpoint name in the
   save and matches FindCheckPointName on load (the events are named G1_<package>_<checkpoint actor>), and whether an
   in-session reload fires them.
+- **Checkpoint names: an FName number mismatch (fixed).** Gears 3 records the loaded checkpoint in
+  GearPC.LastCheckpointSaveName as an FName built from a string, which splits a trailing `_<n>` into its number
+  ("G1_..._WarCheckpoint" + 1); the converter wrote names whole ("G1_..._WarCheckpoint_0" + 0), so they never
+  compared equal. objcopy.checkpoint_name now leaves out the underscore (`WarCheckpoint0`); verified: the save and
+  the event both read G1_SP_Prison_S04_Scripting_WarCheckpoint0. GOW3_LOG_PROPS `Name$` now prints the FName number.
+- **Still open: on Continue no SeqEvent_CheckpointLoaded fires at all.** Names matching did not fire S04's events;
+  neither did relays placed in the persistent level (a named SeqEvent_CheckpointLoaded firing a remote event into the
+  section, as stock Gears 3 keeps its checkpoint events: SP_Tower_P's Main_Sequence.Sublevel_Streaming.Checkpoint_4,
+  next to its SeqAct_Checkpoint with CheckpointName). The relay is kept as build/scratch/checkpoint_relay_attempt.diff.
+  So Continue (a fresh map load with the checkpoint record) likely does not raise these events; an in-session reload
+  may. GearGameSP_Base has CheckpointLoadComplete, bStartupLoadCheckpoint, bCheckpointLoadInProgress; GearPC has
+  LoadCheckpoint, ClientLoadCheckpoint, ApplyCheckpointRecord, CreateCheckpointRecord (GOW3_DUMP_CLASSES=A,B lists a
+  class's fields and functions). Next: compare an in-session reload (death) with Continue, then read
+  CheckpointLoadComplete's script to see when the event is raised.

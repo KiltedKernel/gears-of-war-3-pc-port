@@ -2609,7 +2609,11 @@ def checkpoint_events(up, made):
     def checkpoint_name(ref):       # a name for Gears 1's checkpoint actor: its package's and its own
         while ref < 0 and s.imports[-ref - 1]['outer']: ref = s.imports[-ref - 1]['outer']
         pkg = s.imports[-ref - 1]['name'] if ref < 0 else os.path.splitext(os.path.basename(s.filename))[0]
-        return f"G1_{pkg}_{s.exports[ref - 1]['name'] if ref > 0 else ''}".rstrip('_')
+        # no trailing "_<digits>": an FName built from a string splits it off as its number ("A_0" = "A" + 1), and the
+        # game saves the checkpoint's name that way, while a name written here stays whole ("A_0" + 0): the two never
+        # compared equal, so on Continue no checkpoint-loaded event fired (WarCheckpoint_0 -> WarCheckpoint0)
+        import re
+        return re.sub(r'_(\d+)$', r'\1', f"G1_{pkg}_{s.exports[ref - 1]['name'] if ref > 0 else ''}".rstrip('_'))
     def set_name(ref, prop, value):
         recs, end = parse828(w.current(ref - 1), 4, up.wname)
         recs = [r for r in recs if r[0] != prop] + [[prop, 'NameProperty', 0, b'', struct.pack('>ii', *w.name(value))]]

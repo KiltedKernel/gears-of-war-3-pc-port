@@ -92,6 +92,27 @@ void Start()
     const char* spec = getenv("GOW3_LOG_PROPS");
     const char* watchSpec = getenv("GOW3_WATCH_PROP");
     SetProps();
+    // GOW3_DUMP_CLASSES=A,B (RE): each class's own fields once its class exists - properties with their kind and offset,
+    // functions by name (UStruct children at +68, each field's next at +60, a property's offset at +84)
+    if (const char* dump = getenv("GOW3_DUMP_CLASSES"))
+        std::thread([list = std::string(dump)] {
+            while (!ue3::Init()) std::this_thread::sleep_for(std::chrono::seconds(2));
+            std::stringstream ss(list); std::string name;
+            while (std::getline(ss, name, ','))
+            {
+                uint32_t cls = 0;
+                for (int tries = 0; !cls && tries < 300; tries++) { cls = ue3::FindClass(name.c_str()); if (!cls) std::this_thread::sleep_for(std::chrono::seconds(1)); }
+                if (!cls) { LOGFN("class dump: {} not found", name); continue; }
+                const uint32_t super = ue3::Read32(cls + 64);
+                LOGFN("class dump: {} (super {})", name, super ? ue3::ObjectName(super) : "none");
+                for (uint32_t f = ue3::Read32(cls + 68), n = 0; f && n < 4000; f = ue3::Read32(f + 60), n++)
+                {
+                    const std::string kind = ue3::ObjectName(ue3::ClassOf(f));
+                    if (kind == "Function") LOGFN("class dump:   function {}", ue3::ObjectName(f));
+                    else LOGFN("class dump:   {} {} +{}", kind, ue3::ObjectName(f), ue3::Read32(f + 84));
+                }
+            }
+        }).detach();
     if (!spec && !watchSpec) return;
     std::string s = spec ? spec : "", ws = watchSpec ? watchSpec : "";
     std::thread([s, ws] {
@@ -169,7 +190,12 @@ void Start()
                         if (showOff) line += fmt::format(" [+{}]", off);
                         uint32_t raw = ue3::Read32(o + off);
                         if (first) raw = (raw && ue3::Read32(o + off + 4) > 0) ? ue3::Read32(raw) : 0;
-                        if (fname) { line += fmt::format(" {}={}", p, ue3::Name(raw)); continue; }
+                        if (fname)   // an FName: index, then number (n > 0 prints as "_<n-1>", "Foo" 2 = Foo_1)
+                        {
+                            const uint32_t num = ue3::Read32(o + off + 4);
+                            line += fmt::format(" {}={}{}", p, ue3::Name(raw), num ? fmt::format("_{}", int(num) - 1) : std::string());
+                            continue;
+                        }
                         if (ref)
                         {
                             line += fmt::format(" {}={}", p, raw ? ue3::ObjectName(ue3::Read32(raw + 40)) + "." + ue3::ObjectName(raw) : "None");

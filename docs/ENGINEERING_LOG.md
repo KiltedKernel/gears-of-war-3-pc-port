@@ -2982,3 +2982,18 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   8230F608; watch an element of the restored array, or the save's bytes for G1_SP_Prison_P's reference), and a stock
   save at a named checkpoint to compare. Until then a quit-and-continue inside a converted chapter loses its persistent
   Kismet; play from a chapter start works.
+- **Root cause found and fixed (later the same day): net indices.** The checkpoint save (GearsCheckpoint0.sav, its
+  Kismet record an LZO chunk: tools/xpack `lzo` at the 9E2A83C1 tag) writes each sequence's SequenceObjects as
+  {present, path, the object's own record inline}; a stock save (COGBox #120's) records every op of the tree. Ours
+  wrote "None" for G1_SP_Prison_P and TrilogySharedTextures: the writer keys objects by their **net index**, the first
+  int of a Kismet object's serial data (Main_Sequence 1269 = the 0x4F5 after its path in the record), and every Kismet
+  object the converter adds had -1 there (new ones) or its Gears 1 package's index (duplicates). Not every object's
+  data starts with it: an actor's (RF_HasStack, 0x0200000000000000) starts with its state frame, a component's with
+  its template owner and name; renumbering those broke the level (stuck loading, no Kismet).
+  Fix (tools/upkwrite.py, build): each added Kismet object (a Sequence or anything inside one) gets the next free
+  index after the package's own Kismet; the generation's NetObjectCount is raised to cover them. Verified: fresh run
+  to the S04 checkpoint, quit, Continue: Main_Sequence keeps its children (2 -> 20 -> 23), S04's
+  SeqEvt_CheckpointActivated_0 fires (TriggerCount 1), its scripting runs (towerFalls, domEasy) and S05 is shown; the
+  checkpoint route (cp_s04_yard.txt) goes through the roadie-run door into S05 and stops at the rubble past
+  -4444,6794 (where the route script itself is unfinished). The section-timing concern did not bite: the relay
+  (build/scratch/checkpoint_relay_visibility.diff) is not needed. Seen in that run: Dom below the world (z -12422).

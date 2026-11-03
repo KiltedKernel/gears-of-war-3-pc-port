@@ -107,6 +107,8 @@ void Start()
                 uint32_t cls = 0;
                 for (int tries = 0; !cls && tries < 300; tries++) { cls = ue3::FindClass(name.c_str()); if (!cls) std::this_thread::sleep_for(std::chrono::seconds(1)); }
                 if (!cls) { LOGFN("class dump: {} not found", name); continue; }
+                // a class can be found before its fields are linked: wait for them (up to a minute)
+                for (int tries = 0; !ue3::Read32(cls + 68) && tries < 60; tries++) std::this_thread::sleep_for(std::chrono::seconds(1));
                 const uint32_t super = ue3::Read32(cls + 64);
                 LOGFN("class dump: {} (super {})", name, super ? ue3::ObjectName(super) : "none");
                 for (uint32_t f = ue3::Read32(cls + 68), n = 0; f && n < 4000; f = ue3::Read32(f + 60), n++)

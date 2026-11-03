@@ -78,10 +78,8 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
   Drone fight, the S04 catwalk (fixed 2026-11-02: two converter bugs, ENGINEERING_LOG "the catwalk") and the
   roadie-run door (button at y 4675, hold A); S05's scripting starts. Next: S05 to the yard (script:
   build/scratch/buttons8.txt, extend it).
-  **Bug: Continue loses the chapter's converted Kismet** (ENGINEERING_LOG 2026-11-02 and 2026-11-03): the checkpoint
-  restore rewrites the chapter Main_Sequence's SequenceObjects and our G1_<level> sequence comes back None (dropped), so
-  no checkpoint event or other persistent Gears 1 logic runs after Continue. Next: how the checkpoint archive resolves
-  object references. Checkpoint-start tests: build/scratch/snap_s04e (current build's save) + resume.txt; pass -Mods the
-  mod folder itself (build/scratch/ch1relay/Gears1_Chapter1), not its parent.
+  Continue (quit and resume at a checkpoint) works since 2026-11-03: converted Kismet needs unique net indices
+  (tools/upkwrite.py; ENGINEERING_LOG 2026-11-03). Checkpoint-start tests: build/scratch/snap_s04f (S04 save) +
+  cp_s04_yard.txt; pass -Mods the mod folder itself (.../Gears1_Chapter1), not its parent. Seen once: Dom below the world.
 - Not yet verified: the hard route end to end, the yard fight, the Corpser ending, the hand-off to chapter 2.
   Chapters 2 and 3 need rebuilding with the converter fixes.

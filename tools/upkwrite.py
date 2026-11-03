@@ -76,6 +76,35 @@ class Rewriter:
     def build(self):
         import modpack
         img = modpack.uncompressed_image(self.p)
+        # Net indices. A Kismet object's serial data starts with its net index, unique among its package's own
+        # objects. Gears 3's checkpoints save Kismet by it: an object at -1 is saved as None, and on Continue the
+        # chapter's Main_Sequence lost its converted Kismet (G1_<level>, TrilogySharedTextures). Kismet objects added
+        # here came with -1 or with their source package's indices (duplicates): each gets the next free index, after
+        # the highest of the package's own Kismet. Only Kismet (a Sequence and what is inside one): an actor's data
+        # starts with its state frame (RF_HasStack), a component's with its template owner and name.
+        orig = len(self.p.exports)
+        def cls_name(k):
+            c = struct.unpack_from('>i', self.exports[k], 0)[0]
+            if c < 0: return self.names[struct.unpack_from('>i', self.imports[-c - 1], 20)[0]]
+            return self.names[struct.unpack_from('>i', self.exports[c - 1], 12)[0]] if c > 0 else 'Class'
+        def in_kismet(k):
+            for _ in range(64):
+                if cls_name(k) == 'Sequence': return True
+                outer = struct.unpack_from('>i', self.exports[k], 8)[0]
+                if outer <= 0: return False
+                k = outer - 1
+            return False
+        top = -1
+        for k in range(orig):
+            x = self.p.export_data(k)
+            if len(x) >= 4 and in_kismet(k): top = max(top, struct.unpack_from('>i', x, 0)[0])
+        next_net = top + 1
+        for k in range(orig, len(self.exports)):
+            data = self.appended.get(k)
+            if data is None or len(data) < 4 or not in_kismet(k): continue
+            self.appended[k] = struct.pack('>i', next_net) + data[4:]
+            next_net += 1
+        self.net_objects = next_net
         for k, data in self.appended.items():
             img += bytes((-len(img)) % 16)
             base = len(img)
@@ -101,7 +130,8 @@ class Rewriter:
         # the newest generation records the export and name counts
         go = so + 28 + 16 + 16
         gens = struct.unpack_from('>i', img, go)[0]
-        put(go + 4 + 12 * (gens - 1), len(self.exports), len(self.names))
+        old_net = struct.unpack_from('>i', img, go + 4 + 12 * (gens - 1) + 8)[0]
+        put(go + 4 + 12 * (gens - 1), len(self.exports), len(self.names), max(old_net, self.net_objects))
         return img
 
 

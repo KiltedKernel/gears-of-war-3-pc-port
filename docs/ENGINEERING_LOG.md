@@ -2944,3 +2944,6 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   LoadCheckpoint, ClientLoadCheckpoint, ApplyCheckpointRecord, CreateCheckpointRecord (GOW3_DUMP_CLASSES=A,B lists a
   class's fields and functions). Next: compare an in-session reload (death) with Continue, then read
   CheckpointLoadComplete's script to see when the event is raised.
+- In-session reload test, not yet possible: teleporting Marcus to z -40000 (to die below KillZ and reload) left him
+  standing in the void at -41200, no death, no reload: the converted level's KillZ does not trigger (to check:
+  WorldInfo.KillZ in GOW1_SP_Prison_P, levelpkg `persistent` sets it). Another way to die on cue is needed.

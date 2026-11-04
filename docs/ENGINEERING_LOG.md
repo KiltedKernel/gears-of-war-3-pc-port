@@ -3073,3 +3073,8 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - Verified: chapter 1 rebuilt, the S04 checkpoint route walks past the rubble (-4544,6720), (-4720,6584), (-4966,7005),
   (-4867,7665) to (-4618,7821) by the yard; there Marcus dies (the test script does not fight yet) and restarts at
   the checkpoint. The collision and frozen-player entries above were wrong turns.
+- The yard (build/scratch/cp_s05_yard2.txt from the S04 save, god mode GOW3_SET_PROPS="GearPC:bGodMode=1"): the
+  route reaches the yard, the fight there kills two Drones (DroneSavage_1/_2) in 5 s, and the route crosses the yard
+  (-4525,8469) -> (-4264,8776) -> (-3577,8875) -> (-3066,8866) -> (-2304,8871) -> (-2367,8563) -> (-2528,8320); it
+  stops near (-2700,7800), short of (-2810,7873) and (-3058,7813). No engine error. Next: what holds it there (a door,
+  a step, the route points), then the Corpser ending.

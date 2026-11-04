@@ -81,7 +81,8 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
   Continue (quit and resume at a checkpoint) works since 2026-11-03: converted Kismet needs unique net indices
   (tools/upkwrite.py; ENGINEERING_LOG 2026-11-03). Checkpoint-start tests: build/scratch/snap_s04f (S04 save) +
   cp_s04_yard.txt; pass -Mods the mod folder itself (.../Gears1_Chapter1), not its parent. Seen once: Dom below the world.
-- Chapter 1 route stops at the S05 rubble (-4367,6828): converted collision blocks a plain Gears 1 path (ENGINEERING_LOG
-  2026-11-04). Not yet verified: the hard route end to end, the yard fight, the Corpser ending, the hand-off to chapter 2.
-  Chapters 2 and 3 rebuilt 2026-11-04 (build/scratch/trilogy3); both load and play from Select Chapter (boot_ch2/3.txt).
-  The S05 stop is a frozen player, not a wall (ENGINEERING_LOG 2026-11-04 later); Dom's fall was a test-script artifact.
+- Chapter 1 route passes the S05 rubble since 2026-11-04 (the "freeze" was a fatal load error in S06_Scripting: a Gears 1
+  ForceFeedbackWaveform's native tail; ENGINEERING_LOG 2026-11-04 evening). A fatal engine error now logs its text
+  (RtlUnicodeStringToAnsiString). Next: the yard fight (the S04 route dies near (-4618,7821)), the Corpser ending, the
+  hand-off to chapter 2. Chapters 2 and 3 rebuilt 2026-11-04 (build/scratch/trilogy3); both load and play from Select
+  Chapter (boot_ch2/3.txt).

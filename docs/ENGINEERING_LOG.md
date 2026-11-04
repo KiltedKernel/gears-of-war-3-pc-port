@@ -3053,3 +3053,23 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   exists in the build (23), and S06_Scripting loads as he arrives. Still open; the fresh route without the door
   teleport stops earlier at the closed roadie-run door (y 6194: buttons8's button timing), so a run with no teleport
   at all has not reached the spot yet.
+
+## 2026-11-04 (evening): the S05 freeze was a fatal load error - a Gears 1 force-feedback waveform
+- **Root cause:** as Marcus reaches the S05 rubble, GOW1_SP_Prison_S06_Scripting streams in, and loading it raises
+  appError "ForceFeedbackWaveform ...Choppers.chopper2Shot.SeqAct_PlayWaveForm_0.ForceFeedbackWaveform_0: Serial size
+  mismatch: Got 222, Expected 238", then "Exiting due to error": the game thread stops for good. Audio and the input
+  script's thread go on, which is why it looked like a frozen pawn (Velocity and Acceleration never change again, a
+  teleport is not taken up).
+- It went unseen because this runtime's RtlInitUnicodeString / RtlUnicodeStringToAnsiString were stubs: appError
+  converts its message with them, so nothing reached the log. Both are implemented now (runtime/kernel/imports.cpp,
+  with RtlFreeAnsiString), and the first 20 conversions are logged: a fatal engine error now shows its text.
+- Gears 1 writes a ForceFeedbackWaveform's Samples twice, the tagged ArrayProperty and again natively after the
+  properties (16 bytes here: 0, count 1, LeftAmplitude/RightAmplitude 0x4B, two function bytes, Duration 1.0);
+  Gears 3's waveforms end at their properties (75 stock ones checked). tools/objcopy.py drops the tail
+  (TAIL_FIXUPS['ForceFeedbackWaveform']).
+- A scan of chapters 1-3 for any class whose converted exports have bytes after the properties where stock Gears 3
+  never does (432 classes) finds only this one; the reverse (stock always with a tail, converted without) finds 16
+  StaticMeshCollectionActors in levels that already load and play.
+- Verified: chapter 1 rebuilt, the S04 checkpoint route walks past the rubble (-4544,6720), (-4720,6584), (-4966,7005),
+  (-4867,7665) to (-4618,7821) by the yard; there Marcus dies (the test script does not fight yet) and restarts at
+  the checkpoint. The collision and frozen-player entries above were wrong turns.

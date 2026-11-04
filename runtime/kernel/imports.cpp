@@ -1455,19 +1455,64 @@ void RtlTimeToTimeFields()
     LOG_UTILITY("!!! STUB !!!");
 }
 
-void RtlFreeAnsiString()
+// A UNICODE_STRING as the guest lays it out: lengths in bytes, big-endian UTF-16 characters.
+struct XUNICODE_STRING
 {
-    LOG_UTILITY("!!! STUB !!!");
+    be<uint16_t> Length;
+    be<uint16_t> MaximumLength;
+    xpointer<be<uint16_t>> Buffer;
+};
+
+void RtlFreeAnsiString(XANSI_STRING* string)
+{
+    if (string && string->Buffer)
+        g_userHeap.Free(string->Buffer.get());
+    if (string)
+    {
+        string->Buffer = nullptr;
+        string->Length = 0;
+        string->MaximumLength = 0;
+    }
 }
 
-void RtlUnicodeStringToAnsiString()
+// Before 2026-11-04 these two were stubs that left the destination unwritten: Gears 3 called them as the trilogy's
+// chapter 1 reached the S05 rubble, and its game thread never came back (ENGINEERING_LOG 2026-11-04, "the S05 freeze").
+uint32_t RtlUnicodeStringToAnsiString(XANSI_STRING* destination, XUNICODE_STRING* source, uint32_t allocate)
 {
-    LOG_UTILITY("!!! STUB !!!");
+    const uint16_t chars = source->Length / 2;
+    if (allocate)
+    {
+        char* buffer = (char*)g_userHeap.Alloc(chars + 1);
+        if (!buffer) return STATUS_NO_MEMORY;
+        destination->Buffer = buffer;
+        destination->MaximumLength = chars + 1;
+    }
+    else if (destination->MaximumLength <= chars)
+    {
+        return STATUS_BUFFER_OVERFLOW;
+    }
+    char* out = destination->Buffer.get();
+    const be<uint16_t>* in = source->Buffer.get();
+    for (uint16_t i = 0; i < chars; i++)
+    {
+        const uint16_t c = in[i];
+        out[i] = c < 0x80 ? char(c) : '?';
+    }
+    out[chars] = 0;
+    destination->Length = chars;
+    static int logged = 0;
+    if (logged++ < 20) LOGFN("RtlUnicodeStringToAnsiString: \"{}\"", out);
+    return STATUS_SUCCESS;
 }
 
-void RtlInitUnicodeString()
+void RtlInitUnicodeString(XUNICODE_STRING* destination, be<uint16_t>* source)
 {
-    LOG_UTILITY("!!! STUB !!!");
+    uint16_t length = 0;
+    if (source)
+        while (source[length] != 0) length++;
+    destination->Length = length * 2;
+    destination->MaximumLength = source ? length * 2 + 2 : 0;
+    destination->Buffer = source;
 }
 
 void ExTerminateThread()

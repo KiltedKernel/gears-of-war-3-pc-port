@@ -3118,3 +3118,9 @@ def install_sun_point():
 
 
 if SUN_POINT: install_sun_point()
+
+# Gears 1 writes a ForceFeedbackWaveform's Samples twice: as the tagged property and again natively after the
+# properties (count, then LeftAmplitude, RightAmplitude, LeftFunction, RightFunction bytes and a Duration float each).
+# Gears 3 reads only the tagged one, and the 16 bytes left over are a fatal "Serial size mismatch" when the level
+# loads (chapter 1's S06_Scripting, chopper2Shot's waveform: the S05 freeze, ENGINEERING_LOG 2026-11-04).
+TAIL_FIXUPS['ForceFeedbackWaveform'] = lambda c, props, tail: (props, b'')

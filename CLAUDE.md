@@ -84,4 +84,4 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
 - Chapter 1 route stops at the S05 rubble (-4367,6828): converted collision blocks a plain Gears 1 path (ENGINEERING_LOG
   2026-11-04). Not yet verified: the hard route end to end, the yard fight, the Corpser ending, the hand-off to chapter 2.
   Chapters 2 and 3 rebuilt 2026-11-04 (build/scratch/trilogy3); both load and play from Select Chapter (boot_ch2/3.txt).
-  After a Continue, Dom is below the world.
+  The S05 stop is a frozen player, not a wall (ENGINEERING_LOG 2026-11-04 later); Dom's fall was a test-script artifact.

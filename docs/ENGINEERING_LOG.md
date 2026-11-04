@@ -3014,3 +3014,26 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   Next: what collides there (the rubble mesh's collision, a BlockingVolume, the door InterpActor's), with a trace.
 - Seen in every Continue run at S04: Dom below the world (z about -12400): his checkpoint restore places him where
   there is no floor. To look at with the rubble.
+
+## 2026-11-04 (later): the S05 stop is a frozen player, not a wall; Dom's fall is the test scripts'
+- **Dom after Continue: restored right.** From the S04 checkpoint save he comes back at his saved spot
+  (-3426,2599,846; the save's GearAI_Dom record holds it), stands on the world and walks. The falls (z -12400 to
+  -14200) were in the long route runs, which teleport Marcus past the roadie-run door and leave Dom behind; the
+  sections behind are then unloaded with Dom on them. A test artifact, not a Continue bug (an AI left on a section
+  being unloaded falls; Gears 3's squad teleport to FallbackTeleportPoints does not help: the only ones in the
+  chapter are the template map's, near (-74250,-3240), never used).
+- **The S05 stop at (-4367,6827): Marcus freezes, he is not blocked.** Once there he cannot walk back either (to
+  (-4128,6800), walked a moment before) and does not move after a teleport elsewhere; not in cover (CoverType 0),
+  Physics walking on the world, velocity 0, no Kismet fires as it happens. Ruled out offline (tools here, in the job
+  scratch: mesh / volume / BSP scans of Gears 1's S04-S05 packages around the walk):
+  - Gears 1's meshes there do not block pawns (the fallen door StaticMeshActor_801, the cover pieces, the door
+    frames: BlockNonZeroExtent and/or the actor's bBlockActors off), and no BlockingVolume crosses the walk;
+  - the floor: the curved catwalk (StaticMeshActor_255, RB_Prison_Floors_Catwalks_Curve_384, 7 convex hulls) ends
+    about 60 units short of S05's BSP floor (a pit under the fallen door). A real gap, but he stops 120 units before it.
+  - Tried and reverted (build/scratch/collision_experiments.diff): honouring the actor's bBlockActors /
+    bCollideActors on merged meshes, and a recipe `collide =` that made the fallen door block pawns (he stood
+    13 units higher, still frozen).
+  - bStopAtLedges / bAvoidLedges are on, bCanWalkOffLedges off (Gears 3's player). The move-input byte read set
+    since the roadie-run door's button push, yet he walked through S05 after it: its meaning there is not settled.
+  Next: what holds the pawn (its special move byte, its acceleration, the ledge check's result) with a write watch on
+  the pawn's Acceleration or Velocity once he stops.

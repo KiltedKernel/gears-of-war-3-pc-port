@@ -2997,3 +2997,20 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   checkpoint route (cp_s04_yard.txt) goes through the roadie-run door into S05 and stops at the rubble past
   -4444,6794 (where the route script itself is unfinished). The section-timing concern did not bite: the relay
   (build/scratch/checkpoint_relay_visibility.diff) is not needed. Seen in that run: Dom below the world (z -12422).
+
+## 2026-11-04: chapters 2 and 3 rebuilt; the S05 rubble stops the chapter 1 route
+- Chapters 2 (House of Sovereigns) and 3 (Embry) rebuilt with the converter fixes (net indices included), 291 s and
+  326 s, into build/scratch/trilogy3 with chapter 1. Both start from Select Chapter and play (ch2: the corridor with the
+  squad; ch3: its opening cutscene, subtitles) with no crash.
+- Starting a trilogy chapter in a test: tests/select_chapter.txt from an existing profile (a fresh one shows the video
+  settings screen first and drops the early presses); the act's chapters are a carousel: right presses after entering
+  Act VI pick chapters 2 and 3 (build/scratch/boot_ch2.txt, boot_ch3.txt). Restore a snapshot with robocopy /MIR.
+- **Chapter 1 route, S05:** from the S04 checkpoint the route reaches (-4444,6794) and stops at the rubble mound: Marcus
+  holds at (-4367,6828,526) whatever the walk, cover press or teleport ahead (from (-4720,6584) and even (-3944,6748),
+  walked before, he does not move after the teleport). Gears 1's path network has plain ReachSpecs through here
+  (nodes (-4444,6794,506) -> (-4544,6720,498) -> (-4720,6584,498), no mantle), so the converted collision blocks what
+  Gears 1 walks. Not the S05 encounter: easyRoute's SeqAct_Interp_0 (a door) plays and its AIFactory_2's All Dead only
+  toggles a PathNode; a fight there finds no enemy. bIgnoreMoveInput was set briefly after the teleport and cleared.
+  Next: what collides there (the rubble mesh's collision, a BlockingVolume, the door InterpActor's), with a trace.
+- Seen in every Continue run at S04: Dom below the world (z about -12400): his checkpoint restore places him where
+  there is no floor. To look at with the rubble.

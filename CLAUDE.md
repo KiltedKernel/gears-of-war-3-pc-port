@@ -81,5 +81,7 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
   Continue (quit and resume at a checkpoint) works since 2026-11-03: converted Kismet needs unique net indices
   (tools/upkwrite.py; ENGINEERING_LOG 2026-11-03). Checkpoint-start tests: build/scratch/snap_s04f (S04 save) +
   cp_s04_yard.txt; pass -Mods the mod folder itself (.../Gears1_Chapter1), not its parent. Seen once: Dom below the world.
-- Not yet verified: the hard route end to end, the yard fight, the Corpser ending, the hand-off to chapter 2.
-  Chapters 2 and 3 need rebuilding with the converter fixes.
+- Chapter 1 route stops at the S05 rubble (-4367,6828): converted collision blocks a plain Gears 1 path (ENGINEERING_LOG
+  2026-11-04). Not yet verified: the hard route end to end, the yard fight, the Corpser ending, the hand-off to chapter 2.
+  Chapters 2 and 3 rebuilt 2026-11-04 (build/scratch/trilogy3); both load and play from Select Chapter (boot_ch2/3.txt).
+  After a Continue, Dom is below the world.

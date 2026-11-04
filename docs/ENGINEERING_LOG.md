@@ -3037,3 +3037,12 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
     since the roadie-run door's button push, yet he walked through S05 after it: its meaning there is not settled.
   Next: what holds the pawn (its special move byte, its acceleration, the ledge check's result) with a write watch on
   the pawn's Acceleration or Velocity once he stops.
+- More on the S05 freeze (GOW3_LOG_PROPS at 250-500 ms while the script pushes the stick): once stopped, the pawn's
+  Acceleration and Velocity never change again (last values a run: about -1290,-210 and -190,-28), its position
+  stays, CustomTimeDilation 1, bTickIsDisabled 0, Physics walking; the controller still possesses it and views it
+  (not a pawn swap, not cinematic mode), and passes PlayerWalking -> PlayerTakingCover -> PlayerWalking around the
+  stop (CoverType stays 0). GOW1_SP_Prison_S06_Scripting streams in as he arrives (its WorldInfo_8 changes state);
+  none of its Kismet fires. Leading guess: the pawn's movement stops being processed (a cover-entry move or special
+  move that never finishes) rather than a collision. Next: GearPawn's special-move and cover-acquire fields
+  (CoverAction, SpecialMove as their own bytes, bWantsToBeInCover, AcquireCoverFOV / the cover link it tried) and a
+  watch on the pawn's Location write path.

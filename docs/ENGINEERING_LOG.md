@@ -3046,3 +3046,10 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   move that never finishes) rather than a collision. Next: GearPawn's special-move and cover-acquire fields
   (CoverAction, SpecialMove as their own bytes, bWantsToBeInCover, AcquireCoverFOV / the cover link it tried) and a
   watch on the pawn's Location write path.
+- The S05 freeze also happens from a fresh chapter start (build/scratch/fresh_s05.txt: buttons8's opening, the same
+  teleport past the roadie-run door, the same S05 route), at the same spot (-4374,6826): not a Continue effect.
+  Marcus's special move and cover bytes (GearPawn +1281 SpecialMove, +1284.. CoverType / CoverAction) are 0 when he
+  freezes (the last special move, 4 then 8, ended well before). Every level the persistent Kismet's streaming names
+  exists in the build (23), and S06_Scripting loads as he arrives. Still open; the fresh route without the door
+  teleport stops earlier at the closed roadie-run door (y 6194: buttons8's button timing), so a run with no teleport
+  at all has not reached the spot yet.

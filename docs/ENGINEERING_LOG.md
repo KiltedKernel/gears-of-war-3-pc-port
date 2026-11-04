@@ -3078,3 +3078,15 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   (-4525,8469) -> (-4264,8776) -> (-3577,8875) -> (-3066,8866) -> (-2304,8871) -> (-2367,8563) -> (-2528,8320); it
   stops near (-2700,7800), short of (-2810,7873) and (-3058,7813). No engine error. Next: what holds it there (a door,
   a step, the route points), then the Corpser ending.
+- **After the yard: the welding door (2026-11-04 night).** S06's Kismet starts only from its own triggers, east of the
+  yard (TriggerVolume_1 (-672,5935), Trigger_14 (384,7512) ...); the routes above turned west and into the hard
+  route's door (doorOpenStatus.InterpActor_1 at (-1727,6576), shut on the easy route). The easy route goes on at the
+  welding door: S05_Scripting's main SeqCond_Increment_0 (A counts up to B = 3) starts `weldingDoor` (Dom cuts the
+  door InterpActor_6/7 at (-740,7710), checkpoint WarCheckpoint_3) once it has (1) Marcus touching Trigger_0
+  (-2402,8865) (SeqEvent_Touch_0), (2) Dom touching it (SeqEvent_Touch_1, ClassProximityTypes GearPawn_COGDomG2:
+  converted right), (3) easyRoute's fodderDead (the yard's Drones). Runs from the S04 save (build/scratch/cp_weld2.txt)
+  get (1) and (3), and the route reaches the door (-845,7782), but never (2): the test teleports Marcus past the
+  roadie-run door's ledge (-3200,6470,880) and Dom stays behind. A Location write does not make touches, and Dom put
+  near the trigger stands idle (the `teleport x y z Class` verb, runtime/hid/hid.cpp, moves him). Next: a run where
+  Dom keeps up (no Marcus teleport: the mantle at the roadie-run door) to see the welding-door fight start; nothing
+  points to a converter bug here.

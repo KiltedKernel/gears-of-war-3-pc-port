@@ -257,21 +257,28 @@ namespace
         return 0;
     }
 
-    // "teleport x y z" (testing): the local player's pawn put there (its Location written: a test reaches a place
-    // the route walker cannot, e.g. the top of a staircase)
-    void Teleport(double x, double y, double z)
+    // "teleport x y z [Class]" (testing): the local player's pawn put there (its Location written: a test reaches a
+    // place the route walker cannot, e.g. the top of a staircase); with a class, its first live instance instead (a
+    // squad mate a teleport left behind: GearPawn_COGDomG2, whose touches Gears 1's Kismet counts)
+    void Teleport(double x, double y, double z, const std::string& cls = "")
     {
         static const uint32_t actor = ue3::FindClass("Actor");
         const int loc = actor ? ue3::PropertyOffset(actor, "Location") : -1;
-        const uint32_t pawn = LocalPawn();
-        if (!pawn || loc < 0) { LOGFN("input: teleport: no player pawn"); return; }
+        uint32_t pawn = LocalPawn();
+        if (!cls.empty())
+        {
+            const uint32_t c = ue3::FindClass(cls.c_str());
+            const std::vector<uint32_t> all = c ? ue3::FindInstancesOf(c) : std::vector<uint32_t>();
+            pawn = all.empty() ? 0 : all[0];
+        }
+        if (!pawn || loc < 0) { LOGFN("input: teleport: no {}", cls.empty() ? "player pawn" : cls); return; }
         const float v[3] = { float(x), float(y), float(z) };
         for (int k = 0; k < 3; k++)
         {
             uint32_t u; memcpy(&u, &v[k], 4);
             *(uint32_t*)g_memory.Translate(pawn + uint32_t(loc) + 4 * k) = ByteSwap(u);
         }
-        LOGFN("input: teleport to {:.0f},{:.0f},{:.0f}", x, y, z);
+        LOGFN("input: teleport {}to {:.0f},{:.0f},{:.0f}", cls.empty() ? "" : cls + " ", x, y, z);
     }
 
     // "walkto x y [seconds]": steer the local player to (x, y) with the left stick, relative to the camera (the
@@ -564,7 +571,7 @@ namespace
             else if (e.kind == "trig") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 200; }
             else if (e.kind == "choose") { std::string which; in >> which >> e.b; e.a = (which == "R") ? 1 : 0; if (!e.b) e.b = 900; }
             else if (e.kind == "walkto") { in >> e.a >> e.b >> e.c; if (!e.c) e.c = 20; }
-            else if (e.kind == "teleport") { in >> e.a >> e.b >> e.c; }
+            else if (e.kind == "teleport") { in >> e.a >> e.b >> e.c; if (!(in >> e.text)) e.text.clear(); }
             else if (e.kind == "face") { in >> e.a >> e.b; }
             else if (e.kind == "look") { in >> e.a >> e.b; if (!e.b) e.b = 300; }
             else if (e.kind == "fight") { in >> e.a >> e.b; }
@@ -641,7 +648,7 @@ namespace
                 std::thread([b = uint16_t(e.a), hold = e.b] { g_scriptPadButtons = b; Sleep(DWORD(hold)); g_scriptPadButtons = 0; }).detach();
             }
             else if (e.kind == "walkto") std::thread(WalkTo, e.a, e.b, e.c).detach();
-            else if (e.kind == "teleport") Teleport(e.a, e.b, e.c);
+            else if (e.kind == "teleport") Teleport(e.a, e.b, e.c, e.text);
             else if (e.kind == "face") std::thread(Face, e.a, e.b).detach();
             else if (e.kind == "look")
                 std::thread([amount = e.a, hold = e.b] {

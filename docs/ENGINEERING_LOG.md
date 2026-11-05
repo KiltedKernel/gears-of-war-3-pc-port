@@ -3210,3 +3210,7 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   strip from y 6176 is there, but the converted mesh's floor starts at 6185: the 9-unit seam may be the gap the
   ledge test sees), or hook the ledge test to see its trace. Next: check why Trilogy_BSP_5 starts at 6185, not
   6176 (a dropped sliver polygon from y 6176-6185?).
+  Correction: no seam. Sampled finer, Trilogy_BSP_5's floor starts at y 6176 exactly (768 at 6176.5 onward), where
+  the catwalk slab ends; the geometry is continuous. The failing step is from the mover's surface onto world
+  geometry at the same height; the ledge test itself must be traced (or the catwalk made world geometry where it
+  never moves on the path the player takes).

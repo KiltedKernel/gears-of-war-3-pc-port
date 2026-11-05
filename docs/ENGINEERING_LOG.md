@@ -3197,3 +3197,9 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   hypothesis: the converted navigation mesh (built with the door shut, tools/navinject.py / pylons.py) has no
   surface through the doorway, and the player's ledge test in Gears 3 uses it; check the S05/S04 pylons' polygons
   at (-3300,6190..6240), and the S05 "gap" the same way.
+- Not the navmesh either: build/trilogy/Gears1_Chapter1_s05.navm (Pylon_2) has polygons at z 772 at x -3300 for
+  y 6160-6280, through the doorway; only the catwalk mover itself (y 6100) has none, as a mover should. So the
+  player's ledge check fails over converted floor and navmesh both. Next: hook the engine's ledge test (the native
+  behind Pawn's walking physics, CheckForLedges / the floor trace it makes) in this runtime and log its trace start,
+  end and result at the stop; a workaround meanwhile would be bCanWalkOffLedges for the player, which changes
+  Gears 3's feel and is not taken.

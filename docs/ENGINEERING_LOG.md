@@ -3158,3 +3158,11 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   -> -21824 -> -19456 (73 degrees) and back. Open: Marcus reaches y 6062 within 4 s of the push but stays at
   y 6194 while the door is open (its swing direction or its collision in the converted level); Dom stays back
   at (-3250,2826) after the teleport.
+- The roadie-run doorway (y 6150-6240), checked offline: the door (InterpActor_5 -> converted InterpActor_9,
+  Sized_Doors.SizedDoor1_DR, bounds x -178..0 local, scale 0.95) spans x -3412..-3242 closed (yaw 180) and swings
+  +73 degrees toward +y, away from the player: open, it leaves x -3362..-3242. The arch at the stop line
+  (S04 StaticMeshActor_559, RB_Prison_Misc_DoorArch_Mirrored_02_Mesh at (-3327,6192,1104), blocking) has three
+  convex hulls: two posts (local x -77..-48, 47..76) and the lintel (z -1..150): its opening is open. S04_Scripting's
+  BlockingVolume_0 (-3360,6240,704) is not converted. Also blocking there: S04 StaticMeshActor_732 (window,
+  y 6143) and S05 StaticMeshActor_722 (door frame, (-3328,6224,880)). Next: which converted collision stops Marcus
+  at y 6194 with the door open (a trace in game, or the merged mesh's hulls around (-3330,6200)).

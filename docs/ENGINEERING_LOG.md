@@ -3146,3 +3146,15 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   Open: where Gears 3 puts the player on Continue for a converted checkpoint (his saved position at the save, or a
   start point), and where Marcus was when this save was written (the fresh run's log is gone). If players come
   back south of a gate that shut behind them, the converter must place them at Gears 1's WarCheckpoint instead.
+- **Fixed (2026-11-05): Continue puts the players at the checkpoint, as Gears 1 did.** Gears 1 put the players back
+  at the checkpoint actor (WarCheckpoint) on a load; Gears 3 restores them where they were when it saved. A fresh
+  run's S04 save was written with Marcus at (-3374,2268), south of the S02 gate (up, z 1152, the whole run); on
+  Continue the checkpoint's load event (SeqEvt_CheckpointActivated_0 of WarCheckpoint_0) shuts that gate
+  (RemoteEvent "shutS02Door" -> easyPath Interp_2), with Marcus on the wrong side. tools/objcopy.py now copies
+  WarCheckpoint actors (as PathNodes) and gives each later checkpoint's load event a SeqAct_Teleport (all players,
+  GearSeqVar_Player) to its checkpoint actor (checkpoint_teleport). Verified from a new save (build/scratch/
+  snap_s04h): G1CheckpointTeleport fires on Continue, Marcus goes from (-3225,2305) to (-3419,2509), and the S04
+  route walks to the roadie-run button; the push fires, and the door (InterpActor_9, bound now) swings: yaw -32767
+  -> -21824 -> -19456 (73 degrees) and back. Open: Marcus reaches y 6062 within 4 s of the push but stays at
+  y 6194 while the door is open (its swing direction or its collision in the converted level); Dom stays back
+  at (-3250,2826) after the teleport.

@@ -1323,6 +1323,9 @@ SUN_POINT = bool(os.environ.get("OBJCOPY_SUN_POINT")) and not os.environ.get("OB
 if SUN_POINT: LIGHT_CLASSES |= {"DirectionalLight"}
 if os.environ.get("OBJCOPY_SKY"): LIGHT_CLASSES |= {"SkyLight", "SkyLightToggleable"}
 if not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= LIGHT_CLASSES
+# Gears 1's checkpoint actors: where a load puts the players (checkpoint_teleport), copied as a PathNode
+if not os.environ.get("OBJCOPY_NO_ACTORS") and not os.environ.get('OBJCOPY_NO_RENAME'):
+    ACTOR_CLASSES.add('WarCheckpoint'); CLASS_RENAME['WarCheckpoint'] = 'PathNode'
 SOUND_ACTORS = {'AmbientSoundSimple', 'AmbientSoundNonLoop', 'AmbientSound'}
 # Gears 1's weapon pickups (the prison's frag grenades): Gears 3's GearWeaponPickupFactory makes the pickup's mesh from
 # the weapon class (SetPickupMesh: DroppedPickupMesh), so Gears 1's static mesh component is not copied
@@ -2630,6 +2633,7 @@ def checkpoint_events(up, made):
         if origin > 0 and mine:
             set_name(eref, 'FindCheckPointName', checkpoint_name(origin))
             for ai, aref in mine: set_name(aref, 'CheckpointName', checkpoint_name(origin))
+        if origin > 0 and mine and not persistent and checkpoint_teleport(up, eref, origin): n += 1
         if not mine: mine = [(ai, aref) for ai, aref in actions if s.exports[ai]['outer'] == s.exports[ei]['outer']]
         # only the persistent level's checkpoint (the chapter's first, which a fresh start loads in Gears 1) runs its
         # events on a save too; a later one's are for a load only (the prison's S04 easy checkpoint: its event shuts
@@ -2660,6 +2664,61 @@ def checkpoint_events(up, made):
             d = w.current(aref - 1)
             w.replace(aref - 1, d[:4] + up.enc(recs) + d[end:])
     return n
+
+
+# Gears 1 put the players back at the checkpoint actor (WarCheckpoint, a navigation point) when a checkpoint loaded;
+# Gears 3 puts them where they were when it saved. The prison's S04 easy checkpoint saves with Marcus south of the
+# S02 gate and its load event shuts that gate (behind a player who is at the checkpoint, north of it): on Continue
+# Marcus was shut out of the level. Each later checkpoint's load event now first teleports the players
+# (GearSeqVar_Player: all of them) to the checkpoint actor, copied as a PathNode (WarCheckpoint in ACTOR_CLASSES).
+def checkpoint_teleport(up, eref, origin):
+    c, w = up.c, up.w
+    dest = c.obj_map.get(origin)
+    seq = struct.unpack_from('>i', w.exports[eref - 1], 8)[0]
+    op_cls, pvar_cls, ovar_cls = c.class_ref('SeqAct_Teleport'), c.class_ref('GearSeqVar_Player'), c.class_ref('SeqVar_Object')
+    if not dest or seq <= 0 or not op_cls or not pvar_cls or not ovar_cls: return False
+    parent = ['ParentSequence', 'ObjectProperty', 0, b'', struct.pack('>i', seq)]
+    pvar = w.add_export(pvar_cls, seq, c.unique_name('G1CheckpointPlayers', 0), b'', flags=0x0007000100000000)
+    w.replace(pvar - 1, struct.pack('>i', -1) + up.enc([parent]))
+    ovar = w.add_export(ovar_cls, seq, c.unique_name('G1CheckpointSpot', 0), b'', flags=0x0007000100000000)
+    w.replace(ovar - 1, struct.pack('>i', -1) + up.enc([['ObjValue', 'ObjectProperty', 0, b'', struct.pack('>i', dest)], parent]))
+    op = w.add_export(op_cls, seq, c.unique_name('G1CheckpointTeleport', 0), b'', flags=0x0007000100000000)
+    arrays = []
+    for prop, conn in LINK_ARRAYS[:3]:
+        dflt = up.g3.default_array('SeqAct_Teleport', prop)
+        if dflt is None: continue
+        els = [up.retag(e, dflt[0]) for e in up.elements(dflt[1], dflt[0].fname)]
+        if prop == 'VariableLinks':
+            for e in els:
+                desc = next((str_value(r[4]) for r in e if r[0] == 'LinkDesc'), '').lower()
+                v = pvar if desc == 'target' else ovar if desc == 'destination' else 0
+                if v: e[:] = [r for r in e if r[0] != 'LinkedVariables'] + [['LinkedVariables', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, v)]]
+        arrays.append([prop, 'ArrayProperty', 0, b'', struct.pack('>i', len(els)) + b''.join(up.enc(e) for e in els)])
+    w.replace(op - 1, struct.pack('>i', -1) + up.enc(arrays + [parent]))
+    # the event's first output -> the teleport
+    recs, end = parse828(w.current(eref - 1), 4, up.wname)
+    linked = False
+    for r in recs:
+        if r[0] != 'OutputLinks' or linked: continue
+        els = up.elements(r[4], up.wname)
+        if not els: continue
+        e = els[0]
+        lr = next((x for x in e if x[0] == 'Links'), None)
+        link = [['LinkedOp', 'ObjectProperty', 0, b'', struct.pack('>i', op)], ['InputLinkIdx', 'IntProperty', 0, b'', struct.pack('>i', 0)]]
+        if lr is None: e.append(['Links', 'ArrayProperty', 0, b'', struct.pack('>i', 1) + up.enc(link)])
+        else: lr[4] = struct.pack('>i', struct.unpack_from('>i', lr[4], 0)[0] + 1) + lr[4][4:] + up.enc(link)
+        r[4] = struct.pack('>i', len(els)) + b''.join(up.enc(x) for x in els)
+        linked = True
+    if not linked: return False
+    d = w.current(eref - 1)
+    w.replace(eref - 1, d[:4] + up.enc(recs) + d[end:])
+    sd = w.current(seq - 1)
+    srecs, send = parse828(sd, 4, up.wname)
+    for r in srecs:
+        if r[0] == 'SequenceObjects':
+            r[4] = struct.pack('>i', struct.unpack_from('>i', r[4], 0)[0] + 3) + r[4][4:] + struct.pack('>iii', pvar, ovar, op)
+    w.replace(seq - 1, sd[:4] + up.enc(srecs) + sd[send:])
+    return True
 
 
 # ---- the squad: Gears 3's player slots ----

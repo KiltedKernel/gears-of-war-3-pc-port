@@ -76,33 +76,38 @@ class Rewriter:
     def build(self):
         import modpack
         img = modpack.uncompressed_image(self.p)
-        # Net indices. A Kismet object's serial data starts with its net index, unique among its package's own
-        # objects. Gears 3's checkpoints save Kismet by it: an object at -1 is saved as None, and on Continue the
-        # chapter's Main_Sequence lost its converted Kismet (G1_<level>, TrilogySharedTextures). Kismet objects added
-        # here came with -1 or with their source package's indices (duplicates): each gets the next free index, after
-        # the highest of the package's own Kismet. Only Kismet (a Sequence and what is inside one): an actor's data
-        # starts with its state frame (RF_HasStack), a component's with its template owner and name.
+        # Net indices: unique among a package's own objects. Gears 3's checkpoints save Kismet, and the objects its
+        # variables point at, by them: an object at -1 (or sharing an index) is saved as None. On Continue the
+        # chapter's Main_Sequence lost its converted Kismet (G1_<level>, TrilogySharedTextures; 2026-11-03), and a
+        # level's object variables lost the converted actors they name (S04's roadie-run door: its matinee played
+        # on nothing; 2026-11-05). Objects added here came with -1 or with their source package's indices
+        # (duplicates): each gets the next free index, after the highest of the package's own objects. Where it is:
+        # an actor's (RF_HasStack) after its state frame (Node, StateNode, ProbeMask 8, LatentAction 2, Offset:
+        # 22 bytes; all 317 in a stock level), a component's after its template owner class (and, when that is
+        # set, its template name), anything else's first.
         orig = len(self.p.exports)
         def cls_name(k):
             c = struct.unpack_from('>i', self.exports[k], 0)[0]
             if c < 0: return self.names[struct.unpack_from('>i', self.imports[-c - 1], 20)[0]]
             return self.names[struct.unpack_from('>i', self.exports[c - 1], 12)[0]] if c > 0 else 'Class'
-        def in_kismet(k):
-            for _ in range(64):
-                if cls_name(k) == 'Sequence': return True
-                outer = struct.unpack_from('>i', self.exports[k], 8)[0]
-                if outer <= 0: return False
-                k = outer - 1
-            return False
+        def net_at(k, data):
+            if struct.unpack_from('>Q', self.exports[k], 24)[0] & 0x0200000000000000: return 22
+            c = cls_name(k)
+            if c.endswith('Component') or c.startswith('Distribution'):
+                return 4 if struct.unpack_from('>i', data, 0)[0] == 0 else 12
+            return 0
         top = -1
         for k in range(orig):
             x = self.p.export_data(k)
-            if len(x) >= 4 and in_kismet(k): top = max(top, struct.unpack_from('>i', x, 0)[0])
+            o = net_at(k, x) if len(x) >= 4 else None
+            if o is not None and len(x) >= o + 4: top = max(top, struct.unpack_from('>i', x, o)[0])
         next_net = top + 1
         for k in range(orig, len(self.exports)):
             data = self.appended.get(k)
-            if data is None or len(data) < 4 or not in_kismet(k): continue
-            self.appended[k] = struct.pack('>i', next_net) + data[4:]
+            if data is None or len(data) < 4: continue
+            o = net_at(k, data)
+            if len(data) < o + 4: continue
+            self.appended[k] = data[:o] + struct.pack('>i', next_net) + data[o + 4:]
             next_net += 1
         self.net_objects = next_net
         for k, data in self.appended.items():

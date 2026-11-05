@@ -3104,3 +3104,17 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   A fresh-start run to the door (build/scratch/fresh_door.txt, -Fresh) did not settle it: its button press did not
   register (no SeqEvt_ButtonPush in the trace), so the matinee never played. Note: gow3.log rolls over to gow3-2.log
   in long runs; read both.
+- **Root cause (2026-11-05): the converted actors' net indices.** Logged at run time after Continue from the S04
+  save: the door matinee (SeqAct_Interp_1, 10.4 s) plays start to end, but every S04 matinee's InterpGroupInst has
+  GroupActor=None (S05's, loaded fresh, are bound), and most easyPath SeqVar_Objects are None (SeqVar_Object_3, the
+  door, among them). The 2026-11-03 fix gave added Kismet unique net indices but left added actors and components
+  at their source's (-1 or duplicates; 1993 objects at -1 in S04_Scripting), and Gears 3's checkpoint saves the
+  objects Kismet variables point at by net index too. tools/upkwrite.py now gives every added object the next free
+  index, where its class keeps it: an actor (RF_HasStack) at +22, after its state frame (Node, StateNode, ProbeMask
+  8, LatentAction 2, Offset; all 317 in a stock level have their properties at +26), a component at +4 (+12 when
+  it names a template), anything else at +0. The first attempt (2026-11-03) wrote actors at +0 into the state frame
+  and broke the level. Rebuilt chapter 1: the door InterpActor_9 is 4382, actors parse at +26.
+  NOT YET VERIFIED in game: needs a new S04 checkpoint save made with this build (the old snapshot holds the old
+  indices), then Continue and the button: the door should swing. A fresh run (build/scratch/fresh_door2.txt) was
+  stopped by low memory before it got there. Also affects players: any converted chapter's Kismet that names a
+  converted actor (doors, triggers, AI targets) after Continue.

@@ -3090,3 +3090,14 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   near the trigger stands idle (the `teleport x y z Class` verb, runtime/hid/hid.cpp, moves him). Next: a run where
   Dom keeps up (no Marcus teleport: the mantle at the roadie-run door) to see the welding-door fight start; nothing
   points to a converter bug here.
+- **The roadie-run door does not open in checkpoint runs (2026-11-05).** Walking (no teleport) from the S04 save,
+  Marcus stops at y 6194 every time: the door is S04_Scripting easyPath's InterpActor (Gears 1 InterpActor_5,
+  converted InterpActor_9, (-3412,6232,752)); both buttons (SeqEvt_ButtonPush_0/1: Trigger_ButtonInteraction_0 at
+  y 4675 and _1 at (-3168,6259), the far side) open Gate_1 -> SeqAct_Interp_1 (InterpData_3, 10.4 s: the door
+  swings, EulerTrack yaw 0 -> 73 at 0.5 s, held to 7.0 s, back by 7.5 s; PosTrack about 0). The push and the matinee
+  fire (Interp_1, its doorShutDialog event -> Gate_3), the door is bound (SeqVar_Object_3 -> InterpActor_9) and is
+  PHYS_Interpolating, but its Rotation never changes (yaw -32767 the whole run). The converted track's keys equal
+  Gears 1's, and rotation-only door matinees play elsewhere (S02's easyDoorRoom). Open question: the S04 checkpoint
+  restore (these runs start from it) leaving the matinee or the door in a state where it does not move; a fresh
+  start to this door (no Continue) would tell. The route walker with A held (roadie run) overshoots points and turns
+  back: give it one straight leg (build/scratch/cp_noport.txt).

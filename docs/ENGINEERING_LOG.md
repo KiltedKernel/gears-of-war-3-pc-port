@@ -3182,3 +3182,12 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   collision against its swing (a door at rest blocks x -3412..-3242; whether its collision turns with it), the
   step from a mover base (InterpActor_22) onto the converted S05 floor under bStopAtLedges, or a converted S05
   mesh. Next: an in-game trace/hit log at the stop (the pawn's HitWall / Bump with the actor hit).
+- **The roadie-run door stop is the ledge check (2026-11-05).** Same run with GOW3_SET_PROPS
+  "GearPawn_COGMarcusG2MP:bStopAtLedges=0,bCanWalkOffLedges=1,bAvoidLedges=0": Marcus walks through the open door
+  to (-3313,6281) (the route point past it reached). So it is not a wall: Gears 3's player stops at a ledge
+  (bStopAtLedges) where the catwalk mover he stands on (InterpActor_22, slab ending at y 6176, top 768) meets the
+  converted S05 floor, which Gears 1 has flush at 768 there. The ledge test finds no floor past the slab's end in
+  the converted level. (After crossing, the closing door pushed him back south of it.) Probably the same at the
+  S05 "gap" (a catwalk end 60 units short of S05's floor). Next: what the ledge trace hits (or misses) at
+  (-3300,6190..6240): the converted S05 floor's collision there, or the trace ignoring the floor while the pawn's
+  Base is a mover; then fix in the converter (floor collision) rather than in the pawn.

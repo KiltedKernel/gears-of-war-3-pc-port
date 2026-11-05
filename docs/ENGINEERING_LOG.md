@@ -3101,3 +3101,6 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   restore (these runs start from it) leaving the matinee or the door in a state where it does not move; a fresh
   start to this door (no Continue) would tell. The route walker with A held (roadie run) overshoots points and turns
   back: give it one straight leg (build/scratch/cp_noport.txt).
+  A fresh-start run to the door (build/scratch/fresh_door.txt, -Fresh) did not settle it: its button press did not
+  register (no SeqEvt_ButtonPush in the trace), so the matinee never played. Note: gow3.log rolls over to gow3-2.log
+  in long runs; read both.

@@ -3166,3 +3166,11 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   BlockingVolume_0 (-3360,6240,704) is not converted. Also blocking there: S04 StaticMeshActor_732 (window,
   y 6143) and S05 StaticMeshActor_722 (door frame, (-3328,6224,880)). Next: which converted collision stops Marcus
   at y 6194 with the door open (a trace in game, or the merged mesh's hulls around (-3330,6200)).
+- More of the doorway (Gears 1 data, world space): S05 StaticMeshActor_722 (COG_City_DoorFrame2_SMesh_DR, z scale
+  0.9) has posts x -3448..-3418 and -3254..-3224 and a lintel from z 959 (y 6200-6247): opening x -3418..-3254,
+  up to z 959; S05's BSP crosses only above (a face at y 6208 from z 1008, a ceiling at 1008); no BlockingVolume.
+  With the door open, x -3362..-3254 (108 units) is clear in Gears 1's own collision. So the stop at y 6194 comes
+  from something the conversion adds or changes: candidates are Gears 3 Marcus's cylinder against the lintel at
+  959 (the floor here and his collision height to measure), the door's converted collision not following its
+  rotation, or a converted merged mesh's hull. Next: an in-game trace (or GOW3_LOG_PROPS of the pawn's Floor/Base
+  and CylinderComponent) at the stop.

@@ -3136,3 +3136,13 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
 - Why fresh runs could not press the roadie-run button: its event (easyPath.SeqEvt_ButtonPush_1) starts disabled
   and easyPath.SeqAct_Toggle_9 turns it on when AIFactory_3's Drones are All Dead; the test's fight did not always
   kill them (a write watch on the event's bEnabled: no write in such a run). Not a conversion bug.
+- **Next blocker after the restore fix (2026-11-05): a gate restored shut, Marcus on the wrong side.** Continue
+  from snap_s04g: Marcus comes back at (-3225,2303,846) and cannot go north past y 2330. The gate is S04_Scripting
+  InterpActor_12 (Gears 1 the same name), the "door" group of easyPath.SeqAct_Interp_2 (RemoteEvent_5
+  "shutS02Door" plays it: z -384 in 0.08 s); after Continue it sits at (-3108,2368,768), the matinee's end - shut,
+  restored from the save now that the reference survives. Before the fix the reference restored as None and the
+  gate stayed up, which is why every older Continue run walked through. The checkpoint actor
+  (WarCheckpoint_0) is at (-3419,2509), north of the gate, while Marcus is restored south of it.
+  Open: where Gears 3 puts the player on Continue for a converted checkpoint (his saved position at the save, or a
+  start point), and where Marcus was when this save was written (the fresh run's log is gone). If players come
+  back south of a gate that shut behind them, the converter must place them at Gears 1's WarCheckpoint instead.

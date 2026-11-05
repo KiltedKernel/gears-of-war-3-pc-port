@@ -3123,3 +3123,10 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   S02, S04 ..., and the first checkpoint save at the chapter's start died with appError "OOM: Ran out of memory
   trying to allocate 498935624 bytes" (logged thanks to RtlUnicodeStringToAnsiString). New indices now start at the
   template generation's own NetObjectCount (largest in chapter 1: 3769); the chapter saves checkpoints again.
+- Fresh-start runs to the roadie-run door (build/scratch/fresh_door2.txt, fresh_door3.txt): the chapter now saves
+  checkpoints and reaches the button, the button is enabled first (easyPath / towerFalls SeqAct_Toggle_9 fire during
+  the S04 route), Marcus presses X 67 units from it (as in the checkpoint runs, where SeqEvt_ButtonPush_1 fires),
+  but no push registers from a fresh start, three tries. So the door's Continue fix is still unverified in game.
+  Next: find what the push needs here (the trigger's bUsable state, AimToInteract / facing, Dom's position) by
+  logging Trigger_ButtonInteraction's properties in both kinds of run; then make the new S04 save from a fresh run
+  and Continue to the door.

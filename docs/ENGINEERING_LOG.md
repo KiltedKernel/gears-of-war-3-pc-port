@@ -3174,3 +3174,11 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   959 (the floor here and his collision height to measure), the door's converted collision not following its
   rotation, or a converted merged mesh's hull. Next: an in-game trace (or GOW3_LOG_PROPS of the pawn's Floor/Base
   and CylinderComponent) at the stop.
+- Measured at the stop (Continue from snap_s04h, 225 s): Marcus (-3282,6187,846), cylinder 72 high / 34 radius (top
+  918, under the frame's 959), standing on S04_Scripting InterpActor_22 (RB_Prison_Floors_Catwalks_Straight_1024,
+  yaw 90, x scale 0.67: one slab x -3520..-3136, y 5488..6176, top z 768; only the hard path's bridgeChopper moves
+  it). Past its end Gears 1's S05 BSP floor runs on at z 768 (y 6176-6208, 6208-6240 under the door, 6240-6560),
+  flush. So not height, not a missing floor in Gears 1's data, not the arch or frame. Left: the door's converted
+  collision against its swing (a door at rest blocks x -3412..-3242; whether its collision turns with it), the
+  step from a mover base (InterpActor_22) onto the converted S05 floor under bStopAtLedges, or a converted S05
+  mesh. Next: an in-game trace/hit log at the stop (the pawn's HitWall / Bump with the actor hit).

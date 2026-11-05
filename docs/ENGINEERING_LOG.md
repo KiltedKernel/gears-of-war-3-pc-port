@@ -3191,3 +3191,9 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   S05 "gap" (a catwalk end 60 units short of S05's floor). Next: what the ledge trace hits (or misses) at
   (-3300,6190..6240): the converted S05 floor's collision there, or the trace ignoring the floor while the pawn's
   Base is a mover; then fix in the converter (floor collision) rather than in the pawn.
+- The converted floor is there: GOW1_SP_Prison_S05's Trilogy_BSP_5 has triangles at z 768 at x -3300 for every y
+  from 6185 on (none at 6170: Gears 1's strip starts at 6176, where the catwalk slab ends), flush with the slab;
+  Trilogy_Merged_1 only overhead (z 961+, the frame). So the ledge check stops the pawn over real floor. Next
+  hypothesis: the converted navigation mesh (built with the door shut, tools/navinject.py / pylons.py) has no
+  surface through the doorway, and the player's ledge test in Gears 3 uses it; check the S05/S04 pylons' polygons
+  at (-3300,6190..6240), and the S05 "gap" the same way.

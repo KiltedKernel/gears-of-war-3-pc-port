@@ -3130,3 +3130,9 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   Next: find what the push needs here (the trigger's bUsable state, AimToInteract / facing, Dom's position) by
   logging Trigger_ButtonInteraction's properties in both kinds of run; then make the new S04 save from a fresh run
   and Continue to the door.
+- **Verified (2026-11-05):** a fresh run made a checkpoint save with this build (build/scratch/snap_s04g); Continue
+  from it restores S04's easyPath object variables: SeqVar_Object_3 = InterpActor_9 (the door; None before the fix),
+  26 of easyPath's variables set against about 10 before (the 8 still None may be ones the game fills at run time).
+- Why fresh runs could not press the roadie-run button: its event (easyPath.SeqEvt_ButtonPush_1) starts disabled
+  and easyPath.SeqAct_Toggle_9 turns it on when AIFactory_3's Drones are All Dead; the test's fight did not always
+  kill them (a write watch on the event's bEnabled: no write in such a run). Not a conversion bug.

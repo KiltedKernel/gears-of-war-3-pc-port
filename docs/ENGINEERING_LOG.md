@@ -3118,3 +3118,8 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   indices), then Continue and the button: the door should swing. A fresh run (build/scratch/fresh_door2.txt) was
   stopped by low memory before it got there. Also affects players: any converted chapter's Kismet that names a
   converted actor (doors, triggers, AI targets) after Continue.
+- The first build with it broke every Continue-able chapter: the next free index came from the highest index read
+  in the template's own objects, and for some class that word was not an index: NetObjectCount 1.2 billion in S01,
+  S02, S04 ..., and the first checkpoint save at the chapter's start died with appError "OOM: Ran out of memory
+  trying to allocate 498935624 bytes" (logged thanks to RtlUnicodeStringToAnsiString). New indices now start at the
+  template generation's own NetObjectCount (largest in chapter 1: 3769); the chapter saves checkpoints again.

@@ -96,12 +96,13 @@ class Rewriter:
             if c.endswith('Component') or c.startswith('Distribution'):
                 return 4 if struct.unpack_from('>i', data, 0)[0] == 0 else 12
             return 0
-        top = -1
-        for k in range(orig):
-            x = self.p.export_data(k)
-            o = net_at(k, x) if len(x) >= 4 else None
-            if o is not None and len(x) >= o + 4: top = max(top, struct.unpack_from('>i', x, o)[0])
-        next_net = top + 1
+        # the template's own objects use indices below its newest generation's NetObjectCount: start there (reading
+        # the highest index from the objects instead took a non-index word for one and gave counts of 1.2 billion,
+        # which Gears 3's checkpoint save sizes an allocation by: "OOM ... 498935624 bytes" at the first checkpoint)
+        so = self.p.package_flags_offset + 4
+        go = so + 28 + 16 + 16
+        gens = struct.unpack_from('>i', img, go)[0]
+        next_net = struct.unpack_from('>i', img, go + 4 + 12 * (gens - 1) + 8)[0]
         for k in range(orig, len(self.exports)):
             data = self.appended.get(k)
             if data is None or len(data) < 4: continue

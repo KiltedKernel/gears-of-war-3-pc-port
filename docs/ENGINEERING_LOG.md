@@ -3203,3 +3203,10 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   behind Pawn's walking physics, CheckForLedges / the floor trace it makes) in this runtime and log its trace start,
   end and result at the stop; a workaround meanwhile would be bCanWalkOffLedges for the player, which changes
   Gears 3's feel and is not taken.
+- Floor-hop test (build/scratch/cp_doorhop.txt): with the door open, Marcus teleported onto the converted floor at
+  (-3300,6215) stands on it (Base WorldInfo_3) and walks north freely (6356, 6484). So the floor past the door
+  works; what fails is stepping from the catwalk mover (Base InterpActor_22, slab ending at y 6176) onto it under
+  bStopAtLedges. Converter-side options: give the walk a world floor under the mover's end (Gears 1's own BSP
+  strip from y 6176 is there, but the converted mesh's floor starts at 6185: the 9-unit seam may be the gap the
+  ledge test sees), or hook the ledge test to see its trace. Next: check why Trilogy_BSP_5 starts at 6185, not
+  6176 (a dropped sliver polygon from y 6176-6185?).

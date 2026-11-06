@@ -168,9 +168,10 @@ namespace
         while (GetMessageW(&m, nullptr, 0, 0) > 0) DispatchMessageW(&m);
     }
 
+    void LogMark();
     void MouseThread()
     {
-        bool hotkeyWasDown = false;
+        bool hotkeyWasDown = false, markWasDown = false;
         for (;;)
         {
             Sleep(2);
@@ -178,6 +179,10 @@ namespace
             const bool hotkey = Focused() && (Down(VK_F11) || (Down(VK_MENU) && Down(VK_RETURN)));
             if (hotkey && !hotkeyWasDown) { SetCaptured(false); portgpu::ToggleFullscreen(); }
             hotkeyWasDown = hotkey;
+            // F8 (manual tests): a numbered marker in the log with where the squad stands, for a tester's notes
+            const bool mark = Focused() && Down(VK_F8);
+            if (mark && !markWasDown) LogMark();
+            markWasDown = mark;
             static bool wasMenu = false;
             const bool menu = g_menuMode;
             if (!Focused() || Down(VK_MENU) || menu) { SetCaptured(false); wasMenu = menu; continue; }
@@ -255,6 +260,32 @@ namespace
             if (player && ue3::IsA(player, localPlayer)) { g_localController = pc; return ue3::Read32(pc + pawnOff); }
         }
         return 0;
+    }
+
+    // F8 (manual tests): "MARK n" with the player's position and what he stands on (Base), and Dom's position
+    void LogMark()
+    {
+        static int n = 0;
+        static const uint32_t actor = ue3::FindClass("Actor");
+        const int loc = actor ? ue3::PropertyOffset(actor, "Location") : -1;
+        const int base = actor ? ue3::PropertyOffset(actor, "Base") : -1;
+        auto pos = [&](uint32_t a) {
+            float v[3] = {};
+            for (int k = 0; k < 3; k++) { uint32_t u = ue3::Read32(a + uint32_t(loc) + 4 * k); memcpy(&v[k], &u, 4); }
+            return fmt::format("({:.0f},{:.0f},{:.0f})", v[0], v[1], v[2]);
+        };
+        const uint32_t pawn = LocalPawn();
+        std::string line = fmt::format("MARK {}:", ++n);
+        if (pawn && loc >= 0)
+        {
+            const uint32_t b = base >= 0 ? ue3::Read32(pawn + uint32_t(base)) : 0;
+            line += fmt::format(" {} {} on {}", ue3::ObjectName(pawn), pos(pawn), b ? ue3::ObjectName(b) : "nothing");
+        }
+        else line += " no player pawn";
+        static const uint32_t dom = ue3::FindClass("GearPawn_COGDomG2");
+        for (uint32_t d : dom && loc >= 0 ? ue3::FindInstancesOf(dom) : std::vector<uint32_t>())
+            line += fmt::format(" | {} {}", ue3::ObjectName(d), pos(d));
+        LOGFN("{}", line);
     }
 
     // "teleport x y z [Class]" (testing): the local player's pawn put there (its Location written: a test reaches a

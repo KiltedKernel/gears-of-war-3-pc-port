@@ -3214,3 +3214,15 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   the catwalk slab ends; the geometry is continuous. The failing step is from the mover's surface onto world
   geometry at the same height; the ledge test itself must be traced (or the catwalk made world geometry where it
   never moves on the path the player takes).
+
+## 2026-11-05: COGBox (TU6) hides the trilogy's Act VI - Gears 3 TU6 reserves ActNum 5 for RAAM's Shadow
+- On COGBox 0.4.5 (TU6) the three chapters load (mod chapters 32-34 mapped, config fragments merged into both
+  user\mod-config and user\ini-edits Coalesced_INT.bin, verified with tools/coalesced.py) but Select Chapter shows
+  no Act VI. The base disc (this runtime) lists it from config alone. TU6's ScriptPatch_GearGame.bin (update
+  GearGame\Patches, LZX: tools/xpack ... 0 lzx) rewrites ConstructActList / ConstructChapterSelectData and adds
+  GearDLCCampaignActData, IsCampaignDLC1Installed, SelectChapterDLC, DLCStartAct / DLCStartChapter, with consts
+  DLC2_ACT_NUM = 5 and DLC2_START_CHAPTER = 31: ActNum 5 ("Act VI") is RAAM's Shadow's act.
+- Test (user, in progress): the installed mods' config moved to ActNum 6 ("VII: Gears of War"). If it shows, the
+  fix is tools/campaign.py's act number (and the trilogy acts after 6); if not, chapters >= 31 are filtered too.
+- Also seen: COGBox loads the mods' content packages (MPCH_* squad) on the game thread at the title screen: a
+  35 s stall (gow3_tick_log max 33916 ms) before the title screen answers.

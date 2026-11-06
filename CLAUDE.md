@@ -68,6 +68,13 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
 
 ## Open work (keep this current)
 
+- **2026-11-05 direction: COGBox is the runtime to develop and test on** (map: docs/COGBOX_DEV.md). Next, in order:
+  (1) the COGBox mod framework, design draft docs/superpowers/specs/2026-11-05-cogbox-mod-framework-design.md (share
+  with Shagg/Flippage first): campaign registry + a runtime fix for TU6's five-act cap in ConstructActList (the reason
+  the trilogy's Act VI is hidden on COGBox; ENGINEERING_LOG 2026-11-05), async content packages (35 s title freeze);
+  (2) port the debug tooling and the Scaleform menu mouse (runtime/ui/gfx_menu.cpp) to COGBox; (3) the user's manual
+  trilogy test plan on COGBox; (4) chapter 1's roadie-run door (Gears 3's ledge check stepping off a catwalk mover).
+
 - COGBox (the merged project's home, local clone `../cogbox`): our mod support (PR #122) is merged in COGBox 0.4.3
   (SDK patch 61, renumbered from our 60); fixes for its issues #146 (PR #148, merged) and #145 (PR #156, Gears 2
   voice-language twins). Build recipe and status in docs/ECOSYSTEM.md and COGBox's Gears3-Native/notes/28-mod-support.md.

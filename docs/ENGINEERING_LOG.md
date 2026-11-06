@@ -3226,3 +3226,12 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   fix is tools/campaign.py's act number (and the trilogy acts after 6); if not, chapters >= 31 are filtered too.
 - Also seen: COGBox loads the mods' content packages (MPCH_* squad) on the game thread at the title screen: a
   35 s stall (gow3_tick_log max 33916 ms) before the title screen answers.
+- **TU6 caps the act list at five (2026-11-05).** Decompiled TU6's patched UIWidget_MainMenu.ConstructActList
+  (ScriptPatch_GearGame.bin: entries are FName string, FString path, int script size, bytecode; object refs resolve
+  against the disc's GearGame.xxx, so tools/uscript.py's Reader decodes it with GearGame.xxx as the package):
+  `if (I < 5) CurrentList.SetElementObject(I, ...)` and after the loop `CurrentList.SetFloat('length', 5.0)`.
+  Bytes: `2C 05` at script +0x272, `1E 40 A0 00 00` at +0x4D9 (file offset of the script 0x1CB4F5 in the decoded
+  patch). The base disc builds the list from the providers with no cap. Also: acts are found by ActNum = I for
+  I < provider count, so ActNum must be contiguous (the ActNum 6 test could not have shown on any build). Fix path
+  (design doc 6.1): raise both constants at run time and number mod acts from 5. ConstructChapterSelectData still to
+  read (its decode needs the patch's appended names).

@@ -153,7 +153,18 @@ for repeatable tests, an F8 log marker, and fatal engine error text in the log. 
 
 ### 6.1 Menu integration on TU6 (research first)
 
-TU6's act list stops after Act V for anything that is not RAAM's Shadow. To settle before building:
+**Found (2026-11-05):** TU6's `UIWidget_MainMenu.ConstructActList` (decompiled from ScriptPatch_GearGame.bin with
+tools/uscript.py against the disc's GearGame.xxx tables) hard-codes five acts: a new act row is only added
+`if (I < 5)` (bytecode `2C 05`, script +0x272 on disk) and after the loop `CurrentList.SetFloat('length', 5.0)`
+(`1E 40A00000`, +0x4D9). The base disc has neither cap. Acts must also be contiguous (the loop looks for ActNum = 0,
+1, 2 ... up to the number of act providers), so mod acts take ActNum 5, 6 ... with no gaps (ActNum 6 alone was never
+found, on either build). **So approach 1 becomes concrete:** a runtime *script constant* service that, once the patched
+function is loaded, finds those two constants in its Script array by pattern and raises them to 5 + the registry's
+act count; acts get contiguous numbers from 5. Still to read: `ConstructChapterSelectData` (its decompile stops on a
+name the patch adds; the decoder needs the patch's own name table) for a similar chapter or DLC filter, and how the
+RAAM's Shadow act (`DLC2_ACT_NUM` 5) is listed when the DLC is installed (then mod acts start after it).
+
+Original research list:
 - Read the patched `ConstructActList` / `ConstructChapterSelectData` (TU6 `ScriptPatch_GearGame.bin`: a small package
   of replacement script; LZX, decodes with the trilogy's tools) to see exactly what they filter on.
 - Candidate approaches, in order of preference:

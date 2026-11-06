@@ -3240,3 +3240,23 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   of the act, no DLC or number filter; unlock and completion bits per chapter come from 32-bit words indexed
   ChapterNum / 32 (chapters 32-49: word 1). So the five-act cap in ConstructActList is the only TU6 change that hides
   mod campaigns.
+
+## 2026-11-05 (night): chapter 1 plays on COGBox from Select Chapter; user playtest findings
+- COGBox PR #205 (TU6 five-act cap raised at run time) verified by the user: "VI: Gears of War" in Select Chapter, the
+  prison loads and plays on COGBox TU6.
+- Findings from the user's playtest (logs: cogbox-release/app/Gears3/logs/20261105-210941 play, -211803 recording):
+  - **Lighting looks like Gears 3's, not the converted Gears 1 look** (polish, later).
+  - **Path choice mouse buttons swapped** (left click picked the right path; the prompts say the opposite). This
+    runtime swapped them while UIScene_PathChoice was open (hid.cpp); COGBox had nothing. Fixed in COGBox (branch
+    kiltedkernel/path-choice-mouse: game_patches.cpp Gow3PathChoiceTick swaps keybind_left_trigger /
+    keybind_right_trigger while the scene is open and takes input). Affects Gears 3's own path choices too.
+  - **Left path softlock**: past the walkway stretch, between an open void and a pillar fallen in front of the door.
+    Not analysable from COGBox logs (no Kismet/position logging there yet): needs the debug tooling port or the
+    user's recording.
+  - **Checkpoint reload greyed out** in the pause menu though checkpoints were saved (182293-byte saves). TU6 patches
+    UIScene_Pause.ShouldOptionBeDisabled: option 3 (campaign pause) is disabled when GearGRI_SP.ChapterNum == 0, or a
+    GearGameSP_Base.PlayerSlots entry has no PawnClass / Owner, or a player-controller condition with 0.5. For the
+    trilogy: the GRI's ChapterNum may stay 0 for a mod chapter, or the empty squad slots 3-4 may count. To confirm
+    with property logging on COGBox.
+  - COGBox logs "content packages: ... kept loaded" for all five packages every second (log noise).
+- User priority (2026-11-05): chapter 1 complete and polished first (the trilogy's tech demo), chapters 2-3 after.

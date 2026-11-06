@@ -160,9 +160,12 @@ tools/uscript.py against the disc's GearGame.xxx tables) hard-codes five acts: a
 1, 2 ... up to the number of act providers), so mod acts take ActNum 5, 6 ... with no gaps (ActNum 6 alone was never
 found, on either build). **So approach 1 becomes concrete:** a runtime *script constant* service that, once the patched
 function is loaded, finds those two constants in its Script array by pattern and raises them to 5 + the registry's
-act count; acts get contiguous numbers from 5. Still to read: `ConstructChapterSelectData` (its decompile stops on a
-name the patch adds; the decoder needs the patch's own name table) for a similar chapter or DLC filter, and how the
-RAAM's Shadow act (`DLC2_ACT_NUM` 5) is listed when the DLC is installed (then mod acts start after it).
+act count; acts get contiguous numbers from 5. `ConstructChapterSelectData` (decoded with the patch's own 663 names) has no filter: it lists all of an act's
+ChapterProviders and sets the length to their count; unlock / completion bits are read per chapter number from
+32-bit words (`ChapterNum / 32`, `ChapterNum % 32`), so chapters 32-49 use the second word, and `IsAlwaysUnlocked`
+unlocks them regardless. **The five-act cap is the only TU6 obstacle.** Still open: how the RAAM's Shadow act
+(`DLC2_ACT_NUM` 5) is listed when the DLC is installed (then mod acts would start at 6), and whether the profile keeps
+the second progress word (progress of chapters 32+).
 
 Original research list:
 - Read the patched `ConstructActList` / `ConstructChapterSelectData` (TU6 `ScriptPatch_GearGame.bin`: a small package

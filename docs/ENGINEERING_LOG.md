@@ -3235,3 +3235,8 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
   I < provider count, so ActNum must be contiguous (the ActNum 6 test could not have shown on any build). Fix path
   (design doc 6.1): raise both constants at run time and number mod acts from 5. ConstructChapterSelectData still to
   read (its decode needs the patch's appended names).
+- TU6's ConstructChapterSelectData (decoded with the patch's own name table: int length + name per entry, 663 names
+  after the package name, appended to GearGame.xxx's; appended objects show as obj#N) lists every chapter provider
+  of the act, no DLC or number filter; unlock and completion bits per chapter come from 32-bit words indexed
+  ChapterNum / 32 (chapters 32-49: word 1). So the five-act cap in ConstructActList is the only TU6 change that hides
+  mod campaigns.

@@ -3290,3 +3290,31 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   (a reliable chapter start; `--ue3_launch` cannot start a mod chapter: the map is looked up before COGBox adds it).
 - **Test-setup gotcha:** a mod folder made with a junction served 0 files (links are skipped on purpose); COGBox now
   logs the skip.
+
+## 2026-11-11 (later): path choice swapped, the hard hallway's Drones, two-player cap, Marcus's radio pose
+
+- **Left mouse picked the right path again (COGBox).** The mouse swap watched UIScene_PathChoice, but the campaign's
+  scene is UIScene_PathChoiceContent (GearGameContent), which does not derive from it: the swap never engaged.
+  Both are watched now; verified with the scripted controller (open -> binds swapped; `choose L` -> choseHard).
+- **COGBox Kismet trace:** `--mod_kismet_trace=<package part>` (this repository's GOW3_KISMET_TRACE, ported).
+- **"The walkway's enemies only come out at the softlock".** Traced: the hard route's door, tower fall
+  (S04 SeqEvent_Touch_2, G1Volume_2 at (-1424,2792)) and hardHallwayCombat all run; AIFactory_1 spawns its Drones at
+  PathNode_0 (-1602,6539), whose MoveTargets are cover at y 5163-5535. They never left the spawn point: the yard's
+  navmesh had **no mesh past y 5790**. Pylons 2, 3, 5, 7, 9 carried an empty mesh (the package kept the template's
+  far-away placeholder), Pylon_8 five polygons. The builder log: the seed at (-1605,6525) traced down onto nothing
+  (line check result 1). The hallway's far end stands on S05's geometry, and the yard region was converted from
+  S02_Meshes, S03, S04 only. Recipe: the yard's `sources` add SP_Prison_S05 and S05_Meshes. Rebuilt
+  (build/trilogy/Gears1_Chapter1_yard.r4.navm, now the reused .navm; the old one kept as .r2b): Pylon_8 165 polygons
+  over y 5295-9000, Pylon_3 (the upper level) 78. On COGBox the hallway fight now runs to the end: AIFactory_1's
+  "All Dead" (FinishSequence_6) and AIFactory_2's (Gate_7) fire, Dom advances to the hall's end.
+- **COGBox squad catch-up pulled Dom back** from the hall's end every 30 s: LastPathError stays set after the AI finds
+  its way. It now also needs NavigationHandle.LastPathFailTime within 10 s of WorldInfo.TimeSeconds.
+- **Two-player cap:** `[Campaign] MaxPlayers = 2` (trilogy.py writes it). GearGameSP_Base.AtCapacity is
+  `return NumPlayers >= 4` (MaxPlayers unread); COGBox patches the constant while a capped campaign's chapter is
+  loaded. Logged `co-op players 2` at load; a refused third join is untested.
+- **Marcus's arms while talking:** the radio lines ("Six-Four, this is Delta Two...") put him in Gears 3's comm-link
+  special move (GSM_UsingCommLink: weapon temporarily holstered, a body-stance anim with the hand at the ear; started
+  natively through GearPawn.SetConversing(true, bUseCommLink)). The player is the multiplayer classic Marcus
+  (GearPawn_COGMarcusG2MP); the multiplayer classic Dom flailed the same way where the campaign class did not
+  (2026-10-22). Gears 3 has no campaign classic Marcus (GearGame / SP packages: GearPawn_COGMarcus,
+  GearPawn_COGMarcusNoArmorSP only).

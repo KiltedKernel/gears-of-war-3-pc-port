@@ -67,6 +67,8 @@ def write_campaign(folder, ch, map_name):
              # COGBox's squad catch-up: Dom's path search fails across some converted regions (the hard route),
              # and Gears 1's Kismet waits for him there (the hard route's door opens with both at it)
              f'SquadCatchUp = {ch.get("squad_catch_up", "800")}\n'
+             # Gears 1 and 2's squads hold two players (Marcus and Dom): COGBox stops a third co-op player joining
+             f'MaxPlayers = {ch.get("max_players", "2")}\n'
              f'\n[Chapter.{n}]\nMap = {map_name}\nTitle = {ch["title"]}\n'
              + (f'Location = {ch["location"]}\n' if ch.get('location') else '')
              + (f'Time = {ch["time"]}\n' if ch.get('time') else ''))

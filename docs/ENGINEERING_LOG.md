@@ -3322,3 +3322,10 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   switching between the hand-at-ear pose and hand-down within a few frames through "hold your fire! We are inside the
   prison", in the comm-link stance. A variant with player_pawn = GearPawn_COGMarcus (campaign class) crashed at his
   spawn (guest read 0xEC): his content is not loaded by the chapter; needs a carrier package as Dom's class did.
+- Marcus A/B, continued: the first variant's crash was not missing content. GearPawn_COGMarcus and its mesh
+  (COG_Marcus_Summer.Skel_Mesh.COG_Marcus_Fenix_CamSkel) are cooked into GearGame.xxx, always loaded. The player-pawn
+  factory imported the class as GearGameContent.<class> (objcopy.player_pawn), so GearGame's class resolved to None
+  and the factory crashed on its defaults (null + 0xEC in sub_822D3B68, TU6's class default lookup). player_pawn now
+  takes Package.Class (`GearGame.GearPawn_COGMarcus`). That variant spawns and plays to the radio lines; at video
+  resolution the two poses could not be told apart reliably, so the variant went to the user to judge in play
+  (cogbox-release Gears3\ab-test-campaign-marcus, with a README).

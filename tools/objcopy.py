@@ -2864,7 +2864,10 @@ def player_pawn(up, made):
         x = w.add_export(need[cls], seq, c.unique_name(name, 0), b'', flags=0x0007000100000000)
         w.replace(x - 1, struct.pack('>i', -1) + up.enc(recs + [parent]))
         return x
-    pk = c.find_import('Core', 'Package', 0, 'GearGameContent')
+    # (a class in another script package as Package.Class: GearGame.GearPawn_COGMarcus, the campaign Marcus; the
+    # content package's name for a GearGame class resolved to None, and the factory crashed on its defaults)
+    pkg_name, _, cls_name = cls_name.rpartition('.')
+    pk = c.find_import('Core', 'Package', 0, pkg_name or 'GearGameContent')
     pawn = c.find_import('Core', 'Class', pk, cls_name)
     # the player's pawn (GearSeqVar_Player: PlayerSlots[PlayerIdx - 1]'s pawn; Engine's SeqVar_Player gives the
     # controller: SetLocation and ToggleHidden moved and hid that, and the old pawn kept the spawn point)

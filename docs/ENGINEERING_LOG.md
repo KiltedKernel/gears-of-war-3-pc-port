@@ -3260,3 +3260,33 @@ The prologue-slot recipe (gears1_prison) still passes tests/g1_follow_dom.txt wi
     with property logging on COGBox.
   - COGBox logs "content packages: ... kept loaded" for all five packages every second (log noise).
 - User priority (2026-11-05): chapter 1 complete and polished first (the trilogy's tech demo), chapters 2-3 after.
+
+## 2026-11-11: COGBox 0.5.0 - mod framework (campaign registry), title freeze, Select Chapter, reload, hard route
+
+On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
+
+- **Campaign registry (mod API 1).** mod.ini `[Campaign]` / `[Chapter.N]`; modcore campaigns.h gives out the acts and
+  chapters after whatever the merged config already has and writes the menu's config itself. The trilogy's chapters no
+  longer write act / chapter numbers (tools/trilogy.py; `--legacy-chapters` for this repository's runtime).
+- **The 35-79 s title freeze was ours.** The sampling profiler (`--gow2_profile`) put 64% of the game thread in
+  RaiseActCap -> FindObject -> NameKey -> VirtualQuery: the act cap was looked up every tick, and the readable-page
+  check remembered one region (names table and name entries alternate). Fixed: a 4 KB-page readable bitmap in
+  objects.cpp, the lookup once a second. Start-up's slowest tick with the trilogy: 38-79 s -> 67-84 ms.
+- **Select Chapter on a new profile could not reach Act VI.** TU6 builds every act row with
+  SetBool("bHaltProgression", true); the carousel stops at a locked act. Patched to false (StringConst 1F
+  "bHaltProgression" 00 then 27 -> 28; object references are 8 bytes in memory, 4 on disk).
+- **The stock objectives showed <?INT?...?> with the trilogy.** MergeConfig was case-sensitive; "[Objectives]" made a
+  second section beside the game's [OBJECTIVES]. Sections and keys now match case-blind.
+- **Reload last checkpoint greyed.** TU6's UIScene_Pause.ShouldOptionBeDisabled: any PlayerSlots entry with
+  PawnClass == None || Owner == None. Gears 1's squad is two (slots 3-4 {None, None}). Patched to PawnClass != None
+  && Owner == None (84 -> 82, 72 -> 77). Dom's slot gets its owner when he spawns.
+- **Hard route ("blocked between pillars").** The route's door kicks open only when Marcus and Dom both touch their
+  volumes (hardRouteDoor: SeqEvent_Touch x2 -> SetBool -> CompareBool -> Gate_3 -> Interp_1). Dom's path search fails
+  (NavigationHandle.LastPathError 5 at (-1431,3027), 2-3 elsewhere); a scripted wait reads 0. New COGBox adapter
+  `[Campaign] SquadCatchUp = 800` brings a stuck, far squad AI with a failed search behind the player (trilogy.py
+  writes it). The user's exact softlock was not reproduced by script; needs a playtest.
+- **Developer mode in COGBox:** `--cogbox_input_script` (gears3-pc's script verbs, incl. walkto / route / follow /
+  choose, which waits for the path choice), `--ue3_exec_at="1500:open GearGame_P?game=geargamecontent.GearGameSP?chapter=32"`
+  (a reliable chapter start; `--ue3_launch` cannot start a mod chapter: the map is looked up before COGBox adds it).
+- **Test-setup gotcha:** a mod folder made with a junction served 0 files (links are skipped on purpose); COGBox now
+  logs the skip.

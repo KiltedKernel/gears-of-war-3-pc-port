@@ -3350,3 +3350,29 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   - Gameplay start: Gears 3's camera sits closer behind Marcus, so the frames are not the same view; the trilogy is
     ~19% darker overall there. The open cell door (InterpActor, SolitaryDoor_DR_SMesh) converted with the same
     lighting setup as Gears 1 (its own DynamicLightEnvironment, no precomputed shadows).
+
+## 2026-11-11 (evening): Marcus on the campaign class with the classic look; Gears 1 side-by-side views
+
+- **The arm twitch is the multiplayer class.** The user's A/B (Gears 3's campaign Marcus) stopped it. Ruled out on
+  the way: `bForceStretchToMarcusSkeleton` / `AnimRotationOnly` (the classic Marcus already runs with 1, the campaign
+  value; COGBox's new `[ClassDefaults]` adapter and `--mod_log_props` showed it), the extra multiplayer anim set
+  (AnimSetMarcus_CamSkel_Multiplayer holds only Leader_Shout), and the mesh: the multiplayer Dom flailed where the
+  flashback Dom (GearPawn_COGDomG2) did not, on the same 93-bone classic skeleton. The multiplayer chain adds
+  GearPawn_HumanBaseMPBase / GearPawn_HumanBaseMP over GearPawn_COGGear.
+- **tools/campaignclass.py**: Gears 3's flashback Dom is a content class over the campaign Dom with the classic mesh;
+  the same for Marcus: MPCH_COGMarcusG2MP_SF cloned as GOW1_GearPawn_COGMarcusG1_SF, its class renamed
+  GearPawn_COGMarcusG1, SuperStruct (export entry and class data +8) GearGame.GearPawn_COGMarcus, the default and its
+  7 components' archetypes the campaign Marcus's; the campaign Marcus's Gears 3 hair materials cleared, the
+  multiplayer chain's own properties and chatter banks dropped. Recipes: `campaign_classes = New = Package: Class ->
+  Package.Super` (the clone replaces the package in the content list), `player_pawn = GearPawn_COGMarcusG1`
+  (chapters 1-3). In game: he spawns as GearPawn_COGMarcusG1 with the classic mesh (screenshots), no crash, plays
+  through the path choice. The user's earlier A/B crash was objcopy importing every player class from
+  GearGameContent (fixed: player_pawn takes Package.Class).
+- **Gears 1 on COGBox, scripted**: COGBox's Gears1-Native now has the scripted controller and reflection (its object
+  layout found in memory: slot +4, Outer +40, Name +44 with number, Class +52, SuperStruct +60, Children +76, Next
+  +64, ElementSize +72, Offset +96, BitMask +124; 16-bit names, text at +16). Gears 1's map coordinates equal the
+  conversion's (Marcus's start: 151,687,187 vs the trilogy's spawn 105,595 beside it), so one script of
+  teleport/face lines shoots the same views in both (job tmp views.txt, viewshots.sh).
+- First views (the cell block): lighting and colour close; the corridor's light shaft and pool match. The trilogy
+  adds Gears 3's dynamic shadow of Marcus on walls. View 4 (corridor, west): Gears 1's wall is grimy detailed
+  plaster, the trilogy's the same wall smooth light grey (a low mip or a lost detail layer; to check later in time).

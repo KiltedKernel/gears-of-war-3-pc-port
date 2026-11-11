@@ -542,7 +542,22 @@ def cmd_build(args):
     start = time.time()
     print(f'{m["name"]} -> {folder}', flush=True)
     content = ' '.join(c['chapter'].get('load_packages', '').split()) if c.has_section('chapter') else ''
+    # campaign_classes = New = Package: Class -> SuperPackage.Super; ...: a multiplayer character's looks on a
+    # campaign class (tools/campaignclass.py), in a clone of its package that the chapter loads instead of it
+    made = []
+    for entry in [x.strip() for x in (c['chapter'].get('campaign_classes', '') if c.has_section('chapter') else '').split(';') if x.strip()]:
+        new, _, rest = (x.strip() for x in entry.partition('='))
+        pkg, _, rest = (x.strip() for x in rest.partition(':'))
+        old, _, sup = (x.strip() for x in rest.partition('->'))
+        out_name = f'{c["chapter"].get("prefix", "GOW1_")}{new}_SF'
+        content = content.replace(pkg, out_name)
+        made.append((os.path.join(g3cooked, pkg + '.xxx'), out_name, old, new, sup))
     write_manifest(folder, m['name'], m.get('version', '0.1'), m.get('description', ''), m.get('side', 'everyone'), content)
+    import campaignclass
+    for src_pkg, out_name, old, new, sup in made:
+        campaignclass.make(src_pkg, os.path.join(folder, 'GearGame', 'CookedXbox360', out_name + '.xxx'), old, new, sup,
+                           campaignclass.MP_HUMAN_CLEAR, campaignclass.MP_HUMAN_DROP)
+        print(f'  {out_name}: {new} = {old} on {sup}', flush=True)
     if c.has_section('chapter'):                       # a chapter of its own
         build_chapter(c, folder, g1cooked, g3cooked, args)
         print(f'  objectives: {objective_strings(folder, g1)} Gears 1 objective texts', flush=True)

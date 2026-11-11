@@ -1326,6 +1326,12 @@ if not os.environ.get("OBJCOPY_NO_ACTORS"): ACTOR_CLASSES |= LIGHT_CLASSES
 # Gears 1's checkpoint actors: where a load puts the players (checkpoint_teleport), copied as a PathNode
 if not os.environ.get("OBJCOPY_NO_ACTORS") and not os.environ.get('OBJCOPY_NO_RENAME'):
     ACTOR_CLASSES.add('WarCheckpoint'); CLASS_RENAME['WarCheckpoint'] = 'PathNode'
+# Gears 1's physics props (KActor: broken lights, rubble, a ceiling collapse's cover pieces, floor stones Kismet shows)
+# were left out; copied as InterpActors they stand where Gears 1 put them and Kismet can show / hide / move them.
+# Their physics is not converted (converted static meshes carry no rigid-body collision): they do not fall or tumble.
+# (DrawScaleX/Y/Z are Gears 1's copies of DrawScale3D, which they also carry.) docs/G1_G3_ARTICULATION.md
+if not os.environ.get("OBJCOPY_NO_ACTORS") and not os.environ.get('OBJCOPY_NO_RENAME') and not os.environ.get('OBJCOPY_NO_KACTORS'):
+    ACTOR_CLASSES.add('KActor'); CLASS_RENAME['KActor'] = 'InterpActor'
 SOUND_ACTORS = {'AmbientSoundSimple', 'AmbientSoundNonLoop', 'AmbientSound'}
 # Gears 1's weapon pickups (the prison's frag grenades): Gears 3's GearWeaponPickupFactory makes the pickup's mesh from
 # the weapon class (SetPickupMesh: DroppedPickupMesh), so Gears 1's static mesh component is not copied
@@ -1351,8 +1357,10 @@ COMPONENT_TAIL = {'StaticMeshComponent': bytes(4),
 
 
 def movers(src):
-    """the level's InterpActors (doors, lifts...): copied whether or not Kismet refers to them"""
-    return [i for i, e in enumerate(src.exports) if src.class_name(e['class']) == 'InterpActor'
+    """the level's InterpActors (doors, lifts...) and KActors (as InterpActors): copied whether or not Kismet refers
+    to them"""
+    movable = {'InterpActor'} | ({'KActor'} if 'KActor' in ACTOR_CLASSES else set())
+    return [i for i, e in enumerate(src.exports) if src.class_name(e['class']) in movable
             and src.path(i).count('.') == 2 and src.path(i).startswith('TheWorld.PersistentLevel')]
 
 

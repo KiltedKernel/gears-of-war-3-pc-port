@@ -3394,3 +3394,9 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   pickups and COG tags, music Kismet, Gears 1's anim-tree classes...).
 - Side-by-side brightness: the trilogy measured 25-35% darker than Gears 1 in the same views; the screenshot sizes
   differ (Gears 1 2560x1440, trilogy 1920x1080), so sharpness needs equal resolutions to compare.
+- **Gears 1's physics props were never converted** (g1g3map: 16 KActors in chapter 1, none in the conversion: broken
+  lights, rubble, the ceiling collapse's cover pieces, the easy path's hidden floor stones). objcopy now copies them
+  as InterpActors (movers(); `OBJCOPY_NO_KACTORS` off): checked in the S02 view, the cover pieces stand by Marcus as in
+  Gears 1. No physics yet (they do not fall). Their DrawScaleX/Y/Z are copies of DrawScale3D (no scale gap).
+- Side-by-side lead: at (-3250,1700,1550) Gears 1's Marcus stands on the upper beams; the trilogy's falls to z 204:
+  that upper geometry has no collision in the conversion.

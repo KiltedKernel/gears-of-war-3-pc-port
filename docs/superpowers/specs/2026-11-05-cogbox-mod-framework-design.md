@@ -1,6 +1,18 @@
 # COGBox mod framework: runtime layer and base mods (design)
 
-Status: draft for Shagg and Flippage (COGBox maintainers). The mod-facing parts are written so outside mod creators
+Status: agreed with Shagg and Flippage (2026-11-10: go-ahead, tech demo = framework + mod support + the trilogy's
+chapter 1); building on COGBox 0.5.0 (gitlab.com/shagg88/cogbox), branch kiltedkernel/mod-framework.
+
+Built so far (2026-11-10):
+- 4.1 manifest (Api, [Campaign], [Chapter.N]) and 4.2 campaign registry: modcore/campaigns.h (allocation, config
+  writing, unit tests in gn_tests), run in mod_extras.cpp's config merge (mod_api: log lines); the TU6 five-act cap fix
+  (RaiseActCap) shipped in 0.5.0.
+- 4.6 diagnostics in the launcher: the Mods tab shows, through the same modcore code, a mod the game leaves out and
+  why, each campaign chapter's place in Select Chapter, and mod.ini keys the game does not understand.
+- Creator documentation: COGBox docs/modding.md.
+- The trilogy's converter writes the Api 1 manifest (tools/trilogy.py; --legacy-chapters for this repo's runtime).
+
+Draft for Shagg and Flippage (COGBox maintainers). The mod-facing parts are written so outside mod creators
 can follow them later. Author: KiltedKernel (with Claude). Date: 2026-11-05.
 
 ## 1. Why

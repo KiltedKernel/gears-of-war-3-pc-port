@@ -64,6 +64,9 @@ def write_campaign(folder, ch, map_name):
     n = ch.get('campaign_chapter', str(int(ch['number']) - 31))
     text += (f'\n[Campaign]\nId = {ch.get("campaign", "gears1")}\nTitle = {ch.get("act_title", "Gears of War")}\n'
              f'Order = {ch.get("campaign_order", "10")}\nScreenshot = {ch.get("screenshot", SCREENSHOT)}\n'
+             # COGBox's squad catch-up: Dom's path search fails across some converted regions (the hard route),
+             # and Gears 1's Kismet waits for him there (the hard route's door opens with both at it)
+             f'SquadCatchUp = {ch.get("squad_catch_up", "800")}\n'
              f'\n[Chapter.{n}]\nMap = {map_name}\nTitle = {ch["title"]}\n'
              + (f'Location = {ch["location"]}\n' if ch.get('location') else '')
              + (f'Time = {ch["time"]}\n' if ch.get('time') else ''))

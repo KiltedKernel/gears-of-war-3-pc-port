@@ -3329,3 +3329,24 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   takes Package.Class (`GearGame.GearPawn_COGMarcus`). That variant spawns and plays to the radio lines; at video
   resolution the two poses could not be told apart reliably, so the variant went to the user to judge in play
   (cogbox-release Gears3\ab-test-campaign-marcus, with a README).
+
+## 2026-11-11: Gears 1 on COGBox - first side-by-side with the trilogy's chapter 1
+
+- Gears 1 runs on COGBox (app\Gears1: port\gow1.exe, game\extracted, game\update). Direct start into the prison:
+  `--ue3_launch=SP_Prison_P --gow1_skip_logos=true` with a test `--user_data_root` (scratch runner: job tmp g1run.ps1).
+  A profile with no storage device shows Gears 1's "No storage device" prompt over every frame; the Gears 1 port has
+  no scripted input to dismiss it (yet), so its band is masked out of comparisons.
+- Capture: `um win shot --exe gow1.exe|gow3.exe` in a loop (window only, ~1 per 0.75 s). Do NOT use ffmpeg ddagrab /
+  gdigrab for this: ddagrab records the whole desktop (it captured the user's other windows), gdigrab is black on
+  D3D12.
+- Pairing: the opening cinematic is Gears 1's own matinee in both, so its frames match by time once anchored on a
+  subtitle (Gears 1 shot n ~ trilogy shot n+35 here); an order-preserving match on gradient images finds the anchors.
+- Results (build/scratch/g1-vs-trilogy, local only):
+  - Character close-ups match: mean luminance ratio trilogy/Gears 1 0.85-1.17 over three synced shots, colour balance
+    the same (warm: rgb ~0.08/0.07/0.054 vs 0.082/0.073/0.053 on "Welcome back to the army").
+  - "You could get into a lot of trouble": the camera agrees (the window at the same place) but Dom stands much closer
+    to the lens and faces the other way, hiding the lit corridor (frame mean 0.49x). Either his cutscene placement or
+    a timing offset (he walks toward the camera; shots 0.75 s apart) - to check with denser shots.
+  - Gameplay start: Gears 3's camera sits closer behind Marcus, so the frames are not the same view; the trilogy is
+    ~19% darker overall there. The open cell door (InterpActor, SolitaryDoor_DR_SMesh) converted with the same
+    lighting setup as Gears 1 (its own DynamicLightEnvironment, no precomputed shadows).

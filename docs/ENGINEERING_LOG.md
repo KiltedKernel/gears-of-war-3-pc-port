@@ -3318,3 +3318,7 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   (GearPawn_COGMarcusG2MP); the multiplayer classic Dom flailed the same way where the campaign class did not
   (2026-10-22). Gears 3 has no campaign classic Marcus (GearGame / SP packages: GearPawn_COGMarcus,
   GearPawn_COGMarcusNoArmorSP only).
+- Marcus A/B (2026-11-11): video (ffmpeg `-f lavfi -i ddagrab=...`; gdigrab is black on D3D12) shows his arm
+  switching between the hand-at-ear pose and hand-down within a few frames through "hold your fire! We are inside the
+  prison", in the comm-link stance. A variant with player_pawn = GearPawn_COGMarcus (campaign class) crashed at his
+  spawn (guest read 0xEC): his content is not loaded by the chapter; needs a carrier package as Dom's class did.

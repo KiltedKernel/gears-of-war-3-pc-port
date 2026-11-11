@@ -3376,3 +3376,21 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
 - First views (the cell block): lighting and colour close; the corridor's light shaft and pool match. The trilogy
   adds Gears 3's dynamic shadow of Marcus on walls. View 4 (corridor, west): Gears 1's wall is grimy detailed
   plaster, the trilogy's the same wall smooth light grey (a low mip or a lost detail layer; to check later in time).
+
+## 2026-11-11 (night): streamed converted textures; the Gears 1 -> 3 articulation map
+
+- **Converted textures stream** (materialconv.TextureCache, recipe `stream_textures = true`, chapters 1-3): mips over
+  128 texels in the chapter's own `<persistent>_Textures.tfc`, uncompressed (bulk flags 0x01), `FirstResourceMemMip`
+  at the first inline mip, `NeverStream` off. Chapter 1: persistent package 93 MB (512 cap) -> 47 MB + a 95 MB cache.
+  In game the cache is opened (`--gow3_mod_file_log` now logs .tfc too) and the textures draw as before: Gears 3 reads
+  uncompressed cache mips, no LZX encoder needed. At the cell block's distances the engine picks <= 512 mips anyway
+  (the capped and streamed views measure the same); the resident memory is what is gained.
+- **tools/g1g3map.py**: a chapter's Gears 1 classes and object counts, the Gears 3 class each becomes, the Gears 1
+  classes Gears 3 lacks, and the properties Gears 1 objects set that the Gears 3 class does not declare (editor-only
+  data left out; `*` when the converter names the property). Gears 3's content classes are read from MPCH_* /
+  GEARGAME* / *_P packages (tables only). Chapters 1-3: 42 / 67 / 86 classes Gears 3 lacks. The findings, with
+  status per point: docs/G1_G3_ARTICULATION.md (KActor DrawScaleX/Y/Z, SeqAct_WarCameraShake's shake, SeqAct_SetMood's
+  Mood, ParticleSpriteEmitter's loop / duration / sub-UV settings, physical materials, SeqAct_AIShootAtTarget, ammo
+  pickups and COG tags, music Kismet, Gears 1's anim-tree classes...).
+- Side-by-side brightness: the trilogy measured 25-35% darker than Gears 1 in the same views; the screenshot sizes
+  differ (Gears 1 2560x1440, trilogy 1920x1080), so sharpness needs equal resolutions to compare.

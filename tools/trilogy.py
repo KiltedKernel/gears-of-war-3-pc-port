@@ -476,7 +476,17 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         import materialconv
         materialconv.MAX_TEXTURE_SIZE = int(ch.get('max_texture', 0))
         materialconv.MAX_CHARACTER_TEXTURE_SIZE = int(ch['max_character_texture']) if ch.get('max_character_texture') else None
+        # stream_textures: the textures' top mips in the chapter's own texture cache (materialconv.TextureCache), streamed
+        # by Gears 3 like its own; max_texture / max_character_texture no longer apply
+        if ch.get('stream_textures', 'false').lower() == 'true':
+            cache_name = shared_tex + '_Textures'
+            materialconv.TEXTURE_CACHE = materialconv.TextureCache(cache_name, os.path.join(out_dir, cache_name + '.tfc'))
         n_tex = shared_textures_into(manifest, os.path.join(out_dir, shared_tex + '.xxx'), ch.get('persistent_hold', '').split())
+        if materialconv.TEXTURE_CACHE:
+            materialconv.TEXTURE_CACHE.close()
+            print(f'  {materialconv.TEXTURE_CACHE.name}.tfc: '
+                  f'{os.path.getsize(materialconv.TEXTURE_CACHE.path) / 1e6:.0f} MB of streamed mips', flush=True)
+            materialconv.TEXTURE_CACHE = None
         import modpack
         modpack.update_toc(folder, g3cooked)
         print(f'  {shared_tex}: {n_tex} textures, shared by the sections', flush=True)

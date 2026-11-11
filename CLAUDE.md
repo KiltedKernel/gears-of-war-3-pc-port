@@ -26,6 +26,7 @@ COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-r
 | docs/ECOSYSTEM.md | the other Gears projects (COGBox, Gears 2 port, gow3-recomp), the proposed merger, what we bring |
 | docs/REXGLUE_PORT.md | the move onto a ReXGlue runtime: portable mod core + adapters, mapping, steps |
 | docs/TRILOGY.md | the converter, recipes, what each chapter needs |
+| docs/G1_G3_ARTICULATION.md | where Gears 1 and 3 differ and what the converter does about each (tools/g1g3map.py) |
 | docs/ENGINEERING_LOG.md | every finding, newest at the end (long: search it, e.g. for "Pylon", "CoverLink", "Kismet") |
 | docs/REVERSE_ENGINEERING.md | game facts: addresses, layouts, formats |
 | docs/MODDING.md | the mod format players and creators use |

@@ -26,6 +26,29 @@ MAX_TEXTURE_SIZE = 0
 MAX_CHARACTER_TEXTURE_SIZE = None
 
 
+# Streaming (TEXTURE_CACHE set: trilogy.py's stream_textures): a converted texture's top mips go into the chapter's own
+# texture file cache, <name>.tfc beside its packages, as Gears 3's own textures keep theirs in Textures.tfc: they stream
+# in and out of the texture pool by distance instead of staying resident, so no size cap is needed. Mips of
+# STREAM_RESIDENT texels or less stay inline from FirstResourceMemMip on (stock: a 256 texture's 64x64 down), always
+# loaded. The cache mips are stored uncompressed (bulk flags 0x01: in a separate file; Gears 3's own are 0x81, LZX).
+class TextureCache:
+    def __init__(self, name, path):
+        self.name, self.path = name, path
+        self.f = open(path, 'wb')
+
+    def put(self, data):
+        at = self.f.tell()
+        self.f.write(data)
+        return at
+
+    def close(self):
+        self.f.close()
+
+
+TEXTURE_CACHE = None
+STREAM_RESIDENT = 128
+
+
 # ---- tagged properties as raw records, for editing and re-encoding ----
 
 
@@ -573,13 +596,18 @@ def texture_828(w, p3, template, src, mask=None, lod_bias=None, max_size=None, c
     # the cook dropped the top mip(s) (empty entries): the texture starts at the first stored mip, so a texture
     # loaded whole (NeverStream) has its mips where the engine expects them
     first = next(k for k, mm in enumerate(src.mips) if not mm['flags'] & 0x20)
-    cap = MAX_TEXTURE_SIZE if max_size is None else max_size
+    cache = TEXTURE_CACHE
+    cap = 0 if cache else MAX_TEXTURE_SIZE if max_size is None else max_size   # (streamed: every mip kept)
     while cap and max(src.mips[first]['w'], src.mips[first]['h']) > cap and \
             first + 1 < int(src.props.get('MipTailBaseIdx', len(src.mips) - 1)):
         first += 1
     mips = src.mips[first:]
     sx, sy = mips[0]['w'], mips[0]['h']
     tail = int(src.props.get('MipTailBaseIdx', len(src.mips) - 1)) - first
+    # streamed: the mips before FirstResourceMemMip (the first of STREAM_RESIDENT texels or less, at most the tail's)
+    # go to the cache; none when the whole texture is that small (it stays resident, NeverStream)
+    resident = next((k for k, mm in enumerate(mips) if max(mm['w'], mm['h']) <= STREAM_RESIDENT), len(mips) - 1)
+    resident = min(resident, max(tail, 0)) if cache else 0
     keep = []
     for rec in props:
         name = rec[0]
@@ -590,7 +618,11 @@ def texture_828(w, p3, template, src, mask=None, lod_bias=None, max_size=None, c
         elif name == 'Format': rec[4] = fname_bytes(w, fmt)
         elif name == 'MipTailBaseIdx': rec[4] = struct.pack('>i', max(tail, 0))
         keep.append(rec)
-    keep.append(['NeverStream', 'BoolProperty', 0, b'', b'\x01'])
+    if resident:
+        keep.append(['TextureFileCacheName', 'NameProperty', 0, b'', fname_bytes(w, cache.name)])
+        keep.append(['FirstResourceMemMip', 'IntProperty', 0, b'', struct.pack('>i', resident)])
+    else:
+        keep.append(['NeverStream', 'BoolProperty', 0, b'', b'\x01'])
     if lod_bias: keep.append(['LODBias', 'IntProperty', 0, b'', struct.pack('>i', lod_bias)])
     out = bytearray(d3[:4]) + encode_props(w, keep)
     fixups = []
@@ -603,6 +635,8 @@ def texture_828(w, p3, template, src, mask=None, lod_bias=None, max_size=None, c
         if data is not None and colour_scale and tuple(colour_scale) != (1.0, 1.0, 1.0): data = scale_colour(data, fmt, colour_scale)
         if data is None:
             out += struct.pack('>Iiii', 0x21, 0, -1, -1)
+        elif m < resident:                                              # in the chapter's texture cache
+            out += struct.pack('>Iiii', 0x01, len(data), len(data), cache.put(data))
         else:
             out += struct.pack('>Iiii', 0, len(data), len(data), 0)
             fixups.append((len(out) - 4, len(out)))

@@ -3400,3 +3400,69 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   Gears 1. No physics yet (they do not fall). Their DrawScaleX/Y/Z are copies of DrawScale3D (no scale gap).
 - Side-by-side lead: at (-3250,1700,1550) Gears 1's Marcus stands on the upper beams; the trilogy's falls to z 204:
   that upper geometry has no collision in the conversion.
+
+## 2026-11-12: tile floors drew as a smear; the debris report
+
+- **Tile floors** (the prison's corridor, and the same RB_Prison / RB_EBA / RB_Hos / Conservatory tile family in 51
+  materials across the game) drew as a stretched beige smear where Gears 1 shows a tile grid. Their materials sample
+  the diffuse twice: at the tiles' scale (0.67, the same TextureCoordinate as the normal map) and at 0.1 (a broad
+  brightness variation, `0.5 + texture`, multiplied in). g1_uv_transform took the first sample in export order, the
+  variation's, so the tiles came out 6.7 times too large. It now takes the sample laid out with the normal map when
+  the first one is not, both on the same UV set (water and mist materials with panner samples keep their mapping).
+- **Debris "each piece an array of pieces"** (user report with a Gears 1 shot of the same spot, outside the dead
+  prisoner's cell): the patch was Gears 1's **blood decals** (flat EmbrySquare_Gearsofwarprop planes with per-actor
+  Blood*_Mat overrides, x 250-500, y 560-1020) drawn with the trash material, the whole masked trash sheet on each
+  plane. Cause: meshconv.to_828 wrote every element's **MaterialIndex** as min(k, template elements - 1), i.e. 0 with
+  the one-element template; Gears 3 draws an element with the material at its MaterialIndex, so every element after
+  the first of a mesh drew with the first's material. Gears 3's own multi-element meshes carry 0, 1, 2... (checked).
+  Chapter 1: 243 of 812 converted meshes have several elements, about 2 million triangles drew with the wrong
+  material (merged chunks group many materials, so this was the trilogy's most widespread texture error).
+- **Diffuse picked through a lerp's blend factor** (g1_textures, breadth first): Blood1 blends its colour by
+  Blood001_Alpha, reached before Blood001_Tex; the grey alpha became the diffuse. A LinearInterpolate's Alpha input
+  is now followed last: 34 materials across Gears 1 change, nearly all from a mask (WallMask, BlendMask, *_Alpha) to
+  their colour texture (ruined brick walls, terrain dirt, puddles, blood).
+- **Modulate decals** (BlendMode 4: Blood2/Blood5, Wretch prints, the prison's dirt, moss, rust and water-stain
+  sheets: a colour on white multiplying the surface) were left out as see-through. A true modulate template: Gears 3's
+  modulate materials that static meshes draw with (SP_Ravens_04's M_LD_RN_Decal_Master, unlit, a Texture parameter
+  and a static channel mask; Gears 1's own GOW_Decals.*_DecalMat_Mat copies in Hanover / Coast / Mercy levels) are
+  compiled into level packages, and the only modulate materials loaded with every map (GearGame's grenade / shotgun
+  decals) have no texture parameter. Until a level package can be loaded beside the chapter for them, they are
+  cutouts of the masked template: materialconv.dark_to_alpha keeps a texel under 85% white (luminance), the texture
+  as the diffuse, lit (g1_unlit no longer counts them as unlit). Blood002 keeps 34% of its texels, the prints 12%.
+- **SeqAct_SetMood** -> AISetMood's PerceptionMood (objcopy.set_mood; Gears 1's Mood is WarAI_Drone.EPerceptionMood,
+  Gears 3's AIPM_None means "leave it"): the prison's 12 "Alert" moods now reach the Locust.
+- **SeqAct_WarCameraShake** -> a CameraShake subobject (objcopy.camera_shake), built from Gears 1's inline
+  ScreenShakeStruct over its class defaults (1 s; rotation 100/100/200 at 10/10/25; location 0/3/5 at 1/10/20; FOV 2
+  at 5), amplitudes x GlobalAmplitudeScale, frequencies x GlobalFrequencyScale, ShakeScale = GlobalScale.
+- **SeqAct_AIShootAtTarget** -> SeqAct_AISetTarget (Target, Focus Targets; Overwrite / Add -> In); it was a log op.
+
+## 2026-11-12: the user's chapter 1 test (halos, ceiling blooms, Marcus's shimmer, washed-out light)
+
+- **Decal halos** (blood pools ringed white, Wretch prints near white): Gears 1's modulate textures are a stain on
+  white; sampled at a cutout's edge (bilinear, mips) the white drew a halo, and the stain's own colour lit came out
+  far lighter than Gears 1's surface x stain. materialconv.modulate_fill fills the white (and the unused black
+  endpoint Gears 1 stored with each white block) with stain colour, block by block in the DXT1 data; the decal's
+  Diffuse_01_Color is MODULATE_TINT (0.45), its specular off.
+- **Two blooms of light on the cell's ceiling** in the opening: Gears 1's cobwebs (EBA_Cobwebs1_CP_Mat: translucent,
+  unlit, two-sided) passed g1_volumetric and drew as the kit's glowing fog sheet; before the MaterialIndex fix their
+  triangles took another element's material. g1_opacity_is_diffuse: a translucent material whose Opacity samples
+  its own diffuse is a see-through textured surface (cobwebs, the Raven's blurred blades), not light in the air (fog
+  sheets, cones and beams fade by falloff gradients); it is a lit cutout of its texture's alpha now.
+- **Marcus's white shimmer in the opening, lit through the cell's shadow**: the converted characters are instances of
+  Gears 3's weapon shader (skin_material, the HOD's), which carries a dropped weapon's pickup glint (ShimmerColor,
+  Weap_DropGlowAlpha / Dist) and environment reflection (envMult). Set off by the master's ExpressionGUIDs
+  (materialconv.child_mic extra=: parameters the template instance does not carry), Weap_SpecMult 0.33.
+- **Washed out against Gears 1** (the first room): the global grade measures the same (mean luminance 18.3 Gears 1 /
+  20.8 trilogy, the same 5th / 95th percentiles), so it is the local light: the conversion lights meshes and BSP per
+  vertex (light maps sampled at the vertices), and a 512 x 256 floor segment has four, so pipe shadows and light
+  pools across a surface flatten. Next step for it: Gears 1's light map textures as Gears 3 LightMap2D textures.
+- **Marcus not in the cell's shadow (the opening)**: objcopy.light_component puts every copied light on CompositeDynamic
+  with no shadows (gameplay sections: hundreds of Gears 1 lights, a dynamic pass each cost the frame rate). The
+  opening's five lights are a cutscene's: the armoured Marcus (SkeletalMeshActor_1) is on Cinematic_1 alone, lit by
+  its one Cinematic_1 spot light; the others are Dynamic / Unnamed_1, all casting dynamic shadows. Reduced, nothing
+  reached him but his light environment's ambient. A cutscene package's lights now keep Gears 1's channels and
+  shadows (+ CompositeDynamic); OBJCOPY_CINE_LIGHTS_FLAT=1 as before.
+- **Baked lights shadowed** (the washed-out look): lighting.Occluders, a Moller-Trumbore segment test in numpy (no
+  Embree here): each section's BSP polygons and solid meshes (not cutouts, decals or see-through surfaces), the rays
+  grouped by 256-unit cell, hits within 24 units of the light ignored (Gears 1's lights sit inside their lamps).
+  bake_lights takes a vertex's share of a light only where the segment is clear. LEVELINJECT_NO_LIGHT_SHADOWS=1: off.

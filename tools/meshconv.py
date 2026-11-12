@@ -89,8 +89,10 @@ def to_828(p3, i3, src, materials=None):
     for k, e in enumerate(lod['elements']):
         t = tels[min(k, len(tels) - 1)]
         mat = materials[k] if materials and materials[k] else t['material']
+        # MaterialIndex: the element's own (Gears 3 draws an element with the material at that index; every element
+        # at 0 drew a merged chunk's second material with its first: the prison's blood decals as the trash sheet)
         out += be_i32(mat, t['collision'], t['old_collision'], t['shadow'], e['first_index'], e['triangles'],
-                      e['min_vertex'], e['max_vertex'], min(k, len(tels) - 1))
+                      e['min_vertex'], e['max_vertex'], k)
         out += be_i32(1, e['first_index'], e['triangles']) + bytes([0])          # one fragment, flag
     out += be_i32(12, n) + bulk(12, pos.tobytes())
     vstride = 8 + 4 * uvs

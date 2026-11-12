@@ -30,6 +30,10 @@ CLASS_RENAME = {} if os.environ.get('OBJCOPY_NO_RENAME') else {
     'SeqAct_WarCheckPoint': 'SeqAct_Checkpoint',            # 128
     'SeqEvt_CheckpointActivated': 'SeqEvent_CheckpointLoaded',  # 130
     'SeqAct_AIAcquireEnemy': 'SeqAct_AISetTarget',          # 177
+    # Gears 1's scripted "shoot at" (Dom firing on the prison's bridge guards, the Locust on Marcus in S04/S05): Target
+    # and Shoot At, inputs Overwrite / Add / Remove / Clear -> Gears 3's forced targets (Target, Focus Targets; In
+    # overwrites by default, bOverwriteExisting). Clear has no Gears 3 input (Prohibit bars targets): left unlinked
+    'SeqAct_AIShootAtTarget': 'SeqAct_AISetTarget',
     'SeqAct_AISetFocus': 'SeqAct_AILookAt',                 # 85
     'SeqAct_WarPlayerAnim': 'SeqAct_GearPlayerAnim',        # 47
     'SeqAct_SetMood': 'SeqAct_AISetMood',                   # 45
@@ -751,7 +755,9 @@ LINK_ALIAS = {('SeqAct_AIMoveToActor', 'finished'): 'reached goal', ('SeqAct_AIM
               ('SeqAct_ToggleTutorialMode', 'enable'): 'system on', ('SeqAct_ToggleTutorialMode', 'disable'): 'system off',
               ('SeqAct_ToggleTutorialMode', 'toggle'): 'system on',
               ('SeqEvent_LevelLoaded', 'out'): 'loaded and visible',
-              ('SeqEvent_LevelBeginning', 'out'): 'beginning of level'}
+              ('SeqEvent_LevelBeginning', 'out'): 'beginning of level',
+              ('SeqAct_AIShootAtTarget', 'overwrite'): 'in', ('SeqAct_AIShootAtTarget', 'add'): 'in',
+              ('SeqAct_AIShootAtTarget', 'shoot at'): 'focus targets'}
 
 
 def parse828(d, o, fname):
@@ -2223,6 +2229,80 @@ FIXUPS['SeqAct_SetMusicTrack'] = set_music_track
 CLASS_RENAME['SeqAct_SetMusicTrack'] = 'SeqAct_PlayMusicTrack'
 
 
+# Gears 1's SeqAct_SetMood sets the targets' perception mood (Mood: WarAI_Drone.EPerceptionMood PM_Normal / PM_Alert /
+# PM_Unaware; the prison's Kismet sets Alert 12 times as the Locust arrive); Gears 3's SeqAct_AISetMood has no Mood:
+# its PerceptionMood (GearAI.EPerceptionMood, AIPM_None = leave as it is) takes the same mood. Combat and move moods
+# stay AIPM_None (not set by Gears 1's action)
+G1_PERCEPTION_MOODS = ('PM_Normal', 'PM_Alert', 'PM_Unaware')
+
+
+def set_mood(c, props):
+    import materialconv
+    src = {r[0]: r[4] for r in materialconv.raw_props(c.s, c.s.export_data(c.current_src), 4)[0]}
+    mood = src['Mood'][0] if len(src.get('Mood', b'')) == 1 else 0
+    if mood >= len(G1_PERCEPTION_MOODS): return props
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in ('Mood', 'PerceptionMood')] + [
+        ['PerceptionMood', 'ByteProperty', 0, struct.pack('>ii', *c.w.name('EPerceptionMood')),
+         struct.pack('>ii', *c.w.name('AI' + G1_PERCEPTION_MOODS[mood]))]]
+    c.moods_set = getattr(c, 'moods_set', 0) + 1
+    return encode(c.w, recs)
+
+
+FIXUPS['SeqAct_SetMood'] = set_mood
+
+
+# Gears 1's SeqAct_WarCameraShake carries its shake inline (CameraShake: a ScreenShakeStruct, only the fields changed
+# from the class defaults below) with GlobalScale / GlobalAmplitudeScale / GlobalFrequencyScale; Gears 3's
+# SeqAct_CameraShake plays a CameraShake object (Shake) scaled by ShakeScale. Both oscillate amplitude x sin(phase +
+# frequency x time), rotations in rotation units: the shake becomes a CameraShake subobject of the action, axis by axis
+# (Gears 1's vectors: X pitch, Y yaw, Z roll), its amplitudes x GlobalAmplitudeScale, frequencies x
+# GlobalFrequencyScale, ShakeScale = GlobalScale. Without it the prison's 26 scripted shakes (the bridge collapse, the
+# Locust tunnelling) played Gears 3's empty default shake
+G1_SCREEN_SHAKE = {'TimeDuration': 1.0, 'RotAmplitude': (100.0, 100.0, 200.0), 'RotFrequency': (10.0, 10.0, 25.0),
+                   'LocAmplitude': (0.0, 3.0, 5.0), 'LocFrequency': (1.0, 10.0, 20.0), 'FOVAmplitude': 2.0, 'FOVFrequency': 5.0}
+
+
+def camera_shake(c, props):
+    import materialconv
+    src = {r[0]: r for r in materialconv.raw_props(c.s, c.s.export_data(c.current_src), 4)[0]}
+    f32 = lambda k, d: struct.unpack('>f', src[k][4][:4])[0] if k in src and len(src[k][4]) >= 4 else d
+    shake = dict(G1_SCREEN_SHAKE)
+    if 'CameraShake' in src:
+        for r in materialconv.raw_props(c.s, src['CameraShake'][4], 0)[0]:
+            if r[0] in shake:
+                v = struct.unpack(f'>{len(r[4]) // 4}f', r[4][:len(r[4]) // 4 * 4])
+                shake[r[0]] = v[0] if isinstance(shake[r[0]], float) else tuple(v[:3])
+    amp, freq = f32('GlobalAmplitudeScale', 1.0), f32('GlobalFrequencyScale', 1.0)
+    f = lambda v: struct.pack('>f', v)
+    sname = lambda n: struct.pack('>ii', *c.w.name(n))
+    def osc(a, fr):
+        return encode(c.w, [['Amplitude', 'FloatProperty', 0, b'', f(a * amp)], ['Frequency', 'FloatProperty', 0, b'', f(fr * freq)]])
+    def axes(names, struct_name, a3, f3):
+        return encode(c.w, [[n, 'StructProperty', 0, sname('FOscillator'), osc(a, fr)] for n, a, fr in zip(names, a3, f3)])
+    recs3 = [['OscillationDuration', 'FloatProperty', 0, b'', f(shake['TimeDuration'])],
+             ['RotOscillation', 'StructProperty', 0, sname('ROscillator'),
+              axes(('Pitch', 'Yaw', 'Roll'), 'ROscillator', shake['RotAmplitude'], shake['RotFrequency'])],
+             ['LocOscillation', 'StructProperty', 0, sname('VOscillator'),
+              axes(('X', 'Y', 'Z'), 'VOscillator', shake['LocAmplitude'], shake['LocFrequency'])],
+             ['FOVOscillation', 'StructProperty', 0, sname('FOscillator'), osc(shake['FOVAmplitude'], shake['FOVFrequency'])]]
+    cls = c.class_ref('CameraShake')
+    outer = c.obj_map.get(c.current_src + 1, 0)
+    if not cls or not outer: return props
+    obj = c.w.add_export(cls, outer, c.unique_name('G1CameraShake', 0), c.prelude_828('object', cls) + encode(c.w, recs3),
+                         flags=0x0007000100000000)
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in ('CameraShake', 'GlobalScale', 'GlobalAmplitudeScale', 'GlobalFrequencyScale', 'Shake', 'ShakeScale')]
+    recs += [['Shake', 'ObjectProperty', 0, b'', struct.pack('>i', obj)], ['ShakeScale', 'FloatProperty', 0, b'', f(f32('GlobalScale', 1.0))]]
+    c.camera_shakes = getattr(c, 'camera_shakes', 0) + 1
+    return encode(c.w, recs)
+
+
+FIXUPS['SeqAct_WarCameraShake'] = camera_shake
+
+
 # ---- weapons ----
 # Gears 1's weapon classes (Weap_*: Kismet GiveInventory lists, spawn sets' loadouts, pickups) as Gears 3's (GearWeap_*
 # of the same name: the Lancer is GearWeap_AssaultRifle, the Hammerburst GearWeap_LocustAssaultRifle...); without a
@@ -3127,6 +3207,17 @@ def light_component(c, props, scale=True):
     OBJCOPY_LIGHTS_DYNAMIC=1: every light Dynamic too."""
     wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
     recs, _ = parse828(props, 0, wname)
+    # a cutscene's few lights keep Gears 1's channels and shadows (+ CompositeDynamic): the opening's armoured Marcus is
+    # on Cinematic_1 alone, lit by its one Cinematic_1 spot light; on CompositeDynamic with no shadows nothing reached
+    # him but his light environment's ambient, and he stood evenly lit where Gears 1 kept him in the cell's shadow
+    if '_cine' in os.path.basename(c.s.filename).lower() and not os.environ.get('OBJCOPY_CINE_LIGHTS_FLAT'):
+        lc = next((r for r in recs if r[0] == 'LightingChannels'), None)
+        if lc is not None:
+            inner, _ = parse828(lc[4], 0, wname)
+            inner = [r for r in inner if r[0] != 'CompositeDynamic'] + [['CompositeDynamic', 'BoolProperty', 0, b'', b'']]
+            lc[4] = encode(c.w, inner)
+        c.cine_lights = getattr(c, 'cine_lights', 0) + 1
+        return encode(c.w, [r for r in recs if r[0] != 'bHasLightEverBeenBuiltIntoLightMap'])
     drop = {'LightingChannels', 'CastShadows', 'CastDynamicShadows', 'CastStaticShadows', 'bHasLightEverBeenBuiltIntoLightMap'}
     channels = ('bInitialized', 'Dynamic', 'CompositeDynamic') if os.environ.get('OBJCOPY_LIGHTS_DYNAMIC') else ('bInitialized', 'CompositeDynamic')
     ch = encode(c.w, [[k, 'BoolProperty', 0, b'', b'\x01'] for k in channels])

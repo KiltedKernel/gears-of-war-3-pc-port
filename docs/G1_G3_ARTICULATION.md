@@ -56,6 +56,7 @@ it is the expected one, to be confirmed with a side-by-side view when that point
 | `DecalComponent.Thickness` (60), `DecalLifetimeAge` (24-44) | renamed / different lifetime system | gap | decals may clip or never fade |
 | `KActor` physics props (16 in ch1: broken lights, rubble, the ceiling collapse's cover pieces, floor stones Kismet shows on the easy path) | `KActor` | partial | were not converted at all; now copied as InterpActors (objcopy, `OBJCOPY_NO_KACTORS` turns it off): they stand where Gears 1 put them and Kismet can show / hide / move them, but do not fall or tumble (converted meshes carry no rigid-body collision: physics is the next step). Their `DrawScaleX/Y/Z` are Gears 1's copies of `DrawScale3D`, which they also carry |
 | `WDO_*` destructible furniture (couch, desk, armchair...) | none | gap | ch3's office (13 couches...): a static mesh stand-in, or a Gears 3 destructible |
+| Modulate decals (BlendMode 4: blood pools, Wretch prints, dirt, moss, rust, water stains on flat meshes) | no modulate template static meshes can draw with (Gears 3's are compiled into level packages) | partial | drawn as cutouts of the masked template (materialconv.dark_to_alpha: kept where the texture is under 85% white, its colour as the diffuse); soft edges become hard |
 | Physical materials (`WarPhysicalMaterial*`: footsteps, impact sounds, impact effects, decals; 200+ in ch3) | `PhysicalMaterialProperty` with Gears 3's own tables | gap | surfaces sound and splash with Gears 3's defaults: map Gears 1 surface types onto Gears 3's |
 
 ### Gameplay actors
@@ -83,9 +84,9 @@ it is the expected one, to be confirmed with a side-by-side view when that point
 | Gears 1 | Gears 3 | Status | Notes / next step |
 |---|---|---|---|
 | Sequences, events, variables, most actions | the same classes or CLASS_RENAME | done | |
-| `SeqAct_WarCameraShake` -> `SeqAct_CameraShake` (26) | `CameraShake`, `GlobalScale`, `GlobalAmplitudeScale`, `GlobalFrequencyScale` not carried | gap | scripted shakes run without their shake settings: convert the shake object and scales |
-| `SeqAct_SetMood` -> `SeqAct_AISetMood` (14) | `Mood` not carried (12 set it) | gap | AI combat moods never set: map Gears 1's mood enum onto Gears 3's |
-| `SeqAct_AIShootAtTarget` (6 / - / 2) | none (made a log op) | gap | Dom's scripted shots (the bridge guards in ch1): Gears 3's SeqAct_AIFireAtTarget-style op |
+| `SeqAct_WarCameraShake` -> `SeqAct_CameraShake` (26) | `CameraShake` (an inline ScreenShakeStruct) + global scales -> a `CameraShake` subobject (`Shake`) + `ShakeScale` | partial | objcopy.camera_shake: duration, rotation / location / FOV oscillation per axis from Gears 1's struct over its class defaults, amplitudes x GlobalAmplitudeScale, frequencies x GlobalFrequencyScale, ShakeScale = GlobalScale; to feel in game |
+| `SeqAct_SetMood` -> `SeqAct_AISetMood` (14) | `Mood` (WarAI_Drone.EPerceptionMood) -> `PerceptionMood` (AIPM_*) | done | objcopy.set_mood: PM_Normal / Alert / Unaware -> AIPM_Normal / Alert / Unaware (no Mood: Normal); the prison sets Alert as the Locust arrive |
+| `SeqAct_AIShootAtTarget` (6 / - / 2) | `SeqAct_AISetTarget` (Target, Focus Targets) | partial | renamed; inputs Overwrite / Add -> In, Shoot At -> Focus Targets; Clear has no Gears 3 input (left unlinked); to check in game |
 | `SeqAct_SetWalking` (ch3: 21), `SeqAct_DoorPush` (10) | none | gap | |
 | `SeqAct_AICombatSpectrum`, `SeqAct_AISetTetherDist` | none | gap | AI tuning, low priority |
 | `SeqAct_ClearObjectives`, `SeqAct_FailObjective` | Gears 3 objectives | gap | objectives are added (config fragment) but not cleared/failed |

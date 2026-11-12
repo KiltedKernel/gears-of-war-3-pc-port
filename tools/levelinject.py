@@ -553,7 +553,7 @@ def main():
     def shared_texture(sp, ti, tt, tkey, slot, mask=None, character=False, scale=None):
         name = manifest['names'].get(tkey)
         if name is None:
-            base = name = 'TrilogyT_' + tkey.split('.')[-1].split('#')[0] + ('_Mask' if mask else '') + ('_Emis' if scale else '')
+            base = name = 'TrilogyT_' + tkey.split('.')[-1].split('#')[0] + ({'F': '_Fill'}.get(mask, '_Mask') if mask else '') + ('_Emis' if scale else '')
             k = 2
             while name in manifest['entries']: name = f'{base}_v{k}'; k += 1
             manifest['names'][tkey] = name
@@ -679,17 +679,20 @@ def main():
             if materialconv.g1_unlit(sp, gm):             # drawn at full brightness: a constant light map, no specular
                 unlit_mats.add((si, gm + 1)); texs = {'diffuse': texs['diffuse']}; by_name[('unlit', name)] = True
             refs = {}
+            # (a modulate decal's diffuse: its white background filled with stain colour, materialconv.modulate_fill)
+            modulate = materialconv.g1_blend(sp, gm + 1) == 4
             for slot, ti in texs.items():
                 tt = tex_template.get(slot)
                 if tt is None or tt < 0: continue
-                tkey = sp.path(ti)
+                fill = 'F' if modulate and slot == 'diffuse' else None
+                tkey = sp.path(ti) + ('#fill' if fill else '')
                 character = (si, gm) in skel_mats             # (a character's: its own size cap)
                 if tkey not in tex_ref and args.shared_textures:
                     # in the chapter's shared texture package (written once all sections are converted): an import
-                    tex_ref[tkey] = shared_texture(sp, ti, tt, tkey, slot, character=character)
+                    tex_ref[tkey] = shared_texture(sp, ti, tt, tkey, slot, mask=fill, character=character)
                 if tkey not in tex_ref:
                     upk.E = '>'
-                    data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti), lod_bias=materialconv.SLOT_LOD_BIAS.get(slot),
+                    data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, ti), mask=fill, lod_bias=materialconv.SLOT_LOD_BIAS.get(slot),
                                                          max_size=materialconv.MAX_CHARACTER_TEXTURE_SIZE if character else None)
                     tflags_ = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
                     tex_ref[tkey] = w.add_export(p3.exports[tt]['class'], 0, ('Trilogy_' + tkey.split('.')[-1], 0), data, flags=tflags_, fixups=fix)
@@ -711,7 +714,7 @@ def main():
             # masked (the fence, razor wire, grass): a child of the masked template, its mask texture the cutout as
             # grey and alpha (the diffuse's alpha: alpha_to_grey; a DXT1 mask's red: red_to_alpha)
             mask = materialconv.g1_mask(sp, gm) if masked_mic is not None and masked_param else None
-            if mask is not None and mask[1] == 'R' and texture2d.Texture(sp, mask[0]).format != 'PF_DXT1': mask = None
+            if mask is not None and mask[1] in ('R', 'L') and texture2d.Texture(sp, mask[0]).format != 'PF_DXT1': mask = None
             if mask is not None and tex_template.get('diffuse') is not None:
                 ti, channel = mask
                 tt = tex_template['diffuse']
@@ -735,6 +738,9 @@ def main():
                     tint_, spec_ = materialconv.g1_shading(sp, gm + 1)
                     if tint_: vectors_['Diffuse_01_Color'] = tuple(tint_) + (1.0,)
                     if not spec_: vectors_['Specular_01_Color'] = (0.0, 0.0, 0.0, 1.0)
+                if mask[1] == 'L':                     # (a modulate decal: about as dark as the surface it multiplied)
+                    t_ = materialconv.MODULATE_TINT
+                    vectors_['Diffuse_01_Color'] = (t_, t_, t_, 1.0); vectors_['Specular_01_Color'] = (0.0, 0.0, 0.0, 1.0)
                 data = materialconv.clone_static_mic(w, p3, p3, masked_mic, refs, {}, vectors=vectors_)
                 mflags_m = struct.unpack_from('>Q', p3.data, p3.exports[masked_mic]['entry'] + 24)[0]
                 mic_of[(si, gm + 1)] = by_name[name] = w.add_export(p3.exports[masked_mic]['class'], 0, ('Trilogy_' + name.split('.')[-1], 0), data, flags=mflags_m)
@@ -833,6 +839,7 @@ def main():
                 if r_ > 0 and skel_tmic is None and scls(r_ - 1) == 'MaterialInstanceConstant'                         and {'Diffuse', 'Normal', 'Specular'} <= set(materialconv.mic_texture_params(sp_, r_ - 1)):
                     skel_tmic = r_ - 1
         skel_parent = materialconv.import_object(w, p3, pk, skel_tmic, kit_imports) if pk is not None and skel_tmic is not None else None
+        skin_extra = None
         skin_fill = {}                                 # --skin-material: texture parameter -> neutral texture import
         skin_roles = {'Diffuse': 'Diffuse', 'Normal': 'Normal', 'Specular': 'Specular'}
         if args.skin_material:
@@ -859,6 +866,21 @@ def main():
             for name in params:
                 skin_fill[name] = flat if name == skin_roles['Normal'] else black
             print(f'skin material: {sp_.path(skel_tmic)} ({len(skin_fill)} texture parameters)')
+            # the weapon shader's pickup glint (ShimmerColor, Weap_DropGlowAlpha: a dropped weapon's shimmer) and its
+            # environment reflection (envMult) off: on the opening's Marcus they drew a white shimmer round him and lit
+            # him through the cell's shadow, where Gears 1 kept him dark. Set by the master's ExpressionGUIDs (the HOD
+            # instance carries none of them)
+            skin_extra = None
+            gg_ = os.path.join(args.g3cooked or '', 'GearGame.xxx')
+            if os.path.isfile(gg_):
+                gp_ = upk.Package(gg_)
+                wm_ = next((i for i in range(len(gp_.exports)) if gp_.path(i) == 'ALL_WeaponShaders.SinglePlayer.WeaponShader_SP'
+                            and gp_.class_name(gp_.exports[i]['class']) == 'Material'), None)
+                if wm_ is not None:
+                    skin_extra = (materialconv.material_param_guids(gp_, wm_),
+                                  {'envMult': 0.0, 'Weap_DropGlowAlpha': 0.0, 'Weap_DropGlowDist': 0.0},
+                                  {'ShimmerColor': (0.0, 0.0, 0.0, 0.0)})
+                    print(f"skin material: glint and reflection off ({', '.join(n for n in ('envMult', 'Weap_DropGlowAlpha', 'ShimmerColor') if n in skin_extra[0])})")
         hair_tmic = None
         if args.hair_material:
             hf_, hpath = args.hair_material.rsplit(':', 1)
@@ -884,7 +906,8 @@ def main():
                 fl_ = struct.unpack_from('>Q', sp_.data, sp_.exports[skel_tmic]['entry'] + 24)[0]
                 if skin_fill:
                     refs_ = {**{k: v for k, v in skin_fill.items() if v is not None}, **refs_}
-                    data_ = materialconv.child_mic(w, p3, sp_, skel_tmic, skel_parent, refs_)
+                    # (the weapon shader's specular at a third: Gears 1's characters had no metal sheen)
+                    data_ = materialconv.child_mic(w, p3, sp_, skel_tmic, skel_parent, refs_, {'Weap_SpecMult': 0.33}, extra=skin_extra)
                     skel_cache[key] = w.add_export(mic_cls, 0, ('Trilogy_Skel_' + key.split('.')[-1], 0), data_, flags=fl_)
                 elif pk is not None:
                     data_ = materialconv.child_mic(w, p3, pk, skel_tmic, skel_parent, refs_, {'OverallEmissive': 0.0})
@@ -1090,6 +1113,32 @@ def main():
                 a_, b_, c_ = idx[f_ + 3 * j], idx[f_ + 3 * j + 1], idx[f_ + 3 * j + 2]
                 out_ += [base + a_, base + c_, base + b_] if mirrored else [base + a_, base + b_, base + c_]
         b['n'] += nv
+    # the lights baked here (in no Gears 1 light map) were dynamic in Gears 1, with shadows: each vertex takes a light
+    # only where the segment to it is clear of the section's BSP and solid meshes (cutouts, decals and see-through
+    # surfaces let light by). Without it they lit through walls, pipes and bars: the prison flat against Gears 1.
+    # LEVELINJECT_NO_LIGHT_SHADOWS=1: as before
+    if point_lights is not None and bake is lighting.bake_lights and not os.environ.get('LEVELINJECT_NO_LIGHT_SHADOWS'):
+        occ_tris, n_occ_meshes = [], 0
+        for poly in polys:
+            V_ = np.asarray(poly[1], np.float64)
+            occ_tris += [V_[[0, k_, k_ + 1]] for k_ in range(1, len(V_) - 1)]
+        n_bsp_tris = len(occ_tris)
+        for (si_, mi__, loc_, rot_, scale_, ci_) in actors:
+            m_ = parsed.get((si_, mi__))
+            if m_ is None: continue
+            try:
+                els_ = element_materials(si_, mi__, ci_)
+                if any(materialconv.g1_blend(srcs[si_], x_) in (1, 2, 3, 4) for x_ in els_ if x_): continue
+            except Exception:
+                continue
+            Pw_, _ = world_vertices(m_, loc_, rot_, scale_)
+            T_ = np.asarray(staticmesh.triangles(m_['lods'][0]), np.int64)
+            T_ = T_[(T_ < len(Pw_)).all(1)]
+            if len(T_): occ_tris.append(Pw_[T_]); n_occ_meshes += 1
+        occ_ = lighting.Occluders(np.concatenate([np.asarray(occ_tris[:n_bsp_tris]).reshape(-1, 3, 3)] + occ_tris[n_bsp_tris:])
+                                  if len(occ_tris) > n_bsp_tris else np.asarray(occ_tris).reshape(-1, 3, 3))
+        bake = lambda L_, P_, N_, o_=occ_: lighting.bake_lights(L_, P_, N_, o_)
+        print(f'baked lights shadowed by {len(occ_.tris)} triangles ({n_bsp_tris} BSP, {n_occ_meshes} meshes)')
     for n, (si, mi_, loc, rot, scale, ci) in enumerate(actors):
         sp, mi = srcs[si], (si, mi_)
         tail = bytes(4)                                # no light map

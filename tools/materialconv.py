@@ -108,8 +108,11 @@ def g1_textures(p, mat):
     for slot, prop in (('diffuse', 'DiffuseColor'), ('normal', 'Normal'), ('specular', 'SpecularColor')):
         if prop not in a: continue
         start = {n: v for n, t, k, v in p.properties(a[prop][1], 0)[0]}.get('Expression', 0)
-        queue, seen = [start], set()
-        while queue and slot not in out:
+        # (a lerp's Alpha is its blend factor, followed last: the prison's blood decal blends its colour by
+        # Blood001_Alpha, found first and converted as the diffuse, grey)
+        queue, seen, last = [start], set(), []
+        while (queue or last) and slot not in out:
+            if not queue: queue.append(last.pop(0))
             ref = queue.pop(0)
             if ref <= 0 or ref in seen: continue
             seen.add(ref)
@@ -121,7 +124,7 @@ def g1_textures(p, mat):
                 if n == 'Texture' and t == 'ObjectProperty' and v > 0 and p.class_name(p.exports[v - 1]['class']) == 'Texture2D':
                     out[slot] = v - 1; break
                 if t == 'StructProperty' and v[0] == 'ExpressionInput':
-                    queue.append({nn: vv for nn, tt, kk, vv in p.properties(v[1], 0)[0]}.get('Expression', 0))
+                    (last if n == 'Alpha' else queue).append({nn: vv for nn, tt, kk, vv in p.properties(v[1], 0)[0]}.get('Expression', 0))
     if len(out) < 3 and 'ReferencedTextures' in a:                       # by name
         raw = a['ReferencedTextures']; n = struct.unpack_from('>i', raw, 0)[0]
         for r in struct.unpack_from(f'>{n}i', raw, 4):
@@ -178,17 +181,30 @@ def g1_uv_transform(p, ref):
             if y[0] != 'c': return None
             return ('uv', x[1], x[2], x[3], x[4] + y[1], x[5] + y[2])
         return None
+    # a diffuse sampled more than once: the sample laid out with the normal map (its texture coordinate), else the
+    # finest. The prison's tile floor sampled its diffuse at 0.67 (the tiles, as its normal map) and at 0.1 (a broad
+    # brightness variation added on top); the first sample found was the variation's, and the floor drew as a smear
+    normal = g1_textures(p, mat).get('normal')
+    samples, normal_coords = [], set()
     for j, e in enumerate(p.exports):
         if e['outer'] != mat + 1 or p.class_name(e['class']) != 'MaterialExpressionTextureSample': continue
         try:
             a = props(j + 1)
+            coords = inp(a['Coordinates']) if 'Coordinates' in a else 0
+            if normal is not None and a.get('Texture') == normal + 1: normal_coords.add(coords)
             if a.get('Texture') != tex + 1: continue
-            t = ev(inp(a['Coordinates'])) if 'Coordinates' in a else ('uv', 0, 1.0, 1.0, 0.0, 0.0)
+            samples.append((coords, ev(coords) if coords else ('uv', 0, 1.0, 1.0, 0.0, 0.0)))
         except Exception:
             return None
-        if t is None or t[0] != 'uv' or t[1:] == (0, 1.0, 1.0, 0.0, 0.0): return None
-        return (t[1], (t[2], t[3]), (t[4], t[5]))
-    return None
+    if not samples: return None
+    t = samples[0][1]
+    # (only between followed mappings on the same UV set: water and mist materials sampling their diffuse twice
+    # through panners kept their first mapping)
+    shared = [s[1] for s in samples[1:] if s[0] in normal_coords and s[0] != samples[0][0]
+              and t is not None and t[0] == 'uv' and s[1] is not None and s[1][0] == 'uv' and s[1][1] == t[1]]
+    if shared and samples[0][0] not in normal_coords: t = shared[0]
+    if t is None or t[0] != 'uv' or t[1:] == (0, 1.0, 1.0, 0.0, 0.0): return None
+    return (t[1], (t[2], t[3]), (t[4], t[5]))
 
 
 def g1_apply_uv_transforms(p, m, transform_of):
@@ -258,6 +274,8 @@ def g1_unlit(p, mat):
     except ValueError:
         return False
     a = {n: v for n, t, k, v in pr}
+    if a.get('BlendMode') == 4: return False       # (a modulate decal: unlit as a multiply needs no light; drawn lit)
+    if g1_opacity_is_diffuse(p, mat): return False  # (a see-through textured surface, the cobwebs: a lit cutout)
     lm = a.get('LightingModel')                    # Gears 1: an int (MLM_Phong 0, NonDirectional 1, Unlit 2, SHPRT 3,
     if lm == 2 or (isinstance(lm, tuple) and lm[1] == 'MLM_Unlit'): return True     # Custom 4); Gears 3: the enum name
     return 'EmissiveColor' in a and 'DiffuseColor' not in a
@@ -465,6 +483,12 @@ def g1_mask(p, mat):
     except ValueError:
         return None
     a = {n: v for n, t, k, v in pr}
+    # modulate (the prison's blood pools, Wretch prints, dirt, moss, rust and water stains: a colour on white that
+    # multiplies the surface; Gears 3 has no modulate template its static meshes can draw with): its texture as the
+    # diffuse, cut where it is about white (dark_to_alpha)
+    if a.get('BlendMode') == 4:
+        tex = g1_textures(p, mat).get('diffuse')
+        return (tex, 'L') if tex is not None else None
     # (translucent, lit or not, with a normal map -- the prison's chain-link fences, their opacity the diffuse's alpha
     # faded with distance -- cut by that alpha as well: Gears 3 has no translucent template)
     if a.get('BlendMode') == 1 and 'OpacityMask' in a: src_ = 'OpacityMask'
@@ -513,6 +537,79 @@ def red_to_alpha(data, fmt):
     new = np.where(red >= 128, 0, 3).astype(np.uint32)
     nbits = (new << (2 * np.arange(16, dtype=np.uint32))[None]).sum(1).astype('<u4')
     out = np.concatenate([np.full((len(le), 4), 0xff, np.uint8), nbits.view(np.uint8).reshape(-1, 4)], 1)
+    return out.reshape(-1, 2)[:, ::-1].reshape(-1).tobytes()[:len(data)]
+
+
+# a modulate decal's texel is kept (drawn) where its luminance is under this: the texture multiplies the surface, white
+# leaves it as it is
+MODULATE_KEEP = 0.85
+
+
+def dark_to_alpha(data, fmt):
+    """a tiled DXT1 mip of a Gears 1 modulate decal (blood, prints, dirt, moss, rust, water stains: a colour on white
+    that multiplies the surface) as a cutout: 1-bit alpha kept where the texel is darker than MODULATE_KEEP, white
+    colour (the masked template reads its mask texture's alpha). Block by block in place, as red_to_alpha"""
+    import numpy as np
+    if fmt != 'PF_DXT1': raise ValueError(f'dark_to_alpha: {fmt}')
+    pad = (-len(data)) % 8
+    blk = np.frombuffer(data + bytes(pad), dtype=np.uint8).reshape(-1, 8)
+    le = blk.reshape(-1, 2)[:, ::-1].reshape(-1, 8)
+    c0 = le[:, 0].astype(np.int32) | (le[:, 1].astype(np.int32) << 8)
+    c1 = le[:, 2].astype(np.int32) | (le[:, 3].astype(np.int32) << 8)
+    bits = np.ascontiguousarray(le[:, 4:8]).view('<u4')[:, 0]
+    idx = ((bits[:, None] >> (2 * np.arange(16, dtype=np.uint32))[None]) & 3).astype(np.int64)
+    def lum(c): return (0.299 * ((c >> 11) & 31) / 31 + 0.587 * ((c >> 5) & 63) / 63 + 0.114 * (c & 31) / 31) * 255
+    l0, l1 = lum(c0), lum(c1)
+    four = c0 > c1
+    pal = np.stack([l0, l1, np.where(four, (2 * l0 + l1) / 3, (l0 + l1) / 2), np.where(four, (l0 + 2 * l1) / 3, 255)], 1)
+    l = np.take_along_axis(pal, idx, 1)
+    new = np.where(l < MODULATE_KEEP * 255, 0, 3).astype(np.uint32)
+    nbits = (new << (2 * np.arange(16, dtype=np.uint32))[None]).sum(1).astype('<u4')
+    out = np.concatenate([np.full((len(le), 4), 0xff, np.uint8), nbits.view(np.uint8).reshape(-1, 4)], 1)
+    return out.reshape(-1, 2)[:, ::-1].reshape(-1).tobytes()[:len(data)]
+
+
+# the diffuse tint of a modulate decal drawn as a cutout: Gears 1 multiplied the surface by the texture, so the stain
+# came out about as dark as the surface times its colour; drawn lit over the surface, its colour alone glowed (the
+# prison's Wretch prints near white, the blood pools' edges)
+MODULATE_TINT = 0.45
+
+
+def modulate_fill(data, fmt):
+    """a tiled DXT1 mip of a Gears 1 modulate decal with its white background replaced by stain colour, block by block
+    (an endpoint about white takes the block's other endpoint, both: the texture's mean stain colour): sampled at a
+    cutout's edge (bilinear, mips), the white around the stain drew a white halo round the prison's blood pools"""
+    import numpy as np
+    if fmt != 'PF_DXT1': return data
+    pad = (-len(data)) % 8
+    blk = np.frombuffer(data + bytes(pad), dtype=np.uint8).reshape(-1, 8)
+    le = blk.reshape(-1, 2)[:, ::-1].reshape(-1, 8).copy()
+    c0 = le[:, 0].astype(np.int32) | (le[:, 1].astype(np.int32) << 8)
+    c1 = le[:, 2].astype(np.int32) | (le[:, 3].astype(np.int32) << 8)
+    def lum(c): return 0.299 * ((c >> 11) & 31) / 31 + 0.587 * ((c >> 5) & 63) / 63 + 0.114 * (c & 31) / 31
+    # (an endpoint about white is background; one about black too: Gears 1 stored its white blocks as white + an
+    # unused black endpoint)
+    w0 = (lum(c0) >= MODULATE_KEEP) | (lum(c0) < 0.05)
+    w1 = (lum(c1) >= MODULATE_KEEP) | (lum(c1) < 0.05)
+    dark = np.concatenate([c0[~w0], c1[~w1]])
+    if not len(dark): return data
+    mean = lambda sh, mx: int(round(np.mean((dark >> sh) & mx)))
+    fill = (mean(11, 31) << 11) | (mean(5, 63) << 5) | mean(0, 31)
+    n0 = np.where(w0, np.where(w1, fill, c1), c0)
+    n1 = np.where(w1, np.where(w0, fill, c0), c1)
+    bits = np.ascontiguousarray(le[:, 4:8]).view('<u4')[:, 0].copy()
+    # keep 4-colour mode (c0 > c1): equal endpoints nudged apart, swapped ones swapped back with their indices
+    # (0 <-> 1, 2 <-> 3: in 3-colour mode index 3 was transparent black)
+    eq = n0 == n1
+    n0 = np.where(eq & (n0 < 0xffff), n0 + 1, n0); n1 = np.where(eq & (n0 >= 0xffff), n1 - 1, n1)
+    swap = n0 < n1
+    n0, n1 = np.where(swap, n1, n0), np.where(swap, n0, n1)
+    idx = (bits[:, None] >> (2 * np.arange(16, dtype=np.uint32))[None]) & 3
+    idx = np.where(swap[:, None], idx ^ 1, idx)
+    bits = (idx.astype(np.uint32) << (2 * np.arange(16, dtype=np.uint32))[None]).sum(1).astype('<u4')
+    out = np.concatenate([(n0 & 0xff).astype(np.uint8)[:, None], (n0 >> 8).astype(np.uint8)[:, None],
+                          (n1 & 0xff).astype(np.uint8)[:, None], (n1 >> 8).astype(np.uint8)[:, None],
+                          bits.view(np.uint8).reshape(-1, 4)], 1)
     return out.reshape(-1, 2)[:, ::-1].reshape(-1).tobytes()[:len(data)]
 
 
@@ -571,8 +668,36 @@ def g1_volumetric(p, ref):
             par = next((struct.unpack('>i', r[4][:4])[0] for r in recs if r[0] == 'Parent'), 0)
             if par <= 0: return False
             mat = par - 1
-        return g1_unlit(p, mat) and 'normal' not in g1_textures(p, ref - 1)
+        return g1_unlit(p, mat) and 'normal' not in g1_textures(p, ref - 1) and not g1_opacity_is_diffuse(p, mat)
     except Exception: return False
+
+
+def g1_opacity_is_diffuse(p, mat):
+    """a Gears 1 translucent Material whose Opacity samples its own diffuse texture: a see-through textured surface
+    (the prison's cobwebs, the Raven's blurred blades), not light in the air (fog sheets, light cones and beams fade by
+    a falloff gradient). Volumetric, the cobwebs drew as the kit's glowing fog sheet: two bright blooms on the cell's
+    ceiling in the opening cutscene"""
+    if mat < 0 or p.class_name(p.exports[mat]['class']) != 'Material': return False
+    try:
+        a = {n: v for n, t, k, v in levelinject.props_at(p, p.export_data(mat))[1]}
+    except ValueError:
+        return False
+    if a.get('BlendMode') != 2 or 'Opacity' not in a: return False
+    diffuse = g1_textures(p, mat).get('diffuse')
+    queue, seen = [{n: v for n, t, k, v in p.properties(a['Opacity'][1], 0)[0]}.get('Expression', 0)], set()
+    while queue:
+        ref = queue.pop(0)
+        if ref <= 0 or ref in seen: continue
+        seen.add(ref)
+        try:
+            _, epr, _ = levelinject.props_at(p, p.export_data(ref - 1))
+        except Exception:
+            continue
+        for n, t, k, v in epr:
+            if n == 'Texture' and t == 'ObjectProperty' and v > 0: return diffuse is not None and v - 1 == diffuse
+            if t == 'StructProperty' and v[0] == 'ExpressionInput':
+                queue.append({nn: vv for nn, tt, kk, vv in p.properties(v[1], 0)[0]}.get('Expression', 0))
+    return False
 
 
 # ---- Gears 1 texture -> Gears 3 Texture2D serial data ----
@@ -631,7 +756,7 @@ def texture_828(w, p3, template, src, mask=None, lod_bias=None, max_size=None, c
     out += struct.pack('>i', len(mips))
     for m, mip in enumerate(mips):
         data = src.mip_bytes(first + m)
-        if data is not None and mask: data = (red_to_alpha if mask == 'R' else alpha_to_grey)(data, fmt)
+        if data is not None and mask: data = {'R': red_to_alpha, 'L': dark_to_alpha, 'F': modulate_fill}.get(mask, alpha_to_grey)(data, fmt)
         if data is not None and colour_scale and tuple(colour_scale) != (1.0, 1.0, 1.0): data = scale_colour(data, fmt, colour_scale)
         if data is None:
             out += struct.pack('>Iiii', 0x21, 0, -1, -1)
@@ -758,7 +883,7 @@ def copy_import(w, p3, pk, ref, cache):
     return outer
 
 
-def child_mic(w, p3, pk, kit_mic, parent_ref, textures, scalars=None):
+def child_mic(w, p3, pk, kit_mic, parent_ref, textures, scalars=None, extra=None):
     """serial data for a new MaterialInstanceConstant whose Parent is kit_mic (an export of the kit pk, imported as
     parent_ref): its texture parameters set to textures ({'Diffuse_01': ref, ...}, refs in w), scalars where the kit
     instance has them. Written from properties only: no static permutation of its own, so the game uses the
@@ -789,10 +914,23 @@ def child_mic(w, p3, pk, kit_mic, parent_ref, textures, scalars=None):
     tex = [x for x in (rebuild(e, lambda n: struct.pack('>i', textures[n]) if n in textures else None)
                        for e in elements('TextureParameterValues')) if x is not None]
     if tex: props.append(['TextureParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(tex)) + b''.join(tex)])
+    sc = []
     if scalars:
         sc = [x for x in (rebuild(e, lambda n: struct.pack('>f', scalars[n]) if n in scalars else None)
                           for e in elements('ScalarParameterValues')) if x is not None]
-        if sc: props.append(['ScalarParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(sc)) + b''.join(sc)])
+    # extra = (guids, {scalar: value}, {vector: (r, g, b, a)}): parameters the kit instance does not carry, each with
+    # its master's ExpressionGUID (material_param_guids)
+    vc = []
+    if extra:
+        guids, xs, xv = extra
+        def element(name, typ, ex, value):
+            return encode_props(w, [['ParameterName', 'NameProperty', 0, b'', fname_bytes(w, name)],
+                                    ['ParameterValue', typ, 0, ex, value],
+                                    ['ExpressionGUID', 'StructProperty', 0, fname_bytes(w, 'Guid'), guids[name]]])
+        sc += [element(n, 'FloatProperty', b'', struct.pack('>f', v)) for n, v in (xs or {}).items() if n in guids]
+        vc += [element(n, 'StructProperty', fname_bytes(w, 'LinearColor'), struct.pack('>4f', *v)) for n, v in (xv or {}).items() if n in guids]
+    if sc: props.append(['ScalarParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(sc)) + b''.join(sc)])
+    if vc: props.append(['VectorParameterValues', 'ArrayProperty', 0, b'', struct.pack('>i', len(vc)) + b''.join(vc)])
     return d[:o] + encode_props(w, props)
 
 

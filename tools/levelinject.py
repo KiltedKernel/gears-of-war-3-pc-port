@@ -220,6 +220,9 @@ def main():
                     help="a translucent Gears 3 Material of the kit (or the target), with its shaders compiled there: Gears 1's "
                     "fog sheets, light cones and light rays (materialconv.g1_volumetric) are drawn with it; 'none': they "
                     "are left out")
+    ap.add_argument('--extra-floors', default='', help="hidden world collision boxes 'x0,y0,z0,x1,y1,z1;...' (world units, "
+                    "before --offset): floor where a pawn steps off a mover onto world geometry (Gears 3's ledge check "
+                    "stopped the player there)")
     ap.add_argument('--kit', default=None, help="a chapter of its own: the Gears 3 package (the chapter's persistent level, "
                     "loaded first) holding the material instance templates (--materials, the skeletal one): converted "
                     "materials are child instances of them, through imports (tools/levelpkg.py)")
@@ -1280,7 +1283,21 @@ def main():
     if args.bsp and src.version == 374:
         for si, sp in enumerate(srcs):
             if getattr(sp, 'aux', False): continue
-            for vol in bspconv.blocking_volumes(sp):
+            vols_ = bspconv.blocking_volumes(sp)
+            if si == 0 and args.extra_floors:
+                # (recipe extra_floors) the S04 roadie-run door: stepping off the catwalk mover (InterpActor_22, its
+                # slab ending flush with S05's floor at y 6176) onto world floor failed Gears 3's ledge check; a strip
+                # of world floor under the slab's end makes the step world to world
+                for k_, box in enumerate(x for x in args.extra_floors.split(';') if x.strip()):
+                    x0, y0, z0, x1, y1, z1 = (float(v) for v in box.split(','))
+                    Pb_ = np.array([[x, y, z] for z in (z0, z1) for y in (y0, y1) for x in (x0, x1)], np.float64)
+                    quads = ((0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3))
+                    idx_ = []
+                    for a_, b_, c_, d_ in quads:
+                        idx_ += [a_, b_, c_, a_, c_, d_, a_, c_, b_, a_, d_, c_]           # both windings
+                    vols_.append({'name': f'ExtraFloor_{k_}', 'mesh': bspconv.collision_mesh(Pb_, idx_)})
+                print(f"extra floors: {len([x for x in args.extra_floors.split(';') if x.strip()])}")
+            for vol in vols_:
                 upk.E = '>'
                 data = per_poly_collision(meshconv.to_828(p3, tmesh, vol['mesh'], [None]))
                 mref = w.add_export(p3.exports[tmesh]['class'], 0, ('Trilogy_Volume', n_volumes + 1), data, flags=mflags)

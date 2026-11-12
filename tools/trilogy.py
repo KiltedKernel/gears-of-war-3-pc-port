@@ -465,6 +465,9 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
             froms = [x.strip() for x in froms.split(',') if x.strip()]
             if s in froms: options += ['--no-own-cover']
             if s == into.strip(): options += ['--cover-from=' + ','.join(src(x) for x in froms)]
+        # extra_floors = Section: x0,y0,z0,x1,y1,z1; ... (hidden world floor, levelinject --extra-floors)
+        floors_ = [r.split(':', 1)[1] for r in ch.get('extra_floors', '').split('|') if ':' in r and r.split(':', 1)[0].strip() == s]
+        if floors_: options += ['--extra-floors=' + ';'.join(f_.replace(' ', '') for f_ in floors_)]
         if ch.get('track_offsets'): options += ['--track-offsets=' + ch['track_offsets'].replace(' ', '')]
         if ch.get('object_vars'): options += ['--object-vars=' + ch['object_vars'].replace(' ', '')]
         if ch.get('no_collision'): options += ['--actors-no-collision=' + ch['no_collision'].replace(' ', '')]

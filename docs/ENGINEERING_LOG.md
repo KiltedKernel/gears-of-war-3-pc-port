@@ -3481,3 +3481,11 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   and the script leaves Dom behind. Continue on COGBox: the old runtime's .sav reads as corrupted ("Error Loading
   Checkpoints"); `open ...?chapter=N?loadcheckpoint=1` does not load a save by itself. Still seen, not identified:
   thin rainbow (normal-map coloured) strips on the S02 corridor walls by the hard-route door.
+- **The roadie-run door, again (fresh COGBox run, 2026-11-12):** the walked test route (job script fresh_walk2) now
+  reaches it on COGBox: S02's easy-route door opens (both panels shot, far one first: TakeDamage_0 -> Switch_0 ->
+  Gate_1 -> the converted camera shake -> Interp_3 -> Toggle_7 enables SeqEvt_DoorOpen_3; the X press kicks it),
+  S04's button works (SeqEvt_ButtonPush_1, the door's Interp_2 plays), and Marcus stops in the open doorway at
+  (-3297,6194), as before. With extra_floors' strip under the catwalk's end he stops at the same spot, centre 18 units
+  past the slab: not the mover step. Gears 1's and Gears 3's pawns both stop at ledges (bStopAtLedges; Gears 3 adds
+  LedgeCheckThreshold 60), so turning it off would not be faithful. Recipe entry removed. Next: trace the native ledge
+  check (walking physics' floor probe) in COGBox at this spot.

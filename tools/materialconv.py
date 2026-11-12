@@ -97,6 +97,72 @@ def fname_bytes(w, s):
 
 # ---- Gears 1 material -> textures ----
 
+_tex_means = {}
+
+
+def _texture_mean(p, ti):
+    """(mean rgb luminance 0-1, (mean r, g, b, a) 0-1) of a Gears 1 texture's smallest stored mip, or None"""
+    key = (p.filename, ti)
+    if key not in _tex_means:
+        _tex_means[key] = None
+        try:
+            t = texture2d.Texture(p, ti)
+            # (not the packed mip tail: its mips do not decode as mips of their own)
+            tail = int(t.props.get('MipTailBaseIdx', len(t.mips) - 1))
+            ok = [k for k, mm in enumerate(t.mips) if not mm['flags'] & 0x20 and k < tail]
+            mip = next((k for k in ok if max(t.mips[k]['w'], t.mips[k]['h']) <= 128), ok[-1] if ok else None)
+            if mip is None: raise ValueError('no mip')
+            a = t.rgba(mip).astype('float64') / 255
+            ch = tuple(a[..., c].mean() for c in range(4))
+            _tex_means[key] = (0.299 * ch[0] + 0.587 * ch[1] + 0.114 * ch[2], ch)
+        except Exception:
+            pass
+    return _tex_means[key]
+
+
+def g1_diffuse_pick(p, start, depth=0):
+    """the texture (export index) a Gears 1 DiffuseColor chain mostly shows, walked from expression ref start: a lerp
+    follows the layer its alpha favours on average (alpha under 0.5: A), a multiply passes over a side that is a near
+    white overlay (the prison's Mossline walls multiply the concrete by a moss decal on white: as the diffuse they drew
+    white with green bands), other expressions their inputs in order (a lerp's Alpha last); None when no texture"""
+    if start <= 0 or depth > 16: return None
+    try:
+        cn = p.class_name(p.exports[start - 1]['class'])
+        _, epr, _ = levelinject.props_at(p, p.export_data(start - 1))
+    except Exception:
+        return None
+    if 'TextureSample' in cn:
+        t = next((v for n, t_, k, v in epr if n == 'Texture' and t_ == 'ObjectProperty'), 0)
+        return t - 1 if t > 0 and p.class_name(p.exports[t - 1]['class']) == 'Texture2D' else None
+    inputs = []                                         # (name, expression ref, channel mask)
+    for n, t_, k, v in epr:
+        if t_ == 'StructProperty' and v[0] == 'ExpressionInput':
+            e = {nn: vv for nn, tt, kk, vv in p.properties(v[1], 0)[0]}
+            inputs.append((n, e.get('Expression', 0), [c for c in 'RGBA' if e.get('Mask' + c)]))
+    by = {n: (r, m) for n, r, m in inputs}
+    if cn == 'MaterialExpressionLinearInterpolate' and 'A' in by and 'B' in by:
+        alpha = 0.5
+        ar, am = by.get('Alpha', (0, []))
+        if ar > 0:
+            acn = p.class_name(p.exports[ar - 1]['class'])
+            if acn == 'MaterialExpressionConstant':
+                alpha = next((v for n, t_, k, v in levelinject.props_at(p, p.export_data(ar - 1))[1] if n == 'R'), 0.0)
+            elif 'TextureSample' in acn:
+                at = g1_diffuse_pick(p, ar, depth + 1)
+                m_ = _texture_mean(p, at) if at is not None else None
+                if m_: alpha = m_[1]['RGBA'.index(am[0])] if len(am) == 1 else m_[0]
+        for n in (('A', 'B') if alpha < 0.5 else ('B', 'A')):
+            r = g1_diffuse_pick(p, by[n][0], depth + 1)
+            if r is not None: return r
+        return None
+    picks = [g1_diffuse_pick(p, r, depth + 1) for n, r, m in inputs if n != 'Alpha']
+    picks = [x for x in picks if x is not None]
+    if cn == 'MaterialExpressionMultiply' and len(picks) > 1:
+        lum = [(_texture_mean(p, x) or (0.5,))[0] for x in picks]
+        if lum[0] > 0.75 and lum[1] <= 0.75: return picks[1]
+    return picks[0] if picks else None
+
+
 def g1_textures(p, mat):
     """{'diffuse'|'normal'|'specular': texture export index (0-based)} for Gears 1 material export index mat"""
     if mat >= 0 and p.class_name(p.exports[mat]['class']) == 'MaterialInstanceConstant':
@@ -105,6 +171,11 @@ def g1_textures(p, mat):
     o, pr, end = levelinject.props_at(p, p.export_data(mat))
     a = {n: v for n, t, k, v in pr}
     out = {}
+    lm_ = a.get('LightingModel')                    # (skies are bright, not overlays: unlit materials keep the first)
+    unlit_ = lm_ == 2 or (isinstance(lm_, tuple) and lm_[1] == 'MLM_Unlit')
+    if 'DiffuseColor' in a and os.environ.get('MATERIALCONV_DIFFUSE_PICK'):       # (tried: layer-aware, too often wrong)
+        d_ = g1_diffuse_pick(p, {n: v for n, t, k, v in p.properties(a['DiffuseColor'][1], 0)[0]}.get('Expression', 0))
+        if d_ is not None: out['diffuse'] = d_
     for slot, prop in (('diffuse', 'DiffuseColor'), ('normal', 'Normal'), ('specular', 'SpecularColor')):
         if prop not in a: continue
         start = {n: v for n, t, k, v in p.properties(a[prop][1], 0)[0]}.get('Expression', 0)
@@ -122,9 +193,17 @@ def g1_textures(p, mat):
                 continue
             for n, t, k, v in epr:
                 if n == 'Texture' and t == 'ObjectProperty' and v > 0 and p.class_name(p.exports[v - 1]['class']) == 'Texture2D':
+                    # (a diffuse that is a near-white overlay multiplied over the surface is passed over for the next
+                    # texture: the prison's Mossline walls multiply the concrete by a moss decal on white, and drew
+                    # white with green bands)
+                    if slot == 'diffuse' and not unlit_ and not os.environ.get('MATERIALCONV_KEEP_OVERLAY'):
+                        m_ = _texture_mean(p, v - 1)
+                        if m_ and m_[0] > 0.8:
+                            overlay = v - 1; continue
                     out[slot] = v - 1; break
                 if t == 'StructProperty' and v[0] == 'ExpressionInput':
                     (last if n == 'Alpha' else queue).append({nn: vv for nn, tt, kk, vv in p.properties(v[1], 0)[0]}.get('Expression', 0))
+    if 'diffuse' not in out and 'overlay' in locals(): out['diffuse'] = overlay
     if len(out) < 3 and 'ReferencedTextures' in a:                       # by name
         raw = a['ReferencedTextures']; n = struct.unpack_from('>i', raw, 0)[0]
         for r in struct.unpack_from(f'>{n}i', raw, 4):

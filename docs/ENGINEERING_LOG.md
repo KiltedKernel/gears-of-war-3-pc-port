@@ -3466,3 +3466,18 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   Embree here): each section's BSP polygons and solid meshes (not cutouts, decals or see-through surfaces), the rays
   grouped by 256-unit cell, hits within 24 units of the light ignored (Gears 1's lights sit inside their lamps).
   bake_lights takes a vertex's share of a light only where the segment is clear. LEVELINJECT_NO_LIGHT_SHADOWS=1: off.
+- **Emissive surfaces** (converted as instances of Gears 3's weapon shader: fluorescent tubes, wall panels, keypads)
+  drew cyan: the HOD base instance's Weap_EmisColor is (0, 4, 12). They also carried the dropped-weapon glint. Now
+  Weap_EmisColor (1, 1, 1) and the glint / reflection off (levelinject.weapon_shader_extra, shared with the skin
+  instances): the S02 corridor's tubes white.
+- **Near-white overlay diffuses**: the prison's Mossline walls (and 15 more across Gears 1: moss, dirt, water and
+  dark-stain overlays) multiply their stone by a decal on white, which the diffuse search found first; the walls
+  drew white with green bands. g1_textures passes over a lit material's first diffuse texture when its mean
+  luminance (a mip of 128 or less, outside the packed mip tail) is over 0.8 and takes the next. Tried first: a
+  layer-aware walk (lerp by its alpha's mean, multiply skipping overlays): 127 materials changed, too many wrongly
+  (paintings to black mould, vehicles to walls); kept off (MATERIALCONV_DIFFUSE_PICK=1).
+- Test tooling on COGBox: script_input gains `shoot x y z [s]` (the old runtime's; the hard route's window panels).
+  The fresh route still stops at the hard-route door: Dom kicks it open (touch triggers + the door_kick matinee),
+  and the script leaves Dom behind. Continue on COGBox: the old runtime's .sav reads as corrupted ("Error Loading
+  Checkpoints"); `open ...?chapter=N?loadcheckpoint=1` does not load a save by itself. Still seen, not identified:
+  thin rainbow (normal-map coloured) strips on the S02 corridor walls by the hard-route door.

@@ -167,6 +167,26 @@ def remove_property(p, d, start, name):
         o = v + size
 
 
+_weapon_guids = {}
+
+
+def weapon_shader_extra(args, vectors=None):
+    """materialconv.child_mic's extra= for an instance of Gears 3's weapon shader (WeaponShader_SP, GearGame.xxx): its
+    dropped-weapon glint (ShimmerColor, Weap_DropGlowAlpha / Dist) and environment reflection (envMult) off, by the
+    master's ExpressionGUIDs (the HOD instance carries none of them); None without GearGame.xxx"""
+    gg_ = os.path.join(args.g3cooked or '', 'GearGame.xxx')
+    if gg_ not in _weapon_guids:
+        _weapon_guids[gg_] = None
+        if os.path.isfile(gg_):
+            gp_ = upk.Package(gg_)
+            wm_ = next((i for i in range(len(gp_.exports)) if gp_.path(i) == 'ALL_WeaponShaders.SinglePlayer.WeaponShader_SP'
+                        and gp_.class_name(gp_.exports[i]['class']) == 'Material'), None)
+            if wm_ is not None: _weapon_guids[gg_] = materialconv.material_param_guids(gp_, wm_)
+    if _weapon_guids[gg_] is None: return None
+    return (_weapon_guids[gg_], {'envMult': 0.0, 'Weap_DropGlowAlpha': 0.0, 'Weap_DropGlowDist': 0.0},
+            {'ShimmerColor': (0.0, 0.0, 0.0, 0.0), **(vectors or {})})
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('target'); ap.add_argument('source', help='Gears 1/2 level package(s), comma-separated (a level and its sublevels)'); ap.add_argument('mods'); ap.add_argument('g3cooked')
@@ -779,6 +799,10 @@ def main():
             emis_param = next((n_ for n_ in eparams if 'emis' in n_.lower()), None)
             efl = struct.unpack_from('>Q', ep_.data, ep_.exports[etmic]['entry'] + 24)[0]
             ecls = next((p3.exports[i]['class'] for i in range(len(p3.exports)) if cls(i) == 'MaterialInstanceConstant'), None)
+            # the weapon shader's dropped-weapon glint and reflection off and its emissive colour white (the base
+            # instance's (0, 4, 12) tinted every glow cyan, twelvefold; Gears 1's colour is in its texture): with the
+            # elements' own materials drawn (MaterialIndex), the prison's wall panels shimmered blue and purple
+            eextra = weapon_shader_extra(args, {'Weap_EmisColor': (1.0, 1.0, 1.0, 1.0)})
             for key_, eref in emissive_tex.items():
                 if emis_param is None or key_ not in mic_refs or ecls is None: continue
                 refs_ = {n_: (eflat if 'norm' in n_.lower() else eblack) for n_ in eparams}
@@ -786,7 +810,7 @@ def main():
                 refs_[emis_param] = eref
                 refs_ = {k_: v_ for k_, v_ in refs_.items() if v_ is not None}
                 mic_of[key_] = w.add_export(ecls, 0, ('Trilogy_Emissive_' + srcs[key_[0]].exports[key_[1] - 1]['name'], 0),
-                                            materialconv.child_mic(w, p3, ep_, etmic, eparent, refs_), flags=efl)
+                                            materialconv.child_mic(w, p3, ep_, etmic, eparent, refs_, extra=eextra), flags=efl)
             print(f'emissive: {len(emissive_tex)} lit materials glowing from a texture, instances of {ep_.path(etmic)} ({emis_param})')
     # converted meshes have no BodySetup (simple collision): line and box checks must use the triangles (the kDOP
     # tree), or a simple-collision check finds nothing (UseSimpleLineCollision / UseSimpleBoxCollision off)
@@ -873,17 +897,8 @@ def main():
             # environment reflection (envMult) off: on the opening's Marcus they drew a white shimmer round him and lit
             # him through the cell's shadow, where Gears 1 kept him dark. Set by the master's ExpressionGUIDs (the HOD
             # instance carries none of them)
-            skin_extra = None
-            gg_ = os.path.join(args.g3cooked or '', 'GearGame.xxx')
-            if os.path.isfile(gg_):
-                gp_ = upk.Package(gg_)
-                wm_ = next((i for i in range(len(gp_.exports)) if gp_.path(i) == 'ALL_WeaponShaders.SinglePlayer.WeaponShader_SP'
-                            and gp_.class_name(gp_.exports[i]['class']) == 'Material'), None)
-                if wm_ is not None:
-                    skin_extra = (materialconv.material_param_guids(gp_, wm_),
-                                  {'envMult': 0.0, 'Weap_DropGlowAlpha': 0.0, 'Weap_DropGlowDist': 0.0},
-                                  {'ShimmerColor': (0.0, 0.0, 0.0, 0.0)})
-                    print(f"skin material: glint and reflection off ({', '.join(n for n in ('envMult', 'Weap_DropGlowAlpha', 'ShimmerColor') if n in skin_extra[0])})")
+            skin_extra = weapon_shader_extra(args)
+            if skin_extra: print(f"skin material: glint and reflection off ({', '.join(n for n in ('envMult', 'Weap_DropGlowAlpha', 'ShimmerColor') if n in skin_extra[0])})")
         hair_tmic = None
         if args.hair_material:
             hf_, hpath = args.hair_material.rsplit(':', 1)

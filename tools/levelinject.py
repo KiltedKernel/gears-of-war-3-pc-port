@@ -65,6 +65,9 @@ FOG_SCALARS = {'Density': 1.0, 'DepthBasedDensity': 0.004, 'FalloffExponent': 0.
 FOG_OPACITY = 1.5
 # converted skeletal meshes' least bounds extent (no physics asset: their bounds stand for the animated travel)
 SKEL_MIN_EXTENT = 1024.0
+# Gears 3 levels whose light map textures stand as the template for converted BSP light maps when a section's own
+# template package has none
+LIGHTMAP_TEMPLATE_PACKAGES = ('SP_Char_Tower_1a_S', 'SP_Nightmare_02_S')
 COPLANAR_NUDGE = 0.4      # units a merged mesh face lying on a BSP face is moved off it
 # units a decal card (a mesh drawn only with modulate materials: blood, prints, stains) is lifted off what it lies on,
 # along its normals: Gears 1 drew modulate after the opaque pass with a depth bias; here a cutout in the opaque pass, the
@@ -1284,19 +1287,84 @@ def main():
         mats.append(struct.pack('>16f', *m.flatten()))
     if n_nudged[0]: print(f'{n_nudged[0]} mesh triangles on BSP faces moved {COPLANAR_NUDGE} off them (no z-fighting)')
     if buckets: print(f'merged: {sum(len(b["P"]) for b in buckets.values())} mesh actors into {len(buckets)} chunks ({n_decals} decal cards lifted {DECAL_LIFT})')
+    # Gears 1's BSP light maps as texture light maps (tools/lightmap2d.py): each section's atlas converted to Gears 3's
+    # two coefficient textures, the light Gears 1 drew dynamically baked into its texels, the light-mapped chunks
+    # pointing at it with their atlas UVs (UV set 1). Sampled per vertex instead, the floors lost every shadow edge and
+    # sun patch smaller than a polygon. LEVELINJECT_VERTEX_BSP_LIGHT=1: per vertex as before
+    def bsp_geometry(bmesh_):
+        lod0 = bmesh_['lods'][0]
+        Pb = np.frombuffer(lod0['positions'][2][2], '>f4').reshape(-1, 3).astype(np.float64)
+        stride_ = lod0['vertices'][1]
+        vb = np.frombuffer(lod0['vertices'][4][2], np.uint8).reshape(-1, stride_)
+        Nb = vb[:, [7, 6, 5]].astype(np.float64) / 127.5 - 1          # TangentZ (w z y x)
+        uvs_ = np.frombuffer(vb[:, 8:].tobytes(), '>f2').reshape(len(vb), -1, 2).astype(np.float64)
+        Tb = np.frombuffer(lod0['indices'][2], '>u2').reshape(-1, 3).astype(np.int64)
+        return Pb, Nb, uvs_, Tb
+    lm_template = next((i for i in range(len(p3.exports)) if cls(i) == 'LightMapTexture2D'), None)
+    lm_pkg, lm_class = p3, (p3.exports[lm_template]['class'] if lm_template is not None else None)
+    if lm_template is None and bsp_chunks:
+        # (a section template without one: a Gears 3 level's light map texture for its properties, the class imported)
+        for name_ in LIGHTMAP_TEMPLATE_PACKAGES:
+            f_ = os.path.join(args.g3cooked, name_ + '.xxx')
+            if not os.path.isfile(f_): continue
+            q_ = upk.Package(f_)
+            lm_template = next((i for i, e in enumerate(q_.exports) if q_.class_name(e['class']) == 'LightMapTexture2D'), None)
+            if lm_template is not None:
+                lm_pkg = q_
+                lm_class = w.add_import('Core', 'Class', w.add_import('Core', 'Package', 0, 'Engine'), 'LightMapTexture2D')
+                break
+    tmesh_lmci = int(staticmesh.read(p3, tmesh)['props'].get('LightMapCoordinateIndex', 1))
+    use_atlas = (not args.no_lighting and lm_template is not None and tmesh_lmci == 1
+                 and not os.environ.get('LEVELINJECT_VERTEX_BSP_LIGHT'))
+    atlases, atlas_refs = {}, {}
+    if bsp_chunks and not use_atlas:
+        print(f'BSP light: per vertex (light map template {lm_template}, mesh light map UVs {tmesh_lmci}, no_lighting {args.no_lighting})')
+    if use_atlas:
+        import lightmap2d
+        for si, bmats, bmesh in bsp_chunks:
+            if not bmesh.get('atlas'): continue
+            key_ = (si, tuple(r for r, _ in bmesh['atlas']))
+            if key_ not in atlases:
+                try: atlases[key_] = lightmap2d.Atlas(srcs[si], bmesh['atlas'])
+                except Exception as ex:
+                    print(f'  light map atlas {key_}: not read ({ex}); per vertex'); atlases[key_] = None
+            if atlases[key_] is not None and point_lights is not None:
+                Pb, Nb, uvs_, Tb = bsp_geometry(bmesh)
+                atlases[key_].add_light(Pb, Nb, uvs_[:, 1], Tb, lambda P_, N_: bake(point_lights, P_, N_))
+        lm_flags = struct.unpack_from('>Q', lm_pkg.data, lm_pkg.exports[lm_template]['entry'] + 24)[0]
+        for j_, (key_, atlas_) in enumerate(sorted((kv for kv in atlases.items() if kv[1] is not None), key=lambda kv: str(kv[0]))):
+            sources_, scales_ = atlas_.gears3()
+            trefs_ = []
+            for c_, s_ in enumerate(sources_):
+                upk.E = '>'
+                data_, fix_ = materialconv.texture_828(w, lm_pkg, lm_template, s_)
+                # a LightMapTexture2D serialises its LightmapFlags after the texture (Gears 3's: 1, streamed; these
+                # load whole, NeverStream: 0). Without it the level's load stopped there: the game thread hung at the
+                # loading screen as the first light-mapped section streamed in
+                data_ = data_ + struct.pack('>I', 0)
+                trefs_.append(w.add_export(lm_class, 0, (f'Trilogy_LightMap{j_ + 1}_{c_}', 0), data_, flags=lm_flags, fixups=fix_))
+            atlas_refs[key_] = (trefs_, scales_)
+        print(f'BSP light maps: {len(atlas_refs)} atlases as textures, {sum(1 for c_ in bsp_chunks if c_[2].get("atlas"))} of {len(bsp_chunks)} chunks')
     for k, (si, bmats, bmesh) in enumerate(bsp_chunks):
         upk.E = '>'
         data = per_poly_collision(meshconv.to_828(p3, tmesh, bmesh, [mic_of.get((si, x)) for x in bmats]))
+        akey_ = (si, tuple(r for r, _ in bmesh['atlas'])) if bmesh.get('atlas') else None
+        if akey_ in atlas_refs:
+            # (its light map reads UV set 1, the atlas UVs; the template mesh leaves LightMapCoordinateIndex at its
+            # default, 0: the atlas was sampled with the texture UVs, a patchwork of dark and light blocks)
+            o_, pr_, end_ = props_at(p3, data, (4,))
+            data = bytes(set_property(p3, w, bytearray(data), o_, 'LightMapCoordinateIndex', struct.pack('>i', 1), 'IntProperty'))
         mref = w.add_export(p3.exports[tmesh]['class'], 0, ('Trilogy_BSP', k + 1), data, flags=mflags)
-        light = bmesh['light'].copy()                  # the BSP's own light maps, a little ambient where a node had none
-        light[np.isnan(light[:, 0, 0])] = 0.05 if point_lights is not None else ambient
-        if point_lights is not None:
-            lod0 = bmesh['lods'][0]
-            Pb = np.frombuffer(lod0['positions'][2][2], '>f4').reshape(-1, 3).astype(np.float64)
-            vb = np.frombuffer(lod0['vertices'][4][2], np.uint8).reshape(-1, 12)
-            Nb = vb[:, [7, 6, 5]].astype(np.float64) / 127.5 - 1      # TangentZ (w z y x)
-            light = light + bake(point_lights, Pb, Nb)[:, None, :]
-        tail = bytes(4) if args.no_lighting else lighting.gears3_vertex_lightmap(light, len(w.exports) + 1, light_guids)
+        if akey_ in atlas_refs:
+            trefs_, scales_ = atlas_refs[akey_]
+            tail = lightmap2d.gears3_reference(trefs_, scales_, light_guids)
+        else:
+            light = bmesh['light'].copy()              # the BSP's own light maps, a little ambient where a node had none
+            light[np.isnan(light[:, 0, 0])] = 0.05 if point_lights is not None else ambient
+            if point_lights is not None:
+                Pb, Nb, _, _ = bsp_geometry(bmesh)
+                light = light + bake(point_lights, Pb, Nb)[:, None, :]
+            tail = bytes(4) if args.no_lighting else lighting.gears3_vertex_lightmap(light, len(w.exports) + 1, light_guids)
         d = bytearray(td[:tend]) + tail
         struct.pack_into('>i', d, sm_off, mref)
         struct.pack_into('>3f', d, sc_off, 1.0, 1.0, 1.0)
@@ -1416,7 +1484,7 @@ def main():
         print(f'{n_simple} meshes collide with pawns by their Gears 1 simple collision: {len(body_parts)} hulls in {n_bodies} hidden meshes')
     # spawn points: a start whose capsule (half height about 90) would be in a converted floor is lifted above it
     if args.fix_starts and bsp_chunks:
-        floors = [(pts, n) for surf, pts, uv, n, light in polys if n[2] > 0.7]
+        floors = [(pts, n) for surf, pts, uv, n, light, *_ in polys if n[2] > 0.7]
         def inside2d(poly, x, y):
             xs, ys = poly[:, 0], poly[:, 1]; x2, y2 = np.roll(xs, -1), np.roll(ys, -1)
             cross = (ys > y) != (y2 > y)

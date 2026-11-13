@@ -97,11 +97,15 @@ def polygons(m, p=None, lightmaps=None):
         base, U, V = m['points'][s['base']], m['vectors'][s['u']], m['vectors'][s['v']]
         uv = np.stack([(pts - base) @ U, (pts - base) @ V], 1) / 128.0
         uv -= np.floor(uv.min(0))
-        light = None
+        light, lm_uv = None, None
         lm = lightmaps.get(ni) if lightmaps else None
         if lm and lm['type'] == 2:
-            light = lighting.sample_lightmap_374(p, lm, m['shadow_uv'][nd['vert_pool']:nd['vert_pool'] + k])
-        out.append((nd['surf'], pts, uv, m['vectors'][s['normal']], light))
+            suv = m['shadow_uv'][nd['vert_pool']:nd['vert_pool'] + k]
+            light = lighting.sample_lightmap_374(p, lm, suv)
+            (sx, sy), (bx, by) = lm['coord']
+            lm_uv = (np.asarray(suv, np.float64) * [sx, sy] + [bx, by], tuple(r for r, _ in lm['textures']), lm['textures'])
+        # (lm_uv: the vertices' UVs in the light map atlas and the atlas's textures, for texture light maps)
+        out.append((nd['surf'], pts, uv, m['vectors'][s['normal']], light, lm_uv))
     return out
 
 
@@ -116,7 +120,9 @@ def chunk_meshes(m, polys, cell=4096.0, max_vertices=60000):
     form)], ready for meshconv.to_828"""
     cells = {}
     for poly in polys:
-        key = tuple(np.floor(poly[1].mean(0) / cell).astype(int))
+        # (light-mapped polygons and the rest apart: a chunk is all one or the other)
+        lit = len(poly) > 5 and poly[5] is not None
+        key = tuple(np.floor(poly[1].mean(0) / cell).astype(int)) + (str(poly[5][1]) if lit else '',)
         cells.setdefault(key, []).append(poly)
     out = []
     for key, group in sorted(cells.items()):
@@ -247,12 +253,13 @@ def build_mesh(m, polys):
     by_surf_material = {}
     for poly in polys:
         by_surf_material.setdefault(m['surfs'][poly[0]]['material'], []).append(poly)
-    P, TX, TZ, UV, idx, elements, mats, L = [], [], [], [], [], [], [], []
+    P, TX, TZ, UV, idx, elements, mats, L, LM = [], [], [], [], [], [], [], [], []
     base = 0
     for mat, group in by_surf_material.items():
         first = len(idx)
-        for surf, pts, uv, normal, light in group:
+        for surf, pts, uv, normal, light, *rest in group:
             L.append(light if light is not None else np.full((len(pts), 3, 3), np.nan, np.float32))
+            LM.append(rest[0][0] if rest and rest[0] is not None else np.zeros((len(pts), 2)))
             k = len(pts)
             s = m['surfs'][surf]
             U, V = m['vectors'][s['u']], m['vectors'][s['v']]
@@ -272,17 +279,21 @@ def build_mesh(m, polys):
                          'min_vertex': 0, 'max_vertex': base - 1})
         mats.append(mat)
     P = np.concatenate(P); n = len(P)
-    uvh = np.concatenate(UV).astype('>f2').reshape(n, 1, 2)
-    verts = np.concatenate([np.concatenate(TX), np.concatenate(TZ), np.frombuffer(uvh.tobytes(), np.uint8).reshape(n, 4)], 1)
+    lit = all(len(poly) > 5 and poly[5] is not None for poly in polys)
+    # (a chunk of light-mapped polygons: its atlas UVs as UV set 1, the light map's)
+    uvs = 2 if lit else 1
+    uvh = np.stack([np.concatenate(UV)] + ([np.concatenate(LM)] if lit else []), 1).astype('>f2').reshape(n, uvs, 2)
+    verts = np.concatenate([np.concatenate(TX), np.concatenate(TZ), np.frombuffer(uvh.tobytes(), np.uint8).reshape(n, 4 * uvs)], 1)
     lo, hi = P.min(0), P.max(0)
     centre, ext = (lo + hi) / 2, (hi - lo) / 2
     mesh = {'version': 828, 'props': {},
             'bounds': (*centre, *ext, float(np.linalg.norm(ext))),
             'lods': [{'positions': (12, n, (12, n, P.astype('>f4').tobytes())),
-                      'vertices': (1, 12, n, 0, (12, n, verts.tobytes())),
+                      'vertices': (uvs, 8 + 4 * uvs, n, 0, (8 + 4 * uvs, n, verts.tobytes())),
                       'indices': (2, len(idx), struct.pack(f'>{len(idx)}H', *idx)),
                       'wireframe': (2, 0, b''), 'elements': elements, 'materials_374': mats}],
-            'light': np.concatenate(L)}                          # per vertex (NaN where the node had no light map)
+            'light': np.concatenate(L),                          # per vertex (NaN where the node had no light map)
+            'atlas': polys[0][5][2] if lit else None}            # (the light map atlas: [(texture ref, scale)] x 3)
     return mats, mesh
 
 
@@ -299,7 +310,7 @@ if __name__ == '__main__':
     if len(sys.argv) > 2:
         with open(sys.argv[2], 'w') as f:
             base = 1
-            for surf, pts, uv, nrm, light in polys:
+            for surf, pts, uv, nrm, light, *_ in polys:
                 for q in pts: f.write('v %g %g %g\n' % tuple(q))
                 for j in range(1, len(pts) - 1): f.write(f'f {base} {base + j + 1} {base + j}\n')
                 base += len(pts)

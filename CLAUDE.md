@@ -62,10 +62,10 @@ builder is ported to COGBox's developer mode.
 
 ## Open work (keep this current)
 
-- Chapter 1 polish (2026-11-12): cutscene character shading (flatter and brighter than Gears 1's key light); ragdolls
-  fall through converted floors (no PhysX collision for converted meshes); the big room after the path choice
-  (stretched floor textures, a door's texture, a black slab, flat light cones); Marcus's arm twitch in dialogue;
-  enemy pathfinding in the hard route's yard fight.
+- Chapter 1 polish (2026-11-13): cutscene character shading; dynamic objects (movers, characters) miss Gears 1's
+  world sun and sky (copying those lights washes the converted world out: ENGINEERING_LOG 2026-11-13); an overexposed
+  BSP gutter strip in the cell block; Marcus's arm twitch in dialogue (comm link / head tracking candidates); enemy
+  pathfinding in the hard route's yard fight; ragdolls on the physics floors unconfirmed.
 - Port the navmesh builder to COGBox's developer mode, so building needs no legacy runtime.
 - Effects that Gears 3 lacks (Gears 1/2 particles and materials, the Riftworm...) and a COGBox mod marketplace:
   design notes in docs/ (2026-11-12).

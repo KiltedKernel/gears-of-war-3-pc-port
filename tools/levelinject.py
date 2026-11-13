@@ -66,6 +66,10 @@ FOG_OPACITY = 1.5
 # converted skeletal meshes' least bounds extent (no physics asset: their bounds stand for the animated travel)
 SKEL_MIN_EXTENT = 1024.0
 COPLANAR_NUDGE = 0.4      # units a merged mesh face lying on a BSP face is moved off it
+# units a decal card (a mesh drawn only with modulate materials: blood, prints, stains) is lifted off what it lies on,
+# along its normals: Gears 1 drew modulate after the opaque pass with a depth bias; here a cutout in the opaque pass, the
+# blood pools outside the first cell flickered in and out of the floor tiles (LEVELINJECT_DECAL_LIFT)
+DECAL_LIFT = float(os.environ.get('LEVELINJECT_DECAL_LIFT', 1.0))
 # vector parameters set on the masked template's copies (a pickup material: no glint)
 MASKED_VECTORS = {'ShimmerColor': (0.0, 0.0, 0.0, 0.0)}
 UNLIT_LIGHT = 1.0           # their light map: constant (diffuse x 1 = the texture as it is)
@@ -761,6 +765,9 @@ def main():
                     tint_, spec_ = materialconv.g1_shading(sp, gm + 1)
                     if tint_: vectors_['Diffuse_01_Color'] = tuple(tint_) + (1.0,)
                     if not spec_: vectors_['Specular_01_Color'] = (0.0, 0.0, 0.0, 1.0)
+                uc_ = materialconv.g1_unlit_colour(sp, gm)
+                if uc_ is not None:                    # (the cobwebs: their unlit colour, no specular)
+                    vectors_['Diffuse_01_Color'] = tuple(uc_) + (1.0,); vectors_['Specular_01_Color'] = (0.0, 0.0, 0.0, 1.0)
                 if mask[1] == 'L':                     # (a modulate decal: about as dark as the surface it multiplied)
                     t_ = materialconv.MODULATE_TINT
                     vectors_['Diffuse_01_Color'] = (t_, t_, t_, 1.0); vectors_['Specular_01_Color'] = (0.0, 0.0, 0.0, 1.0)
@@ -1036,7 +1043,7 @@ def main():
         Nw /= np.linalg.norm(Nw, axis=1, keepdims=True) + 1e-9
         return (P * scale) @ R + loc, Nw
     refs, mats, lit, all_samples = [], [], 0, []
-    n_unlit = n_noncolliding = n_pawn_through = n_simple = 0
+    n_unlit = n_noncolliding = n_pawn_through = n_simple = n_decals = 0
     simple_box_cache, hull_cache, body_parts = {}, {}, []
     # --merge: the level's mesh actors joined into one mesh per 4096-unit cell and collision class (each a component
     # of its own: thousands of components were thousands of draws, the render thread held the frame rate down where
@@ -1093,7 +1100,7 @@ def main():
                 move[T[t]] = N[t] * COPLANAR_NUDGE; n_nudged[0] += 1
         return P + move
     MERGE_CELL, MERGE_MAX = 4096.0, 60000
-    def merge_add(si, mi, loc, rot, scale, mics, samples, flags_key):
+    def merge_add(si, mi, loc, rot, scale, mics, samples, flags_key, lift=0.0):
         m_ = parsed[mi]; lod = m_['lods'][0]
         pos, tx, tz, uvh, nv = meshconv.source_vertices(m_)
         P = (np.frombuffer(pos.tobytes(), '>f4').reshape(nv, 3).astype(np.float64) * scale) @ rotation_matrix(*rot) + loc
@@ -1111,6 +1118,8 @@ def main():
             idx_all = np.frombuffer(lod['indices'][2], '>u2').reshape(-1, 3).astype(np.int64)
             VN = TZ[:, [3, 2, 1]].astype(np.float64) / 127.5 - 1
             P = coplanar_nudge(P, idx_all[(idx_all < nv).all(1)], VN)
+        if lift:
+            P = P + (TZ[:, [3, 2, 1]].astype(np.float64) / 127.5 - 1) * lift
         centre = P.mean(0)
         # (and by brightness: a vertex light map is 8 bits per vertex scaled to its brightest, so a dim piece in a
         # chunk with a bright one went black, and the bright one white)
@@ -1225,7 +1234,9 @@ def main():
             # merged into its cell's chunk (below): its triangles in world space, its light, its collision class
             flags_key = tuple(cflags.get(k_) is False for k_ in ('CollideActors', 'BlockActors', 'BlockNonZeroExtent', 'BlockZeroExtent', 'BlockRigidBody')) \
                 if not args.no_collision and sp.version == 374 else ()
-            merge_add(si, mi, loc, rot, scale, [mic_of.get((si, x)) for x in els], samples, flags_key)
+            decal_ = bool(els) and all(x and materialconv.g1_blend(sp, x) == 4 for x in els)
+            n_decals += decal_
+            merge_add(si, mi, loc, rot, scale, [mic_of.get((si, x)) for x in els], samples, flags_key, DECAL_LIFT if decal_ else 0.0)
             if samples is not None and not (els and all((si, x) in unlit_mats for x in els)):
                 all_samples.append(samples.mean(0))
             continue
@@ -1272,7 +1283,7 @@ def main():
         m = np.eye(4); m[3, :3] = offset
         mats.append(struct.pack('>16f', *m.flatten()))
     if n_nudged[0]: print(f'{n_nudged[0]} mesh triangles on BSP faces moved {COPLANAR_NUDGE} off them (no z-fighting)')
-    if buckets: print(f'merged: {sum(len(b["P"]) for b in buckets.values())} mesh actors into {len(buckets)} chunks')
+    if buckets: print(f'merged: {sum(len(b["P"]) for b in buckets.values())} mesh actors into {len(buckets)} chunks ({n_decals} decal cards lifted {DECAL_LIFT})')
     for k, (si, bmats, bmesh) in enumerate(bsp_chunks):
         upk.E = '>'
         data = per_poly_collision(meshconv.to_828(p3, tmesh, bmesh, [mic_of.get((si, x)) for x in bmats]))

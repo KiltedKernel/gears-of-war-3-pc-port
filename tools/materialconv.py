@@ -451,6 +451,9 @@ def g1_shading(p, ref):
     return tint, specular
 
 
+VIEW_DEPENDENT = ('Fresnel', 'CameraVector', 'ReflectionVector', 'DotProduct')
+
+
 def g1_emissive(p, mat):
     """(texture export index, (r, g, b) scale) a lit Gears 1 material's EmissiveColor draws: its texture times the
     constants multiplied onto it (Constant, Constant3/4Vector, a VectorParameter's default; the corridor tubes:
@@ -462,6 +465,25 @@ def g1_emissive(p, mat):
         try: sub = {r[0]: r[4] for r in raw_props(p, v, 0)[0]}
         except Exception: return 0
         return struct.unpack('>i', sub['Expression'])[0] if 'Expression' in sub else 0
+    zero = ('const', np.zeros(3))
+    def has_texture(e, depth=0):
+        if e <= 0 or depth > 16: return False
+        if 'TextureSample' in p.class_name(p.exports[e - 1]['class']): return True
+        try: er = raw_props(p, p.export_data(e - 1), 4)[0]
+        except Exception: return False
+        return any(has_texture(expr_of(r[4]), depth + 1) for r in er if r[1] == 'StructProperty')
+    def view_dependent(e, depth=0):
+        """a term that is a rim light: the view angle (through any nodes), except where an Add also carries a
+        texture of its own (a cave light's glow plus its sheen: the glow stays)"""
+        if e <= 0 or depth > 16: return False
+        cn = p.class_name(p.exports[e - 1]['class']).replace('MaterialExpression', '')
+        if cn in VIEW_DEPENDENT: return True
+        try: ins = [expr_of(r[4]) for r in raw_props(p, p.export_data(e - 1), 4)[0] if r[1] == 'StructProperty']
+        except Exception: return False
+        vd = [view_dependent(x, depth + 1) for x in ins]
+        if cn == 'Add' and any(vd):
+            return not any(has_texture(x) for x, v in zip(ins, vd) if not v)
+        return any(vd)
     def value(e, depth=0):
         """('tex', scale) or ('const', rgb) or None"""
         if e <= 0 or depth > 12: return None
@@ -470,6 +492,14 @@ def g1_emissive(p, mat):
         except Exception: return None
         f = lambda k, d=0.0: struct.unpack('>f', er[k][4])[0] if k in er else d
         if 'TextureSample' in cn: return ('tex', np.ones(3))
+        # a rim light (the view angle: Gears 1's skin and cloth sheen) has no Gears 3 counterpart here: as a constant
+        # glow it lit the whole of the opening's unarmoured Marcus from behind
+        if cn in VIEW_DEPENDENT: return zero
+        if cn == 'Multiply':
+            # an input left unconnected is 0; a view-dependent factor (the tank top's emissive: its normal map times
+            # a sheen from a DotProduct with the camera) leaves nothing to glow
+            if any(expr_of(er[k][4]) <= 0 or view_dependent(expr_of(er[k][4])) if k in er else True for k in ('A', 'B')):
+                return zero
         if cn == 'Constant': return ('const', np.full(3, f('R')))
         if cn in ('Constant3Vector', 'Constant4Vector'): return ('const', np.array([f('R'), f('G'), f('B')]))
         if cn == 'VectorParameter' and 'DefaultValue' in er:
@@ -481,9 +511,10 @@ def g1_emissive(p, mat):
         if cn == 'Multiply' and len(ins) == 2:
             (ka, va), (kb, vb) = ins
             return ('tex' if 'tex' in (ka, kb) else 'const', va * vb)
-        texs = [x for x in ins if x[0] == 'tex']
+        texs = [x for x in ins if x[0] == 'tex' and x[1].max() > 1e-3]
         return texs[0] if texs else (ins[0] if ins else None)
     v = value(expr_of(recs['EmissiveColor']))
+    if v is not None and v[1].max() <= 1e-3: return None        # works out to black
     scale = tuple(float(x) for x in np.clip(v[1], 0, 4)) if v and v[0] == 'tex' else (1.0, 1.0, 1.0)
     return tex, scale
 
@@ -586,7 +617,10 @@ def g1_mask(p, mat):
         for n, t, k, v in epr:
             if n == 'Texture' and t == 'ObjectProperty' and v > 0 and p.class_name(p.exports[v - 1]['class']) == 'Texture2D':
                 if channel is None:                     # (through Add / Multiply: the diffuse's alpha, or a mask's red)
-                    channel = 'A' if v - 1 == g1_textures(p, mat).get('diffuse') else 'R'
+                    # (the diffuse itself with no alpha -- DXT1: the cobwebs, opaque where their web is bright -- by
+                    # its red, as Gears 1's opacity took the colour: by its alpha, all 1, the whole sheet showed)
+                    own = v - 1 == g1_textures(p, mat).get('diffuse')
+                    channel = 'A' if own and texture2d.Texture(p, v - 1).format != 'PF_DXT1' else 'R'
                 return v - 1, channel
             if t == 'StructProperty' and v[0] == 'ExpressionInput':
                 e = {nn: vv for nn, tt, kk, vv in p.properties(v[1], 0)[0]}
@@ -749,6 +783,20 @@ def g1_volumetric(p, ref):
             mat = par - 1
         return g1_unlit(p, mat) and 'normal' not in g1_textures(p, ref - 1) and not g1_opacity_is_diffuse(p, mat)
     except Exception: return False
+
+
+def g1_unlit_colour(p, mat):
+    """an unlit see-through Gears 1 material drawn lit here (g1_opacity_is_diffuse: the cobwebs), its colour as a
+    diffuse tint: the brightness its emissive gave the texture (the cobwebs': x 1.1 x 0.05, a faint dark veil; drawn
+    lit at the texture's own brightness they were grey sheets across the cell's ceiling), or None"""
+    try:
+        a = {n: v for n, t, k, v in levelinject.props_at(p, p.export_data(mat))[1]}
+    except ValueError:
+        return None
+    lm = a.get('LightingModel')
+    if not (lm == 2 or (isinstance(lm, tuple) and lm[1] == 'MLM_Unlit')) or not g1_opacity_is_diffuse(p, mat): return None
+    em = g1_emissive(p, mat)
+    return tuple(min(1.0, x) for x in em[1]) if em else (0.0, 0.0, 0.0)
 
 
 def g1_opacity_is_diffuse(p, mat):

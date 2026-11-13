@@ -1543,7 +1543,22 @@ def kismet_actors(src, kismet_exports, extra=()):
             for v in refs:
                 if v > 0 and v - 1 not in out and src.class_name(src.exports[v - 1]['class']) in ACTOR_CLASSES | SCRIPTED_MESH_ACTOR_CLASSES:
                     out.add(v - 1); todo.append((v - 1, 32))
-    return sorted(out)
+    return sorted(i for i in out if not left_out_emitter(src, i))
+
+
+def left_out_emitter(src, i):
+    """whether source actor i is an Emitter of a system in PARTICLES_LEFT_OUT"""
+    import materialconv
+    if src.class_name(src.exports[i]['class']) != 'Emitter': return False
+    try:
+        a = {r[0]: r[4] for r in materialconv.raw_props(src, src.export_data(i), 32)[0]}
+        comp = struct.unpack('>i', a['ParticleSystemComponent'])[0]
+        c = {r[0]: r[4] for r in materialconv.raw_props(src, src.export_data(comp - 1), 8)[0]}
+        t = struct.unpack('>i', c['Template'])[0]
+    except Exception:
+        return False
+    name = src.imports[-t - 1]['name'] if t < 0 else src.exports[t - 1]['name'] if t > 0 else ''
+    return str(name) in PARTICLES_LEFT_OUT
 
 
 # Gears 1's TriggerVolumes become TriggerVolumes of the target level's own box brush (box_volume_template): its Model
@@ -1830,6 +1845,8 @@ LIGHT_SCALE = 1.0
 # here (as a DirectionalLight or a point light, in a section or the persistent level) changed nothing on them. With
 # Embry's lights at 20000 the squad at the first landing showed its armour (48.5 against 44.6, the world unchanged)
 LIGHT_RADIUS_MIN = float(os.environ.get('OBJCOPY_LIGHT_RADIUS_MIN', 0))
+# a cutscene light's shadow colour (light_component): 0 is Gears 3's default, black
+CINE_SHADOW = float(os.environ.get('OBJCOPY_CINE_SHADOW', 0.5))
 
 
 def float_prop_brightness(c, props):
@@ -2006,6 +2023,12 @@ PARTICLE_MATERIALS = {
 # Gears 1 particle system name -> a Gears 3 system standing for it (levelinject --g3-effects: a carrier's, e.g. Jack's
 # COG_BOT.Effects.P_Jack_ResOUT); the emitter's component imports it instead of a converted copy
 PARTICLE_SYSTEMS = {}
+# Gears 1 particle system name -> the Gears 3 material all its sprites use (before PARTICLE_MATERIALS)
+PARTICLE_SYSTEM_MATERIALS = {}
+# Gears 1 particle systems whose emitters are left out: no Gears 3 material draws them near Gears 1. The opening's
+# Wretch drool (M_Vapors_2: thin, faint falling strands) drew as purple smoke puffs on the steam stand-in, white
+# glowing balls on Gears 3's raindrop and orange blobs on its goo; in Gears 1 it is barely visible
+PARTICLES_LEFT_OUT = {'P_Prison_Start_Cine_Drool'}
 # by Gears 1 BlendMode (2 translucent, 3 additive): the same two
 PARTICLE_MATERIAL_FALLBACK = {2: 'War_Level_Effects.Materials.M_Steam_smoke', 3: 'War_Level_Effects.Materials.M_Steam_Burst_Flair'}
 
@@ -2025,7 +2048,8 @@ def particle_material_ref(c, ref):
     s = c.s
     if ref == 0: return 0
     name = s.imports[-ref - 1]['name'] if ref < 0 else s.exports[ref - 1]['name']
-    path = PARTICLE_MATERIALS.get(name)
+    owner = s.path(c.current_src) if getattr(c, 'current_src', None) is not None else ''
+    path = next((v for k, v in PARTICLE_SYSTEM_MATERIALS.items() if f'.{k}.' in f'.{owner}.'), None) or PARTICLE_MATERIALS.get(name)
     if path is None:
         blend = 2
         if ref > 0:
@@ -2562,11 +2586,35 @@ def touch_classes(c, props):
     # carrier streamed in after the persistent level, whose import of it was None, and ClassIsChildOf(x, None) is true:
     # every pawn was ignored, so the prison's persistent touch events never fired (S04_Scripting and S05's sections were
     # never made visible: the catwalk, InterpActor_19, neither drew nor collided)
+    # Dom's half of a two-pawn counter (Touched -> SeqCond_Increment, UnTouched -> its decrement: the prison's yard
+    # volume counts Dom and Marcus in and seals S02, unloading S02-S04, at two): Gears 3 fired Dom's Touched twice with
+    # no UnTouched between, the count reached two with Marcus still in the hard hallway, the falling slabs closed the
+    # gap ahead of him and the floor under him streamed out. Dom counts once
+    if 'Pawn_COGDom' in names and touched_feeds_counter(s_, c.current_src):
+        out = [r for r in out if r[0] != 'MaxTriggerCount'] + [['MaxTriggerCount', 'IntProperty', 0, b'', struct.pack('>i', 1)]]
+        c.counted_once = getattr(c, 'counted_once', 0) + 1
     if ('Pawn_COGMarcus' in names or a.get('bPlayerOnly', True)) and 'Pawn_COGDom' not in names:
         dom = c.find_import('Core', 'Class', c.find_import('Core', 'Package', 0, 'GearGame'), 'GearPawn_COGDomBase')
         out = [r for r in out if r[0] != 'IgnoredClassProximityTypes']
         out.append(['IgnoredClassProximityTypes', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, dom)])
     return encode(c.w, out)
+
+
+def touched_feeds_counter(src, i):
+    """whether source op i's first output (a touch event's Touched) links a SeqCond_Increment"""
+    import materialconv
+    try: recs, _ = materialconv.raw_props(src, src.export_data(i), 4)
+    except Exception: return False
+    v = next((r[4] for r in recs if r[0] == 'OutputLinks'), None)
+    if v is None or struct.unpack_from('>i', v, 0)[0] < 1: return False
+    el, _ = materialconv.raw_props(src, v, 4)
+    lk = next((r[4] for r in el if r[0] == 'Links'), b'\0\0\0\0')
+    n, o = struct.unpack_from('>i', lk, 0)[0], 4
+    for _ in range(n):
+        sub, o = materialconv.raw_props(src, lk, o)
+        op = next((struct.unpack('>i', r[4])[0] for r in sub if r[0] == 'LinkedOp'), 0)
+        if op > 0 and src.class_name(src.exports[op - 1]['class']) == 'SeqCond_Increment': return True
+    return False
 
 
 FIXUPS['SeqEvent_Touch'] = touch_classes
@@ -3217,7 +3265,13 @@ def light_component(c, props, scale=True):
             inner = [r for r in inner if r[0] != 'CompositeDynamic'] + [['CompositeDynamic', 'BoolProperty', 0, b'', b'']]
             lc[4] = encode(c.w, inner)
         c.cine_lights = getattr(c, 'cine_lights', 0) + 1
-        return encode(c.w, [r for r in recs if r[0] != 'bHasLightEverBeenBuiltIntoLightMap'])
+        # Gears 3's lights shadow by modulating, by default to black (ModShadowColor 0): everything in a shadow went
+        # black, fill and other lights too (Dom's face, a band across Marcus's back). Gears 1's shadows took away only
+        # their own light. Half, as Gears 3's light environments cap theirs (MaxModulatedShadowColor); LightShadow_Normal
+        # left the characters unlit (only composited lights reach a light environment's mesh)
+        recs = [r for r in recs if r[0] not in ('bHasLightEverBeenBuiltIntoLightMap', 'ModShadowColor')] + [
+            ['ModShadowColor', 'StructProperty', 0, struct.pack('>ii', *c.w.name('LinearColor')), struct.pack('>4f', CINE_SHADOW, CINE_SHADOW, CINE_SHADOW, 1.0)]]
+        return encode(c.w, recs)
     drop = {'LightingChannels', 'CastShadows', 'CastDynamicShadows', 'CastStaticShadows', 'bHasLightEverBeenBuiltIntoLightMap'}
     channels = ('bInitialized', 'Dynamic', 'CompositeDynamic') if os.environ.get('OBJCOPY_LIGHTS_DYNAMIC') else ('bInitialized', 'CompositeDynamic')
     ch = encode(c.w, [[k, 'BoolProperty', 0, b'', b'\x01'] for k in channels])

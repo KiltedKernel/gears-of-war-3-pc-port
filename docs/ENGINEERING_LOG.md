@@ -3489,3 +3489,45 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   past the slab: not the mover step. Gears 1's and Gears 3's pawns both stop at ledges (bStopAtLedges; Gears 3 adds
   LedgeCheckThreshold 60), so turning it off would not be faithful. Recipe entry removed. Next: trace the native ledge
   check (walking physics' floor probe) in COGBox at this spot.
+
+## 2026-11-12 (evening): the user's test of fix10 (shots 11-12-26); cutscene lighting, cobwebs, drool, decals, the hard route's trap
+
+- **Reference:** Gears 1's opening cutscene recorded on COGBox's Gears 1 (port-kk, `--cogbox_input_script`: B three
+  times for the storage prompt, then a shot every 3 s). Compared frame by frame with the converted cutscene (a
+  copy of the chapter in `Gears3\mods-test`, never the player's mods).
+- **Black patches on Marcus and Dom:** Gears 3's lights shadow by modulating, by default to black (LightComponent
+  LightShadowMode LightShadow_Modulate, ModShadowColor 0). Keeping the cutscene lights' Gears 1 shadows (fix10) made
+  every shadow black, fill and other lights too. Gears 1's (2006) shadows took away only their own light. Tried on
+  the installed package (patched copies): no CompositeDynamic (characters unlit: only composited lights reach a mesh
+  with a light environment, even with its bForceNonCompositeDynamicLights), LightShadow_Normal (unlit, same reason),
+  no shadows (no patches, nothing in shadow), ModShadowColor 0.5 (kept: soft shadows; Gears 3's own light
+  environments cap theirs at 0.5, MaxModulatedShadowColor). objcopy.CINE_SHADOW (OBJCOPY_CINE_SHADOW). Halving the
+  cutscene lights' brightness changed little: the flat, bright look against Gears 1's warm key light is the
+  characters' materials and light environments, not the lights. Open.
+- **The unarmoured Marcus's glow:** Gears 1's COG_MarcusFenix_TankTop_New_Mat draws its normal map as emissive times
+  a sheen from a DotProduct with the camera (and the body's material adds its diffuse x Fresnel). The converter took
+  the first texture down the emissive chain as a constant glow. materialconv.g1_emissive now treats view-dependent
+  terms (Fresnel, CameraVector, ReflectionVector, DotProduct; an Add of one with constants) as 0, and unconnected
+  Multiply inputs as 0: the tank top's and the end cutscene's Marcus's rim glows are gone, the body's emissive texture
+  and the S04 light pillars' glow stay.
+- **The cell's ceiling:** EBA_Cobwebs1_CP_Mat is translucent and UNLIT: colour = texture x 1.1 x 0.05, opacity = the
+  texture. As a lit cutout (fix10) cut by the texture's alpha (DXT1: none, all 1) it drew whole grey sheets over the
+  grate and hid the Wretches above it; as unlit at full brightness (before) the two blooms. Now cut by its red
+  (g1_mask: a diffuse without alpha) and tinted 0.055 (materialconv.g1_unlit_colour), no specular.
+- **The Wretch drool:** P_Prison_Start_Cine_Drool's sprites (M_Vapors_2, 2-10 wide, 15-50 tall, falling) took the
+  translucent fallback, Gears 3's steam smoke: purple puffs in front of the grate. objcopy.PARTICLE_SYSTEM_MATERIALS
+  maps a system to a material: the drool to Effects_Materials.Water.M_Water_Raindrop_Fall_Fast_01.
+- **Blood decals flickering into the floor:** decal cards (meshes drawn only with modulate materials) are lifted 1
+  unit along their normals when merged (levelinject.DECAL_LIFT; LEVELINJECT_DECAL_LIFT).
+- **The hard route's trap (the user's "trapped between rubble"), and a fall out of the world:** the persistent
+  level's yard volume (TriggerVolume_4) counts Dom (SeqEvent_Touch_16, Pawn_COGDom) and Marcus (Touch_4) in, out on
+  UnTouched, and at two seals S02 (sealS02: S05_Scripting's hardRoute matinee drops two cover slabs, InterpActor_8/9,
+  into the hard hallway's gap at y ~6200) and unloads S02-S04. Kismet trace (hard8.log): Dom's Touch_16 fired twice
+  with no UnTouched between and no player touch; the count reached two with Marcus at (-1524,5446): the slabs closed
+  the gap ahead of him (hard6: stuck along y 6190), or S04 streamed out under him (hard7: fell to z -230000).
+  objcopy.touch_classes: a Dom-filtered touch event whose Touched feeds a SeqCond_Increment fires once
+  (MaxTriggerCount 1; the prison's persistent level: Touch_1, 10, 16).
+- **fix12 (2026-11-12):** the drool emitter left out (objcopy.PARTICLES_LEFT_OUT; Gears 3's raindrop drew white glowing
+  balls, its goo orange blobs). Verified on a test copy: the opening's grate shows (no web sheets, no drool), no black
+  patches; the hard route's counter seals S02 after Marcus passes the gap (hard9: Touch_16 once, Touch_4 at
+  (-1603,6655)); the blood pool by the cell dark red, not black speckle. Installed to the player's mods.

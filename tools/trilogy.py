@@ -17,7 +17,7 @@ Locations (options or environment variables):
   --mods  the game's mods folder        (GOW3_MODS, default build/mods)
   --g3    Gears 3's disc files           (GOW3_DISC, else tools/local.cmd's game folder, else ../gow3-decomp/disc)
   --g1    Gears 1's disc files           (GOW1_DISC, default ../gow1-decomp/disc): the folder holding WarGame\\; make it
-                                         from your disc image with: python -P tools/xdvdfs.py <Gears 1 .iso> <folder>
+                                         from your disc image with: python -P tools/xdvdfs.py <Gears 1 .iso> extract-all <folder>
 """
 import argparse, configparser, os, shutil, subprocess, sys, tempfile, time
 
@@ -167,6 +167,10 @@ def patch_level(folder, recipe, g3cooked, g1cooked):
 def generate_navmesh(folder, nav, out, required=True):
     """runs the game (tools/playtest.ps1: its own test profile and mods, the player's untouched) on the converted
     level with Gears 3's navmesh builder armed; the meshes it builds are dumped to out"""
+    if not os.path.isfile(os.path.join(REPO, 'build', 'gow3.exe')):
+        # (the builder runs in the old port's runtime, until COGBox's developer mode has it: docs/NAVMESH.md)
+        raise SystemExit('navmesh: Gears 3\'s navmesh builder runs in the legacy port (build\\gow3.exe), which is not built '
+                         'here; see docs/NAVMESH.md, or pass --reuse-navmesh with navmeshes you generated before')
     script = os.path.join(tempfile.gettempdir(), 'trilogy_navmesh_input.txt')
     open(script, 'w').write('# trilogy.py: no input while the navmesh builds\n')
     if os.path.exists(out): os.remove(out)

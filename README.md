@@ -1,132 +1,59 @@
-# Gears of War 3 — PC port
+# COGBox-trilogy
 
-A native Windows version of Gears of War 3, made from **your own copy of the game**. The Xbox 360 code is translated
-to C++ ahead of time (static recompilation with XenonRecomp), runs on a small reimplementation of the console's
-kernel, and draws with Xenia's Direct3D 12 GPU emulation. A launcher sets it up, and a mod system lets creators
-replace or add packages, configuration and campaign chapters.
+The Gears of War trilogy inside Gears of War 3, as mods for [COGBox](https://github.com/Shagg88/COGBox): Gears 1's
+and Gears 2's campaigns converted into Gears 3's engine and gameplay, built on your PC from **your own discs**. Also
+here: the tools that do the conversion, sample mods, and what we have learned about the three games' formats.
 
-**No game files are included.** The installation wizard reads your disc image and makes everything game-derived on
-your PC.
+**No game files are included, and none are ever made available.** Every package the converter writes is derived from
+your discs and stays on your PC.
 
-Version 0.2.1: the whole campaign (all five acts) loads and plays, as do Horde, Versus with bots and Beast offline;
-multiplayer over System Link, on a LAN, over the internet with a friend's code, or on a server; keyboard, mouse and controller;
-mods. See [docs/STATUS.md](docs/STATUS.md) for what is
-verified and what is next, and [CHANGELOG.md](CHANGELOG.md).
+Status: Gears 1's first three chapters convert and play on COGBox (Act VI in Select Chapter); chapter 1, the prison,
+is the one being polished first. See [docs/TRILOGY.md](docs/TRILOGY.md) and the newest entries of
+[docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md).
 
-Sister project: the [Gears of War 2 PC port](https://github.com/KiltedKernel/gears-of-war-2-pc-port), which shares
-this port's runtime, setup, launcher and multiplayer.
+## What you need
 
-## Install
+- COGBox with Gears of War 3 set up (its launcher does that from your Gears 3 disc image).
+- Your own Gears of War 1 disc image (and, later, Gears 2's).
+- Windows 10 or 11, Python 3.11 or newer with `numpy` and `Pillow` (and `lz4`), Git, and Visual Studio 2022 (Build Tools are
+  enough) with clang-cl, for one small helper (the package decompressor, built automatically the first time).
 
-1. Get the source: download the release's source archive and extract it to a folder of your choice, or clone the
-   repository.
-2. Double-click **`Setup.cmd`**. The installation wizard asks for your disc image, where to keep the game files, and
-   which shortcuts to make; it checks the build tools and can install the missing ones; then it builds the port,
-   showing each step's progress and a log.
-3. When it is done, start **Gears of War 3 Launcher** (desktop or Start menu): settings, mods, and Play.
+## Building the trilogy's chapters
 
-**You need:** a disc image (.iso) of your own Gears of War 3 game disc (the wizard checks it is the version this port
-was made for), Windows 10 or 11 (64-bit), a Direct3D 12 graphics card, a Haswell / Zen or newer processor, about
-25 GB free, an internet connection, and about an hour the first time (most of it compiling). The build tools (Visual
-Studio 2022 Build Tools with clang-cl, CMake and Ninja; Python 3; Git for Windows) are installed with winget if you
-agree.
+1. Extract your Gears 1 disc image:
+   `python -P tools/xdvdfs.py "Gears of War.iso" extract-all ..\gow1-decomp\disc`
+2. Point the converter at Gears 3's files and your COGBox mods folder, and build a chapter:
+   ```
+   set GOW3_DISC=<COGBox>\Gears3\game\extracted
+   set GOW3_MODS=<COGBox>\Gears3\mods
+   python -P tools/trilogy.py build gears1_ch1 --replace
+   ```
+   `python -P tools/trilogy.py list` shows the chapters (`tools/recipes/*.ini`). A chapter takes about half an hour.
+   The first build of a chapter also generates its navigation meshes, which for now needs the legacy runtime (see
+   [docs/NAVMESH.md](docs/NAVMESH.md)); later builds pass `--reuse-navmesh`.
+3. Turn the chapters on in COGBox's Mods page and pick **Act VI** in Select Chapter.
 
-If a step fails, the wizard shows why; fix the cause and run Setup again: finished steps are skipped. The same setup
-from a console:
+## What is here
 
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\setup.ps1 -Iso "D:\Games\Gears of War 3.iso" [-StartMenu] [-InstallPrerequisites]
-```
-
-`tools\setup.ps1 -CheckOnly` lists missing build tools. `-Game` and `-Xenia` choose where the game files and Xenia go
-(remembered in `tools\local.cmd`); by default they go inside this folder (`game\`, `xenia\`).
-
-## Playing
-
-Run **Gears of War 3** (`build\gow3.exe`) or **Gears of War 3 Launcher** (`build\gow3_launcher.exe`). The launcher
-sets display, resolution, frame rate (up to 240), effects, mouse, prompts and audio (`build\gow3.ini`), your gamertag and
-multiplayer, manages mods, and starts the game. `-nointro` skips the logo movies. Saves live in `%LOCALAPPDATA%\GoW3Recomp`.
-
-| Keyboard / mouse | Controller |
+| Path | What |
 |---|---|
-| WASD | left stick |
-| mouse | camera (native mouse look) |
-| left mouse | fire (RT) |
-| right mouse | aim (LT) |
-| Space or Left Shift | A: cover, roadie run, use |
-| R | RB: reload / active reload |
-| Tab | LB: tactical map |
-| E | X: pick up / interact |
-| F | B: melee, chainsaw |
-| Q | Y: point of interest |
-| 1-4 or arrow keys | d-pad: weapons |
-| C / Z (middle mouse) | left / right stick click |
-| Enter, or Esc in play | Start (pause) |
-| Esc or F in menus | B: back (not on the main menu's first page) |
-| Backspace | Back |
-| F11 or Alt+Enter | fullscreen |
+| `tools/trilogy.py`, `tools/recipes/` | chapter builds: a recipe per chapter, every conversion step in order |
+| `tools/levelinject.py`, `objcopy.py`, `materialconv.py`, `meshconv.py`, `bspconv.py`, `lighting.py`, ... | the converter: levels, actors and Kismet, materials, meshes, light |
+| `tools/navinject.py`, `pylons.py`, `cover.py`, `g1route.py` | navigation, cover, test routes over Gears 1's path network |
+| `tools/upk.py`, `upkwrite.py`, `texture2d.py`, `staticmesh.py`, `skelmesh.py`, `coalesced.py`, `kismetgraph.py` | reading and writing the games' packages and config |
+| `tools/modtool.py` | install, check and package mods |
+| `examples/mods/` | small sample mods (config, menu text, a chapter) |
+| `docs/` | the trilogy, the mod format, Gears 1 against Gears 3, reverse-engineering notes, the engineering log |
 
-In menus the mouse works too: hover selects, left click accepts (Start on the title screen), right click goes back, the
-wheel scrolls. Button prompts follow the device you used last. The keyboard and mouse prompt icons are drawn by the
-setup (`build\prompts`); if you own Gears of War: Reloaded on Steam, `python tools\make_prompts.py reloaded` uses its
-keycap art instead (`python tools\make_prompts.py drawn` goes back).
+## The old PC port
 
-Offline modes: Campaign (Standard, Arcade, Select Chapter), Horde, Versus and Beast (each under **Private**, with bots).
-The Casual / Standard entries are Xbox LIVE matchmaking and ask for Xbox LIVE.
+This repository began as a native Gears of War 3 PC port (static recompilation, its own runtime, launcher and
+multiplayer). COGBox has since become the place where the games run, and this project's mod support went into it.
+The port is kept at the tag [`legacy-port-final`](../../tree/legacy-port-final); its documents are in
+[docs/legacy/](docs/legacy/).
 
-## Multiplayer
+## Licence
 
-Play over the game's **System Link**. In the launcher's **Multiplayer** tab, set a gamertag and choose **With
-friends** (games on your network find each other; over the internet, type a friend's code) or **On a server** (pick
-one from the list, or **Run my own**). Then, in the game, open Party Options (Back on the main menu), pick **System
-Link**, and create or join a party. The game tells you on screen who joins and what goes wrong. See
-[docs/MULTIPLAYER.md](docs/MULTIPLAYER.md).
-
-## Mods
-
-Each folder in `build\mods\` with a `mod.ini` adds or replaces game files; several mods stack by priority and the
-game's table of contents is merged automatically. Mods can change the game's configuration and add campaign chapters
-to Select Chapter. The launcher's **Mods** tab turns mods on or off, changes the load order, installs a shared .zip and
-removes mods; `tools\modtool.py` creates, checks and packs them. In multiplayer, every player needs the same mods
-that change the game for everyone, and the game says which; mods for your own view or for the host's rules are yours
-alone, and a server can require a set of mods. Mods made for the Xbox 360 install as they are. Samples for each kind
-are in `examples\mods`. See [docs/MODDING.md](docs/MODDING.md).
-
-## The trilogy
-
-Gears of War 1 and 2 converted into this port's engine, from your own discs: `tools\trilogy.py build gears1_prison`
-turns Gears 1's opening into a mod that starts Gears 3's campaign in Gears 1's prison cell. A preview; see
-[docs/TRILOGY.md](docs/TRILOGY.md).
-
-## How it works / reverse engineering
-
-[docs/REVERSE_ENGINEERING.md](docs/REVERSE_ENGINEERING.md) describes the port's structure and what is known about the
-game (functions, data layouts, file formats), with the tools that read them.
-[docs/ENGINEERING_LOG.md](docs/ENGINEERING_LOG.md) is the full development journal.
-
-## Developing
-
-- `bash tools/rebuild.sh`: recompile (when `config/` changed) and rebuild; `cmd /c tools\build.cmd`: rebuild the
-  runtime only.
-- `tools\playtest.ps1 -Script tests\<script>.txt -Seconds N -Shots "a,b"`: scripted input, screenshots in
-  `build\shots`, log in `build\gow3.log` ([tests/README.md](tests/README.md)). Tests use their own saves, profile and
-  settings (`build\testdata`; `-Fresh` starts empty) and their own mods (`-Mods "examples\mods\X"`), never the
-  player's.
-- `python tools\chapter_test.py [0-30]`: campaign coverage. Boots each chapter directly (`GOW3_COMMAND_LINE`), plays
-  generic input, and reports crashes, the map loaded, frame rates and black or frozen screens
-  (`build\coverage\report.md`, a contact sheet per chapter).
-- Debug switches are environment variables `GOW3_*`, documented in the files that read them.
-- The package tools (`tools\upk.py` and those built on it) decompress with `tools\xpack\xpack.exe`: build it once with
-  `cmd /c tools\build_xpack.cmd` (after setup, which fetches the LZX decoder with XenonRecomp).
-
-## Reporting problems and contributing
-
-Open an issue with the bug report form and attach `build\gow3.log` (network lines hide public addresses and join
-codes, so it is safe to post). Never post game files, disc images or keys. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-GPL-3.0 (see LICENSE): the runtime's kernel, threading and heap code comes from Unleashed Recompiled (GPL-3.0). Third
-party components keep their licenses (runtime/thirdparty). Gears of War is a trademark of Microsoft; this project
-contains no game assets or code, is not affiliated with or endorsed by Microsoft, Epic Games or The Coalition, and
-needs your own legally obtained copy of the game.
+GPL-3.0 (see [LICENSE](LICENSE)); `modcore/` (the portable mod core COGBox's mod support started from) is MIT.
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists what the tools build on. Gears of War is a trademark of Microsoft; this project is not
+affiliated with Microsoft, Epic Games or The Coalition.

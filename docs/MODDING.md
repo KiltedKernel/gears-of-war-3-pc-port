@@ -1,22 +1,25 @@
-# Modding the Gears of War 3 PC port
+# Modding Gears of War 3 on COGBox
 
-This port runs Gears of War 3 natively on PC. Mods replace or add game packages and configuration, add campaign
-chapters, and stack with each other.
+COGBox runs Gears of War 3 natively on PC, and its mod support (contributed from this project, merged in COGBox
+0.4.3 and extended in 0.6.0) replaces or adds game packages and configuration, adds campaigns and chapters, and lets
+mods stack with each other. This page describes the mod format; COGBox's own notes are in its repository
+(Gears3-Native/notes/28-mod-support.md).
 
 Mods contain material derived from the games. Share them only with people who own the games, and never
 redistribute the games' own files unmodified.
 
 ## Installing a mod
 
-Copy the mod's folder into `mods\` next to the game's executable (`build\mods\` in a source build):
+Copy the mod's folder into `Gears3\mods\` in your COGBox folder, then turn it on in the launcher's Mods page (it
+also sets the load order):
 
 ```
-build\
-  gow3.exe
-  mods\
-    BrighterGridlock\
-      mod.ini
-      GearGame\CookedXbox360\MP_GridlockG3.xxx
+COGBox\
+  Gears3\
+    mods\
+      BrighterGridlock\
+        mod.ini
+        GearGame\CookedXbox360\MP_GridlockG3.xxx
 ```
 
 That's all: start the game. The launcher's **Mods** tab lists the installed mods: tick or untick a mod to turn it on or

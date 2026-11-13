@@ -1338,6 +1338,49 @@ def main():
                 mats.append(struct.pack('>16f', *m.flatten()))
                 n_volumes += 1
         print(f'{n_volumes} blocking volumes as hidden collision meshes')
+    # physics floors (tools/rbfloors.py): the converted meshes have no PhysX shape (Gears 3 cooks it into a level, and
+    # the console cooks nothing at load time), so ragdolls, gibs and dropped weapons fell through the floors. Boxes
+    # under the walkable surfaces of the merged chunks and the BSP, as RB_BodySetup box elements (no cooking), on a
+    # hidden mesh per 4096-unit cell that touches nothing but rigid bodies (LEVELINJECT_NO_RB_FLOORS=1: none)
+    if (buckets or bsp_chunks) and not os.environ.get('LEVELINJECT_NO_RB_FLOORS'):
+        import rbfloors
+        rb_tris = []
+        for b in buckets.values():
+            if b['flags'] and (b['flags'][0] or b['flags'][4]): continue      # (not colliding, or not with rigid bodies)
+            P_ = np.concatenate(b['P'])
+            I_ = np.asarray([i_ for tri in b['idx'].values() for i_ in tri], np.int64).reshape(-1, 3)
+            rb_tris.append(P_[I_])
+        for si_, bmats_, bmesh_ in bsp_chunks:
+            lod_ = bmesh_['lods'][0]
+            P_ = np.frombuffer(lod_['positions'][2][2], '>f4').reshape(-1, 3).astype(np.float64)
+            I_ = np.frombuffer(lod_['indices'][2], '>u2').reshape(-1, 3).astype(np.int64)
+            rb_tris.append(P_[I_])
+        rb_boxes = rbfloors.floor_boxes(np.concatenate(rb_tris)) if rb_tris else []
+        rb_cells = {}
+        for bx in rb_boxes: rb_cells.setdefault(tuple(np.floor(bx[0][:2] / 4096.0).astype(int)), []).append(bx)
+        rb_cls = next((p3.exports[i]['class'] for i in range(len(p3.exports)) if cls(i) == 'RB_BodySetup'), None)
+        if rb_cls is None:
+            rb_cls = w.add_import('Core', 'Class', w.add_import('Core', 'Package', 0, 'Engine'), 'RB_BodySetup')
+        name_of = lambda s_: w.name(s_)
+        for k, key in enumerate(sorted(rb_cells)):
+            boxes_ = rb_cells[key]
+            c_ = np.mean([bx[0] for bx in boxes_], 0)
+            mesh_ = bspconv.collision_mesh(np.array([c_, c_ + [1, 0, 0], c_ + [0, 1, 0]]), [0, 1, 2])
+            upk.E = '>'
+            mref = w.add_export(p3.exports[tmesh]['class'], 0, ('Trilogy_RBFloor', k + 1), b'', flags=mflags)
+            bref = w.add_export(rb_cls, mref, ('RB_BodySetup', k + 1), rbfloors.body_setup(w, name_of, struct.pack(">i", -1), boxes_), flags=0x0007000000000000)
+            w.replace(mref - 1, meshconv.to_828(p3, tmesh, mesh_, [None], body_setup=bref))
+            d = bytearray(td[:tend])
+            struct.pack_into('>i', d, sm_off, mref)
+            struct.pack_into('>3f', d, sc_off, 1.0, 1.0, 1.0)
+            if vis_off: struct.pack_into('>i', d, vis_off, -1)
+            for prop, value in (('HiddenGame', b'\x01'), ('CastShadow', b'\x00'), ('BlockActors', b'\x00'), ('BlockZeroExtent', b'\x00'),
+                                ('BlockNonZeroExtent', b'\x00'), ('BlockRigidBody', b'\x01'), ('CollideActors', b'\x01')):
+                d = set_property(p3, w, d, to, prop, value, 'BoolProperty')
+            refs.append(w.add_export(p3.exports[tcomp]['class'], coll + 1, ('TrilogyRBFloor', k + 1), bytes(d) + bytes(4), flags=tflags, archetype=tarch))
+            m = np.eye(4); m[3, :3] = offset
+            mats.append(struct.pack('>16f', *m.flatten()))
+        print(f'physics floors: {len(rb_boxes)} boxes in {len(rb_cells)} hidden meshes')
     # the meshes' simple collision (bspconv.body_hulls, gathered above): hidden collision meshes for pawns, one per
     # 4096-unit cell (up to 30000 vertices each), both windings as the volumes'
     n_bodies = 0

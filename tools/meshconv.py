@@ -52,9 +52,10 @@ def source_vertices(m):
     return pos, tx, tz, uvh, count
 
 
-def to_828(p3, i3, src, materials=None):
+def to_828(p3, i3, src, materials=None, body_setup=0):
     """serial data for Gears 3 export i3 (the template) holding mesh src (parsed by staticmesh.read); materials:
-    an object ref per source element (default: the template's)"""
+    an object ref per source element (default: the template's); body_setup: an RB_BodySetup ref (its simple
+    collision), else none"""
     d3 = p3.export_data(i3)
     tpl = staticmesh.read(p3, i3)
     props_end = p3.properties(d3)[1]
@@ -68,7 +69,7 @@ def to_828(p3, i3, src, materials=None):
     out += be_f32(*src['bounds'])
     # no body setup: the template's is ITS simple collision (a box for a pillar), which UE3 prefers over the
     # triangles; without one, collision uses the kDOP tree built below (per polygon)
-    out += be_i32(0)
+    out += be_i32(body_setup)
     # collision: a compact kDOP tree over the triangles (tools/kdop.py), material index = element
     idx = struct.unpack(f'>{lod["indices"][1]}H', lod['indices'][2])
     tris = []

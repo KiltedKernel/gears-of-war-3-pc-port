@@ -3615,3 +3615,10 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   converted per vertex). One bright, lengthwise-streaked strip: BSP node 1202 of SP_Prison_S02 (a 1256 x 64 gutter at
   y 1824, RB_Prison_Floors_Tile01_Mat, UVs and Gears 1 light map values like its neighbours', ~2.3). Gears 1 draws it
   dark with its grout lines; why ours is overexposed is open.
+- **fix22 (OBJCOPY_SKY=1 OBJCOPY_SUN=1 on chapter 1): rejected.** With the world's sun and sky copied on
+  CompositeDynamic alone, the whole converted cell block drew washed out to a pale sepia (the floor sweep's 12 views),
+  as Embry did: these lights reach the converted world whatever their channels. Marcus gained Gears 1's detail. Next:
+  carry that light to dynamic objects without a light actor (a light environment's AmbientGlow / an SH ambient from
+  the sun's and sky's values, per mover and for the player's class), not tried yet.
+- fix21 (this entry's changes) installed for the user (backup release-backup-0.5.0-mods/before-fix21); the hard route
+  reaches the yard fight, no crash.

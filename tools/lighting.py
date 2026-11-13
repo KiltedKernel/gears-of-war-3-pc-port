@@ -285,9 +285,61 @@ def unbaked_lights(packages):
              arr('cos_inner'), arr('cos_outer')), (len(lights), len(kept)))
 
 
-def bake_lights(lights, P, N):
+LIGHT_CLEARANCE = 24.0
+
+
+class Occluders:
+    """the level's triangles (m, 3, 3) world space, for shadow tests from baked lights: Gears 1 drew the lights its
+    light maps leave out dynamically, with shadows; baked per vertex without them every such light shone through the
+    walls, pipes and bars round it (the prison's cell block lit flat, "washed out" against Gears 1)"""
+    def __init__(self, tris):
+        self.tris = np.asarray(tris, np.float64).reshape(-1, 3, 3)
+        self.lo, self.hi = self.tris.min(1), self.tris.max(1)
+
+    def visible(self, P, light, cell=256.0):
+        """(n,) bool: the segment from each point (moved 2 units off its surface by the caller) to the light meets no
+        triangle (Moller-Trumbore, t in (0.001, 0.999)); the points in groups by cell (each group's rays tested against
+        the triangles in the box round it and the light)"""
+        P = np.asarray(P, np.float64)
+        out = np.ones(len(P), bool)
+        if not len(P) or not len(self.tris): return out
+        key = np.floor(P / cell).astype(np.int64)
+        _, inv = np.unique(key, axis=0, return_inverse=True)
+        for g in range(inv.max() + 1):
+            sel = np.nonzero(inv.ravel() == g)[0]
+            out[sel] = self._visible(P[sel], light)
+        return out
+
+    def _visible(self, P, light, chunk=200000):
+        out = np.ones(len(P), bool)
+        lo = np.minimum(P.min(0), light) - 1; hi = np.maximum(P.max(0), light) + 1
+        sel = np.nonzero(np.all((self.hi >= lo) & (self.lo <= hi), 1))[0]
+        if not len(sel): return out
+        T = self.tris[sel]
+        v0, e1, e2 = T[:, 0], T[:, 1] - T[:, 0], T[:, 2] - T[:, 0]
+        step = max(1, chunk // len(T))
+        for s in range(0, len(P), step):
+            O = P[s:s + step]; D = light - O                                   # (k, 3), segment = O + t D
+            # (hits within LIGHT_CLEARANCE of the light ignored: Gears 1 put lights inside their lamps' meshes)
+            tmax = np.clip(1 - LIGHT_CLEARANCE / np.maximum(np.linalg.norm(D, axis=1), 1e-6), 0, 0.999)[:, None]
+            h = np.cross(D[:, None, :], e2[None])                               # (k, m, 3)
+            a = (e1[None] * h).sum(2)
+            ok = np.abs(a) > 1e-9
+            f = np.where(ok, 1 / np.where(ok, a, 1), 0)
+            sv = O[:, None, :] - v0[None]
+            u = f * (sv * h).sum(2)
+            q = np.cross(sv, e1[None])
+            v = f * (D[:, None, :] * q).sum(2)
+            t = f * (e2[None] * q).sum(2)
+            hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (t > 1e-3) & (t < tmax)
+            out[s:s + step] = ~hit.any(1)
+        return out
+
+
+def bake_lights(lights, P, N, occluders=None):
     """(n, 3) rgb light at world positions P (n, 3) with normals N (n, 3) from unbaked_lights' arrays: UE3's radial
-    falloff (exponent 2) x N.L, spot lights x their cone ((cos - cos_outer) / (cos_inner - cos_outer), squared)"""
+    falloff (exponent 2) x N.L, spot lights x their cone ((cos - cos_outer) / (cos_inner - cos_outer), squared);
+    occluders (Occluders): each light's contribution only where the segment to it is clear"""
     pos, rad, col, dirs, ci, co = lights
     out = np.zeros((len(P), 3), np.float32)
     if len(P) == 0 or len(pos) == 0: return out
@@ -302,5 +354,9 @@ def bake_lights(lights, P, N):
         if co[k] > -1.5:
             cosang = -(L * dirs[k]).sum(1) * inv
             att = att * np.clip((cosang - co[k]) / max(ci[k] - co[k], 1e-4), 0, 1) ** 2
-        out += (att * lam)[:, None] * col[k]
+        w = att * lam
+        if occluders is not None and (w > 0).any():
+            lit = np.nonzero(w > 0)[0]
+            w[lit] *= occluders.visible(P[lit] + N[lit] * 2.0, pos[k])
+        out += w[:, None] * col[k]
     return out

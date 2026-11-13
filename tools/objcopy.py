@@ -30,6 +30,10 @@ CLASS_RENAME = {} if os.environ.get('OBJCOPY_NO_RENAME') else {
     'SeqAct_WarCheckPoint': 'SeqAct_Checkpoint',            # 128
     'SeqEvt_CheckpointActivated': 'SeqEvent_CheckpointLoaded',  # 130
     'SeqAct_AIAcquireEnemy': 'SeqAct_AISetTarget',          # 177
+    # Gears 1's scripted "shoot at" (Dom firing on the prison's bridge guards, the Locust on Marcus in S04/S05): Target
+    # and Shoot At, inputs Overwrite / Add / Remove / Clear -> Gears 3's forced targets (Target, Focus Targets; In
+    # overwrites by default, bOverwriteExisting). Clear has no Gears 3 input (Prohibit bars targets): left unlinked
+    'SeqAct_AIShootAtTarget': 'SeqAct_AISetTarget',
     'SeqAct_AISetFocus': 'SeqAct_AILookAt',                 # 85
     'SeqAct_WarPlayerAnim': 'SeqAct_GearPlayerAnim',        # 47
     'SeqAct_SetMood': 'SeqAct_AISetMood',                   # 45
@@ -751,7 +755,9 @@ LINK_ALIAS = {('SeqAct_AIMoveToActor', 'finished'): 'reached goal', ('SeqAct_AIM
               ('SeqAct_ToggleTutorialMode', 'enable'): 'system on', ('SeqAct_ToggleTutorialMode', 'disable'): 'system off',
               ('SeqAct_ToggleTutorialMode', 'toggle'): 'system on',
               ('SeqEvent_LevelLoaded', 'out'): 'loaded and visible',
-              ('SeqEvent_LevelBeginning', 'out'): 'beginning of level'}
+              ('SeqEvent_LevelBeginning', 'out'): 'beginning of level',
+              ('SeqAct_AIShootAtTarget', 'overwrite'): 'in', ('SeqAct_AIShootAtTarget', 'add'): 'in',
+              ('SeqAct_AIShootAtTarget', 'shoot at'): 'focus targets'}
 
 
 def parse828(d, o, fname):
@@ -1537,7 +1543,22 @@ def kismet_actors(src, kismet_exports, extra=()):
             for v in refs:
                 if v > 0 and v - 1 not in out and src.class_name(src.exports[v - 1]['class']) in ACTOR_CLASSES | SCRIPTED_MESH_ACTOR_CLASSES:
                     out.add(v - 1); todo.append((v - 1, 32))
-    return sorted(out)
+    return sorted(i for i in out if not left_out_emitter(src, i))
+
+
+def left_out_emitter(src, i):
+    """whether source actor i is an Emitter of a system in PARTICLES_LEFT_OUT"""
+    import materialconv
+    if src.class_name(src.exports[i]['class']) != 'Emitter': return False
+    try:
+        a = {r[0]: r[4] for r in materialconv.raw_props(src, src.export_data(i), 32)[0]}
+        comp = struct.unpack('>i', a['ParticleSystemComponent'])[0]
+        c = {r[0]: r[4] for r in materialconv.raw_props(src, src.export_data(comp - 1), 8)[0]}
+        t = struct.unpack('>i', c['Template'])[0]
+    except Exception:
+        return False
+    name = src.imports[-t - 1]['name'] if t < 0 else src.exports[t - 1]['name'] if t > 0 else ''
+    return str(name) in PARTICLES_LEFT_OUT
 
 
 # Gears 1's TriggerVolumes become TriggerVolumes of the target level's own box brush (box_volume_template): its Model
@@ -1824,6 +1845,8 @@ LIGHT_SCALE = 1.0
 # here (as a DirectionalLight or a point light, in a section or the persistent level) changed nothing on them. With
 # Embry's lights at 20000 the squad at the first landing showed its armour (48.5 against 44.6, the world unchanged)
 LIGHT_RADIUS_MIN = float(os.environ.get('OBJCOPY_LIGHT_RADIUS_MIN', 0))
+# a cutscene light's shadow colour (light_component): 0 is Gears 3's default, black
+CINE_SHADOW = float(os.environ.get('OBJCOPY_CINE_SHADOW', 0.5))
 
 
 def float_prop_brightness(c, props):
@@ -2000,6 +2023,12 @@ PARTICLE_MATERIALS = {
 # Gears 1 particle system name -> a Gears 3 system standing for it (levelinject --g3-effects: a carrier's, e.g. Jack's
 # COG_BOT.Effects.P_Jack_ResOUT); the emitter's component imports it instead of a converted copy
 PARTICLE_SYSTEMS = {}
+# Gears 1 particle system name -> the Gears 3 material all its sprites use (before PARTICLE_MATERIALS)
+PARTICLE_SYSTEM_MATERIALS = {}
+# Gears 1 particle systems whose emitters are left out: no Gears 3 material draws them near Gears 1. The opening's
+# Wretch drool (M_Vapors_2: thin, faint falling strands) drew as purple smoke puffs on the steam stand-in, white
+# glowing balls on Gears 3's raindrop and orange blobs on its goo; in Gears 1 it is barely visible
+PARTICLES_LEFT_OUT = {'P_Prison_Start_Cine_Drool'}
 # by Gears 1 BlendMode (2 translucent, 3 additive): the same two
 PARTICLE_MATERIAL_FALLBACK = {2: 'War_Level_Effects.Materials.M_Steam_smoke', 3: 'War_Level_Effects.Materials.M_Steam_Burst_Flair'}
 
@@ -2019,7 +2048,8 @@ def particle_material_ref(c, ref):
     s = c.s
     if ref == 0: return 0
     name = s.imports[-ref - 1]['name'] if ref < 0 else s.exports[ref - 1]['name']
-    path = PARTICLE_MATERIALS.get(name)
+    owner = s.path(c.current_src) if getattr(c, 'current_src', None) is not None else ''
+    path = next((v for k, v in PARTICLE_SYSTEM_MATERIALS.items() if f'.{k}.' in f'.{owner}.'), None) or PARTICLE_MATERIALS.get(name)
     if path is None:
         blend = 2
         if ref > 0:
@@ -2221,6 +2251,80 @@ def set_music_track(c, props):
 
 FIXUPS['SeqAct_SetMusicTrack'] = set_music_track
 CLASS_RENAME['SeqAct_SetMusicTrack'] = 'SeqAct_PlayMusicTrack'
+
+
+# Gears 1's SeqAct_SetMood sets the targets' perception mood (Mood: WarAI_Drone.EPerceptionMood PM_Normal / PM_Alert /
+# PM_Unaware; the prison's Kismet sets Alert 12 times as the Locust arrive); Gears 3's SeqAct_AISetMood has no Mood:
+# its PerceptionMood (GearAI.EPerceptionMood, AIPM_None = leave as it is) takes the same mood. Combat and move moods
+# stay AIPM_None (not set by Gears 1's action)
+G1_PERCEPTION_MOODS = ('PM_Normal', 'PM_Alert', 'PM_Unaware')
+
+
+def set_mood(c, props):
+    import materialconv
+    src = {r[0]: r[4] for r in materialconv.raw_props(c.s, c.s.export_data(c.current_src), 4)[0]}
+    mood = src['Mood'][0] if len(src.get('Mood', b'')) == 1 else 0
+    if mood >= len(G1_PERCEPTION_MOODS): return props
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in ('Mood', 'PerceptionMood')] + [
+        ['PerceptionMood', 'ByteProperty', 0, struct.pack('>ii', *c.w.name('EPerceptionMood')),
+         struct.pack('>ii', *c.w.name('AI' + G1_PERCEPTION_MOODS[mood]))]]
+    c.moods_set = getattr(c, 'moods_set', 0) + 1
+    return encode(c.w, recs)
+
+
+FIXUPS['SeqAct_SetMood'] = set_mood
+
+
+# Gears 1's SeqAct_WarCameraShake carries its shake inline (CameraShake: a ScreenShakeStruct, only the fields changed
+# from the class defaults below) with GlobalScale / GlobalAmplitudeScale / GlobalFrequencyScale; Gears 3's
+# SeqAct_CameraShake plays a CameraShake object (Shake) scaled by ShakeScale. Both oscillate amplitude x sin(phase +
+# frequency x time), rotations in rotation units: the shake becomes a CameraShake subobject of the action, axis by axis
+# (Gears 1's vectors: X pitch, Y yaw, Z roll), its amplitudes x GlobalAmplitudeScale, frequencies x
+# GlobalFrequencyScale, ShakeScale = GlobalScale. Without it the prison's 26 scripted shakes (the bridge collapse, the
+# Locust tunnelling) played Gears 3's empty default shake
+G1_SCREEN_SHAKE = {'TimeDuration': 1.0, 'RotAmplitude': (100.0, 100.0, 200.0), 'RotFrequency': (10.0, 10.0, 25.0),
+                   'LocAmplitude': (0.0, 3.0, 5.0), 'LocFrequency': (1.0, 10.0, 20.0), 'FOVAmplitude': 2.0, 'FOVFrequency': 5.0}
+
+
+def camera_shake(c, props):
+    import materialconv
+    src = {r[0]: r for r in materialconv.raw_props(c.s, c.s.export_data(c.current_src), 4)[0]}
+    f32 = lambda k, d: struct.unpack('>f', src[k][4][:4])[0] if k in src and len(src[k][4]) >= 4 else d
+    shake = dict(G1_SCREEN_SHAKE)
+    if 'CameraShake' in src:
+        for r in materialconv.raw_props(c.s, src['CameraShake'][4], 0)[0]:
+            if r[0] in shake:
+                v = struct.unpack(f'>{len(r[4]) // 4}f', r[4][:len(r[4]) // 4 * 4])
+                shake[r[0]] = v[0] if isinstance(shake[r[0]], float) else tuple(v[:3])
+    amp, freq = f32('GlobalAmplitudeScale', 1.0), f32('GlobalFrequencyScale', 1.0)
+    f = lambda v: struct.pack('>f', v)
+    sname = lambda n: struct.pack('>ii', *c.w.name(n))
+    def osc(a, fr):
+        return encode(c.w, [['Amplitude', 'FloatProperty', 0, b'', f(a * amp)], ['Frequency', 'FloatProperty', 0, b'', f(fr * freq)]])
+    def axes(names, struct_name, a3, f3):
+        return encode(c.w, [[n, 'StructProperty', 0, sname('FOscillator'), osc(a, fr)] for n, a, fr in zip(names, a3, f3)])
+    recs3 = [['OscillationDuration', 'FloatProperty', 0, b'', f(shake['TimeDuration'])],
+             ['RotOscillation', 'StructProperty', 0, sname('ROscillator'),
+              axes(('Pitch', 'Yaw', 'Roll'), 'ROscillator', shake['RotAmplitude'], shake['RotFrequency'])],
+             ['LocOscillation', 'StructProperty', 0, sname('VOscillator'),
+              axes(('X', 'Y', 'Z'), 'VOscillator', shake['LocAmplitude'], shake['LocFrequency'])],
+             ['FOVOscillation', 'StructProperty', 0, sname('FOscillator'), osc(shake['FOVAmplitude'], shake['FOVFrequency'])]]
+    cls = c.class_ref('CameraShake')
+    outer = c.obj_map.get(c.current_src + 1, 0)
+    if not cls or not outer: return props
+    obj = c.w.add_export(cls, outer, c.unique_name('G1CameraShake', 0), c.prelude_828('object', cls) + encode(c.w, recs3),
+                         flags=0x0007000100000000)
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    recs = [r for r in recs if r[0] not in ('CameraShake', 'GlobalScale', 'GlobalAmplitudeScale', 'GlobalFrequencyScale', 'Shake', 'ShakeScale')]
+    recs += [['Shake', 'ObjectProperty', 0, b'', struct.pack('>i', obj)], ['ShakeScale', 'FloatProperty', 0, b'', f(f32('GlobalScale', 1.0))]]
+    c.camera_shakes = getattr(c, 'camera_shakes', 0) + 1
+    return encode(c.w, recs)
+
+
+FIXUPS['SeqAct_WarCameraShake'] = camera_shake
 
 
 # ---- weapons ----
@@ -2482,11 +2586,35 @@ def touch_classes(c, props):
     # carrier streamed in after the persistent level, whose import of it was None, and ClassIsChildOf(x, None) is true:
     # every pawn was ignored, so the prison's persistent touch events never fired (S04_Scripting and S05's sections were
     # never made visible: the catwalk, InterpActor_19, neither drew nor collided)
+    # Dom's half of a two-pawn counter (Touched -> SeqCond_Increment, UnTouched -> its decrement: the prison's yard
+    # volume counts Dom and Marcus in and seals S02, unloading S02-S04, at two): Gears 3 fired Dom's Touched twice with
+    # no UnTouched between, the count reached two with Marcus still in the hard hallway, the falling slabs closed the
+    # gap ahead of him and the floor under him streamed out. Dom counts once
+    if 'Pawn_COGDom' in names and touched_feeds_counter(s_, c.current_src):
+        out = [r for r in out if r[0] != 'MaxTriggerCount'] + [['MaxTriggerCount', 'IntProperty', 0, b'', struct.pack('>i', 1)]]
+        c.counted_once = getattr(c, 'counted_once', 0) + 1
     if ('Pawn_COGMarcus' in names or a.get('bPlayerOnly', True)) and 'Pawn_COGDom' not in names:
         dom = c.find_import('Core', 'Class', c.find_import('Core', 'Package', 0, 'GearGame'), 'GearPawn_COGDomBase')
         out = [r for r in out if r[0] != 'IgnoredClassProximityTypes']
         out.append(['IgnoredClassProximityTypes', 'ArrayProperty', 0, b'', struct.pack('>ii', 1, dom)])
     return encode(c.w, out)
+
+
+def touched_feeds_counter(src, i):
+    """whether source op i's first output (a touch event's Touched) links a SeqCond_Increment"""
+    import materialconv
+    try: recs, _ = materialconv.raw_props(src, src.export_data(i), 4)
+    except Exception: return False
+    v = next((r[4] for r in recs if r[0] == 'OutputLinks'), None)
+    if v is None or struct.unpack_from('>i', v, 0)[0] < 1: return False
+    el, _ = materialconv.raw_props(src, v, 4)
+    lk = next((r[4] for r in el if r[0] == 'Links'), b'\0\0\0\0')
+    n, o = struct.unpack_from('>i', lk, 0)[0], 4
+    for _ in range(n):
+        sub, o = materialconv.raw_props(src, lk, o)
+        op = next((struct.unpack('>i', r[4])[0] for r in sub if r[0] == 'LinkedOp'), 0)
+        if op > 0 and src.class_name(src.exports[op - 1]['class']) == 'SeqCond_Increment': return True
+    return False
 
 
 FIXUPS['SeqEvent_Touch'] = touch_classes
@@ -3127,6 +3255,23 @@ def light_component(c, props, scale=True):
     OBJCOPY_LIGHTS_DYNAMIC=1: every light Dynamic too."""
     wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
     recs, _ = parse828(props, 0, wname)
+    # a cutscene's few lights keep Gears 1's channels and shadows (+ CompositeDynamic): the opening's armoured Marcus is
+    # on Cinematic_1 alone, lit by its one Cinematic_1 spot light; on CompositeDynamic with no shadows nothing reached
+    # him but his light environment's ambient, and he stood evenly lit where Gears 1 kept him in the cell's shadow
+    if '_cine' in os.path.basename(c.s.filename).lower() and not os.environ.get('OBJCOPY_CINE_LIGHTS_FLAT'):
+        lc = next((r for r in recs if r[0] == 'LightingChannels'), None)
+        if lc is not None:
+            inner, _ = parse828(lc[4], 0, wname)
+            inner = [r for r in inner if r[0] != 'CompositeDynamic'] + [['CompositeDynamic', 'BoolProperty', 0, b'', b'']]
+            lc[4] = encode(c.w, inner)
+        c.cine_lights = getattr(c, 'cine_lights', 0) + 1
+        # Gears 3's lights shadow by modulating, by default to black (ModShadowColor 0): everything in a shadow went
+        # black, fill and other lights too (Dom's face, a band across Marcus's back). Gears 1's shadows took away only
+        # their own light. Half, as Gears 3's light environments cap theirs (MaxModulatedShadowColor); LightShadow_Normal
+        # left the characters unlit (only composited lights reach a light environment's mesh)
+        recs = [r for r in recs if r[0] not in ('bHasLightEverBeenBuiltIntoLightMap', 'ModShadowColor')] + [
+            ['ModShadowColor', 'StructProperty', 0, struct.pack('>ii', *c.w.name('LinearColor')), struct.pack('>4f', CINE_SHADOW, CINE_SHADOW, CINE_SHADOW, 1.0)]]
+        return encode(c.w, recs)
     drop = {'LightingChannels', 'CastShadows', 'CastDynamicShadows', 'CastStaticShadows', 'bHasLightEverBeenBuiltIntoLightMap'}
     channels = ('bInitialized', 'Dynamic', 'CompositeDynamic') if os.environ.get('OBJCOPY_LIGHTS_DYNAMIC') else ('bInitialized', 'CompositeDynamic')
     ch = encode(c.w, [[k, 'BoolProperty', 0, b'', b'\x01'] for k in channels])

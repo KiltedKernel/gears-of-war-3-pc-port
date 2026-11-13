@@ -243,6 +243,11 @@ def main():
                     "itself (path substring; its parent takes Diffuse_01 / Normal_01 and a mask texture read for its "
                     "alpha): masked Gears 1 materials (fences, razor wire, grass) become child instances of it, their "
                     "cutout the diffuse's alpha, or a DXT1 mask's red as its alpha (materialconv.red_to_alpha)")
+    ap.add_argument('--masked-from', default='', help="Gears 1 packages (comma-separated) whose masked mesh actors this "
+                    "package draws (--masked-material): the actors no Kismet refers to whose every element is masked "
+                    "(their own package, with a navmesh, has no masked template: recipe masked_into)")
+    ap.add_argument('--masked-elsewhere', action='store_true', help="leave out the masked mesh actors --masked-from "
+                    "takes into another package")
     ap.add_argument('--fog-material', default='EngineVolumetrics.Fogsheet.Materials.M_EV_FogSheet_Master_01',
                     help="a translucent Gears 3 Material of the kit (or the target), with its shaders compiled there: Gears 1's "
                     "fog sheets, light cones and light rays (materialconv.g1_volumetric) are drawn with it; 'none': they "
@@ -382,6 +387,31 @@ def main():
     actors = []                                        # (source index, mesh, location, rotation, scale, component)
     for si, sp in enumerate(srcs):
         actors += [(si,) + a for a in source_actors(sp)]
+    def masked_actors(sp):
+        """a package's mesh actors no Kismet refers to whose every element's material is masked (g1_mask)"""
+        import objcopy
+        scripted_ = objcopy.scripted_mesh_actors(sp)
+        out_ = []
+        for a in source_actors(sp):
+            if sp.exports[a[4]]['outer'] - 1 in scripted_: continue
+            try:
+                els_ = [el['material'] for el in staticmesh.read(sp, a[0])['lods'][0]['elements']]
+                if els_ and all(x > 0 and materialconv.g1_mask(sp, x - 1) is not None for x in els_): out_.append(a)
+            except Exception:
+                pass
+        return out_
+    if args.masked_elsewhere and src.version == 374:
+        out_ = {a[4] for a in masked_actors(src)}      # (by component)
+        actors = [a for a in actors if not (a[0] == 0 and a[5] in out_)]
+        print(f'{len(out_)} masked mesh actors left to another package (masked_into)')
+    if args.masked_from and args.masked_material:
+        for f_ in args.masked_from.split(','):
+            sp = upk.Package(f_)
+            sp.aux = True                              # (its own actors, lights, Kismet and volumes are its package's)
+            srcs.append(sp)
+            got_ = masked_actors(sp)
+            actors += [(len(srcs) - 1,) + a for a in got_]
+            print(f'{len(got_)} masked mesh actors from {os.path.basename(f_)} (masked_into)')
     # the same mesh placed twice at the same spot (Gears 1's S02_Meshes and S05_Meshes have 11): drawn once (twice
     # they z-fought)
     seen_, unique_ = set(), []
@@ -442,7 +472,7 @@ def main():
     if args.bsp:
         import terrainconv
         for si, sp in enumerate(srcs):
-            if sp.version != 374: continue
+            if sp.version != 374 or getattr(sp, 'aux', False): continue
             try:
                 wm = bspconv.world_model(sp)
                 model = bspconv.read_model_374(sp, wm)
@@ -478,6 +508,7 @@ def main():
     if args.kismet and src.version == 374:
         import objcopy, skelmesh
         for si, sp in enumerate(srcs):
+            if getattr(sp, 'aux', False): continue
             mover_meshes |= {(si, mi) for mi in objcopy.mover_meshes(sp)}
             for mi in objcopy.skeletal_meshes(sp):     # SkeletalMeshActors' meshes: Gears 3 skeletal meshes
                 try: skel_meshes[(si, mi)] = skelmesh.read_374(sp, mi)
@@ -678,10 +709,16 @@ def main():
                 # and dust textures in the master's two multiply textures instead of the master's cloud noise. Tried
                 # for the hard route's green sheets ("grass blown up"): no change there, so they are not these
                 fog_textures = {}
-                if os.environ.get('LEVELINJECT_FOG_G1_TEXTURES') and tex_template.get('diffuse') is not None:
-                    rt_ = materialconv.g1_referenced_textures(sp, gm + 1)
+                rt_ = materialconv.g1_referenced_textures(sp, gm + 1) if tex_template.get('diffuse') is not None else []
+                falloffs_ = [t_ for t_ in rt_ if 'falloff' in sp.path(t_).lower()]
+                # a light beam (Gears 1's UN_Volumetrics lightbeams: opacity = dust x a falloff along the beam x one
+                # across it): its two falloff textures shape it; on the master's cloud textures alone the prison's cones
+                # were flat, evenly bright wedges (LEVELINJECT_NO_FOG_G1_FALLOFF=1: as before)
+                beam_ = len(falloffs_) >= 2 and not os.environ.get('LEVELINJECT_NO_FOG_G1_FALLOFF')
+                if (os.environ.get('LEVELINJECT_FOG_G1_TEXTURES') or beam_) and tex_template.get('diffuse') is not None:
                     pick = lambda keys: next((t_ for t_ in rt_ if any(k_ in sp.path(t_).lower() for k_ in keys)), None)
-                    for pname, ti in (('MultiplyTexture1', pick(('falloff',))), ('MultiplyTexture2', pick(('dust', 'cloud', 'noise')))):
+                    second_ = falloffs_[1] if beam_ else pick(('dust', 'cloud', 'noise'))
+                    for pname, ti in (('MultiplyTexture1', falloffs_[0] if falloffs_ else None), ('MultiplyTexture2', second_)):
                         if ti is None: continue
                         tkey = sp.path(ti)
                         if tkey not in tex_ref and args.shared_textures:

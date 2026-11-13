@@ -452,9 +452,20 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
         # compiled shaders), its materials child instances of that instance (levelinject --masked-material)
         template = ch['section_template']
         only = [x.strip() for x in ch.get('masked_sections', '').split(',') if x.strip()]
-        if ch.get('masked_template') and s not in nav_for and (s in only if only else True) and has_masked(src(s)):
+        # masked_into = A, B -> T; ...: sections A and B (with a navmesh: a clone of the section template, no masked
+        # instance) leave their masked mesh actors to section T, which draws them (the cell block's chain-link fences
+        # by the left path's door, in S02_Scripting, drew as opaque sheets)
+        masked_from, masked_out = [], False
+        for rule in [r for r in ch.get('masked_into', '').split(';') if '->' in r]:
+            froms, into = rule.split('->')
+            froms = [x.strip() for x in froms.split(',') if x.strip()]
+            if s in froms: masked_out = True
+            if s == into.strip(): masked_from += froms
+        if ch.get('masked_template') and s not in nav_for and (s in only if only else True) and (masked_from or has_masked(src(s))):
             template = ch['masked_template']
             options += ['--masked-material', ch.get('masked_material', 'Masked')]
+            if masked_from: options += ['--masked-from=' + ','.join(src(x) for x in masked_from)]
+        if masked_out: options += ['--masked-elsewhere']
         levelpkg.clone(os.path.join(g3cooked, template + '.xxx'), target, keep=keep)
         if s in nav_for:                               # its pylon where the region's navmesh is generated from
             options += seed_options(navs[nav_for[s]], (0, 0, 0))

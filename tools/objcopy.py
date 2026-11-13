@@ -667,6 +667,8 @@ class Copier:
                     and self.s.class_name(self.s.exports[self.s.exports[i]['outer'] - 1]['class']) == 'StaticMeshActor'):
                 # (a static mesh actor copied with the Kismet: pawns collide with its Gears 1 hulls, made with the level's)
                 props = not_blocking_pawns(self, props)
+            if kind == 'component' and cn == 'StaticMeshComponent' and not os.environ.get('OBJCOPY_NO_MOVER_COMPOSITE'):
+                props = composite_channel(self, props)
             if i in getattr(self, 'current_named', {}): props = named_squad_var(self, props)
             elif cn in FIXUPS and i not in getattr(self, 'passthrough_src', ()): props = FIXUPS[cn](self, props)
             if i in getattr(self, 'passthrough_src', ()):
@@ -1360,6 +1362,26 @@ COMPONENT_TAIL = {'StaticMeshComponent': bytes(4),
                   # without them, Gears 3 read past the component and the campaign load crashed or hung
                   'PointLightComponent': bytes(8), 'SpotLightComponent': bytes(8),
                   'DirectionalLightComponent': bytes(8), 'SkyLightComponent': bytes(8)}
+
+
+def composite_channel(c, props):
+    """a copied static mesh component lit by a light environment (doors, movers, Gears 1's physics props): its
+    LightingChannels with CompositeDynamic. The converted lights light only through light environments
+    (light_component: CompositeDynamic alone), and a light reaches one only when their channels overlap: the left path's
+    door kept Gears 1's {Dynamic} and drew nearly black in the lit cell block"""
+    wname = lambda i, n: (c.w.names[i] if n == 0 else f'{c.w.names[i]}_{n - 1}')
+    recs, _ = parse828(props, 0, wname)
+    if not any(r[0] == 'LightEnvironment' and r[4] != b'\0' * len(r[4]) for r in recs): return props
+    lc = next((r for r in recs if r[0] == 'LightingChannels'), None)
+    if lc is None:
+        recs.append(['LightingChannels', 'StructProperty', 0, struct.pack('>ii', *c.w.name('LightingChannelContainer')),
+                     encode(c.w, [[k, 'BoolProperty', 0, b'', b'\x01'] for k in ('bInitialized', 'Dynamic', 'CompositeDynamic')])])
+    else:
+        inner, _ = parse828(lc[4], 0, wname)
+        inner = [r for r in inner if r[0] != 'CompositeDynamic'] + [['CompositeDynamic', 'BoolProperty', 0, b'', b'\x01']]
+        lc[4] = encode(c.w, inner)
+    c.composited = getattr(c, 'composited', 0) + 1
+    return encode(c.w, recs)
 
 
 def movers(src):
@@ -3262,7 +3284,7 @@ def light_component(c, props, scale=True):
         lc = next((r for r in recs if r[0] == 'LightingChannels'), None)
         if lc is not None:
             inner, _ = parse828(lc[4], 0, wname)
-            inner = [r for r in inner if r[0] != 'CompositeDynamic'] + [['CompositeDynamic', 'BoolProperty', 0, b'', b'']]
+            inner = [r for r in inner if r[0] != 'CompositeDynamic'] + [['CompositeDynamic', 'BoolProperty', 0, b'', b'\x01']]
             lc[4] = encode(c.w, inner)
         c.cine_lights = getattr(c, 'cine_lights', 0) + 1
         # Gears 3's lights shadow by modulating, by default to black (ModShadowColor 0): everything in a shadow went

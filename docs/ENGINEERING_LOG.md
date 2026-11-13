@@ -3577,3 +3577,41 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
 - ...and the reference itself: after a Gears 3 texture light map's coordinate scale and bias come only the LOD's 5
   tail bytes (a level's own components: 00 00000000). lightmap2d.gears3_reference had copied the vertex writer's four
   ints before them (the 1D light map's second sample array), misaligning every light-mapped BSP component.
+
+## 2026-11-13: the big room's door and fences, light beams, the mountains, the comm link
+
+- **The left path's door drew nearly black.** Its copied StaticMeshComponent (InterpActor, its own
+  DynamicLightEnvironment) kept Gears 1's LightingChannels {bInitialized, Dynamic}; the converted lights carry
+  {bInitialized, CompositeDynamic} (objcopy.light_component), and a light environment composites only lights whose
+  channels overlap the primitive's. objcopy.composite_channel adds CompositeDynamic to every copied static mesh
+  component with a light environment (doors, movers, Gears 1's KActors). `OBJCOPY_NO_MOVER_COMPOSITE=1`: as before.
+- **The chain-link fences beside it drew as opaque sheets** (the user's "weird texture"; Gears 1 shows them see-through).
+  They are StaticMeshActors in SP_Prison_S02_Scripting, a section with a navmesh: cloned from section_template, which
+  carries no masked instance, so its masked materials converted opaque ("14 materials (0 masked)"). Recipe
+  `masked_into = A -> T`: section A leaves its masked mesh actors that no Kismet refers to (levelinject
+  `--masked-elsewhere`) and section T draws them (`--masked-from`, the package added as an aux source: its BSP,
+  movers, lights, volumes and Kismet stay its own). Chapter 1: S02_Scripting -> S02 (four fence actors).
+- **Light beams**: Gears 1's UN_Volumetrics light beams take their opacity from a dust panner times two falloff
+  textures (along and across the beam). The fog stand-in now takes both falloffs when a beam material has two
+  (`LEVELINJECT_NO_FOG_G1_FALLOFF=1`: the master's cloud textures, flat wedges as before).
+- **The mountains through the cell block's windows were missing.** They are SP_Prison_S07 (Prison_JaggedCliffA,
+  Neutral_Mountain2), streamed with SP_Prison_World by Gears 1's LevelStreamingVolume_2 (volumes are not converted);
+  Kismet only loads S07 hidden. `always_loaded = SP_Prison_World, SP_Prison_S07`.
+- **Comm link and speech, from Gears 3's script** (tools/uscript.py on GearGame.xxx): GearPawn.SetConversing(bConv,
+  bUseCommLink) only sets bWantToConverse / SetUsingCommLink; the comm link is the special move GSM_UsingCommLink
+  (106), which holsters the weapon temporarily, then BS_Play's the hand-to-ear stance (BS_Animation), breaking cover.
+  Speech gestures (GearPawn.PlaySpeechGesture) play only from SeqAct_Speak.GestureAnimName, which Gears 1's Speak
+  actions never set; Gears 3's Speak default turns the head to the addressee (bTurnHeadTowardsAddressee true, Gears
+  1's 7 explicit false kept). Candidates for the arm twitch: the comm-link holster/stance on the classic mesh, or head
+  tracking. Not yet seen in a capture.
+- **The door's darkness is the missing world lights, not its channels.** No Gears 1 point light reaches the left
+  path's door (unshadowed bake over every chapter package: zero). Gears 1 lit its dynamic objects (the door, the
+  characters) from SP_Prison_World's DirectionalLight_1 (brightness 4, LightingChannels Dynamic only, no dynamic
+  shadows: an unshadowed sun on every dynamic primitive, indoors too) and SkyLight_0 (brightness 3, BSP + Static +
+  CompositeDynamic). The conversion copies neither (OBJCOPY_SUN / OBJCOPY_SKY: experimental, from Embry). The channel
+  fix above stays (needed for any light to reach a mover); fix22 tries the two world lights on CompositeDynamic.
+- **Floor sweep** (job tmp floor_g1.txt / floor_g3.txt: 12 views over the cell block, same script on Gears 1): the
+  converted floors lack Gears 1's sunlight dapple (the sun through the roof, in Gears 1's light maps of the mesh floors
+  converted per vertex). One bright, lengthwise-streaked strip: BSP node 1202 of SP_Prison_S02 (a 1256 x 64 gutter at
+  y 1824, RB_Prison_Floors_Tile01_Mat, UVs and Gears 1 light map values like its neighbours', ~2.3). Gears 1 draws it
+  dark with its grout lines; why ours is overexposed is open.

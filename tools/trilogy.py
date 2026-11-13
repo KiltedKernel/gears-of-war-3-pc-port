@@ -17,7 +17,7 @@ Locations (options or environment variables):
   --mods  the game's mods folder        (GOW3_MODS, default build/mods)
   --g3    Gears 3's disc files           (GOW3_DISC, else tools/local.cmd's game folder, else ../gow3-decomp/disc)
   --g1    Gears 1's disc files           (GOW1_DISC, default ../gow1-decomp/disc): the folder holding WarGame\\; make it
-                                         from your disc image with: python -P tools/xdvdfs.py <Gears 1 .iso> <folder>
+                                         from your disc image with: python -P tools/xdvdfs.py <Gears 1 .iso> extract-all <folder>
 """
 import argparse, configparser, os, shutil, subprocess, sys, tempfile, time
 
@@ -103,7 +103,7 @@ def shared_textures_into(manifest, package, hold_names=()):
         tt = by_path[e['template']]
         upk.E = '>'
         data, fix = materialconv.texture_828(w, p3, tt, texture2d.Texture(sp, e['index']), e.get('mask'),
-                                             lod_bias=materialconv.SLOT_LOD_BIAS.get('mask' if e.get('mask') else e.get('slot')),
+                                             lod_bias=materialconv.SLOT_LOD_BIAS.get('mask' if e.get('mask') not in (None, 'F') else e.get('slot')),
                                              max_size=materialconv.MAX_CHARACTER_TEXTURE_SIZE if e.get('character') else None,
                                              colour_scale=e.get('scale'))
         flags = struct.unpack_from('>Q', p3.data, p3.exports[tt]['entry'] + 24)[0]
@@ -167,6 +167,10 @@ def patch_level(folder, recipe, g3cooked, g1cooked):
 def generate_navmesh(folder, nav, out, required=True):
     """runs the game (tools/playtest.ps1: its own test profile and mods, the player's untouched) on the converted
     level with Gears 3's navmesh builder armed; the meshes it builds are dumped to out"""
+    if not os.path.isfile(os.path.join(REPO, 'build', 'gow3.exe')):
+        # (the builder runs in the old port's runtime, until COGBox's developer mode has it: docs/NAVMESH.md)
+        raise SystemExit('navmesh: Gears 3\'s navmesh builder runs in the legacy port (build\\gow3.exe), which is not built '
+                         'here; see docs/NAVMESH.md, or pass --reuse-navmesh with navmeshes you generated before')
     script = os.path.join(tempfile.gettempdir(), 'trilogy_navmesh_input.txt')
     open(script, 'w').write('# trilogy.py: no input while the navmesh builds\n')
     if os.path.exists(out): os.remove(out)
@@ -465,6 +469,9 @@ def build_chapter(c, folder, g1cooked, g3cooked, args):
             froms = [x.strip() for x in froms.split(',') if x.strip()]
             if s in froms: options += ['--no-own-cover']
             if s == into.strip(): options += ['--cover-from=' + ','.join(src(x) for x in froms)]
+        # extra_floors = Section: x0,y0,z0,x1,y1,z1; ... (hidden world floor, levelinject --extra-floors)
+        floors_ = [r.split(':', 1)[1] for r in ch.get('extra_floors', '').split('|') if ':' in r and r.split(':', 1)[0].strip() == s]
+        if floors_: options += ['--extra-floors=' + ';'.join(f_.replace(' ', '') for f_ in floors_)]
         if ch.get('track_offsets'): options += ['--track-offsets=' + ch['track_offsets'].replace(' ', '')]
         if ch.get('object_vars'): options += ['--object-vars=' + ch['object_vars'].replace(' ', '')]
         if ch.get('no_collision'): options += ['--actors-no-collision=' + ch['no_collision'].replace(' ', '')]

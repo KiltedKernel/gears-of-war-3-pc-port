@@ -1,96 +1,71 @@
-# Agent briefing: gears3-pc
+# Agent briefing: COGBox-trilogy
 
-Read this first. It is written for an AI coding agent (Claude Code or similar) picking up this project, including
-agents working on [Flippage/gears-of-war-3-recomp](https://github.com/Flippage/gears-of-war-3-recomp).
+Read this first. It is written for an AI coding agent (Claude Code or similar) picking up this project.
 
-## What this project is, and where it is going
+## What this project is
 
-A Gears of War 3 PC port (XenonRecomp static recompilation + a small kernel reimplementation + Xenia's D3D12 GPU
-code), whose real deliverables are:
+The Gears of War trilogy inside Gears of War 3, as mods for **COGBox** (github.com/Shagg88/COGBox; local clone
+`../cogbox`), which runs Gears 1, 2, 3 and Judgment natively on PC:
 
-1. **Mod support for Gears 3**: `mods\<Name>\mod.ini` folders, merged table of contents, merged config, new campaign
-   chapters, mods in multiplayer (docs/MODDING.md).
-2. **The trilogy**: Gears of War 1 and 2 campaigns converted into Gears 3's engine as mods, built on the player's PC
-   from their own discs (docs/TRILOGY.md). Then a remix mod, then a modding framework for other creators.
+1. **The trilogy**: Gears 1 and 2 campaigns converted into Gears 3's engine and gameplay, built on the player's PC
+   from their own discs (docs/TRILOGY.md). Gears 1 chapter 1 (the prison) is the tech demo being polished first.
+2. Then a remix mod, then tools for other creators. Mod support itself lives in COGBox (this project contributed it:
+   COGBox 0.4.3, extended to mod API 1 in 0.6.0); changes to it go to COGBox as PRs on its `dev` branch.
 
-**Direction (2026-10-30):** gow3-recomp becomes the Gears 3 base; this repository narrows to mod support and the
-trilogy. Our mod runtime files are offered to gow3-recomp under BSD-3 (its issue #25). The plan, their extension
-points and the file-by-file mapping: **docs/REXGLUE_PORT.md**. Our runtime stays the trilogy's test bed until the
-trilogy plays the same on gow3-recomp. Flippage has since proposed one merged package with the Gears 2 port and
-COGBox (docs/ECOSYSTEM.md); our mod features go in as a portable core plus per-runtime adapters.
+This repository was a Gears of War 3 PC port (static recompilation + runtime) until 2026-11-12; that is kept at the
+tag `legacy-port-final`. Its runtime is still what generates the trilogy's navmeshes (docs/NAVMESH.md) until the
+builder is ported to COGBox's developer mode.
 
 ## Where the knowledge is
 
 | File | What |
 |---|---|
-| docs/ECOSYSTEM.md | the other Gears projects (COGBox, Gears 2 port, gow3-recomp), the proposed merger, what we bring |
-| docs/REXGLUE_PORT.md | the move onto a ReXGlue runtime: portable mod core + adapters, mapping, steps |
 | docs/TRILOGY.md | the converter, recipes, what each chapter needs |
 | docs/G1_G3_ARTICULATION.md | where Gears 1 and 3 differ and what the converter does about each (tools/g1g3map.py) |
-| docs/ENGINEERING_LOG.md | every finding, newest at the end (long: search it, e.g. for "Pylon", "CoverLink", "Kismet") |
+| docs/ENGINEERING_LOG.md | every finding, newest at the end (long: search it, e.g. "Pylon", "CoverLink", "Kismet") |
 | docs/REVERSE_ENGINEERING.md | game facts: addresses, layouts, formats |
-| docs/MODDING.md | the mod format players and creators use |
-| docs/STATUS.md | what is verified, what is not |
+| docs/COGBOX_DEV.md | developing and testing on COGBox (developer mode, scripted controller, Kismet trace) |
+| docs/MODDING.md | the mod format |
+| docs/NAVMESH.md | how navmeshes are made (the legacy runtime, for now) |
+| docs/ECOSYSTEM.md | the other Gears projects (COGBox, the Gears 2 port, gow3-recomp) |
+| docs/legacy/ | the old port's status, multiplayer and ReXGlue documents |
 
 ## Layout
 
-- `runtime/`: the port's runtime. Mod pieces: `kernel/mods.cpp`, `mods.h`, `mod_manifest.h`, `kernel/mod_config.cpp`,
-  `ue3/campaign_chapters.cpp`, `ue3/content_packages.cpp` (all original to this project; their portable core is `modcore/`, MIT).
-  `kernel/io/file_system.cpp` descends from UnleashedRecomp: GPL only, never copy it into a BSD project.
-  Debug tooling: `hid/hid.cpp` (scripted input), `ue3/prop_log.cpp`, `ue3/kismet_trace.cpp`, `ue3/cover_trace.cpp`.
 - `tools/`: Python. `trilogy.py` (chapter builds from recipes in `tools/recipes/`), `levelinject.py` (Gears 1 levels
-  into a Gears 3 package), `objcopy.py` (actors, Kismet, class/property mapping), `navcross.py` / `pylons.py` /
-  `navinject.py` (navigation meshes), `materialconv.py`, `staticmesh.py`, `upk.py` / `upkwrite.py` (package read /
-  write), `kismetgraph.py` (a Kismet sequence as text), `g1route.py` (test routes over Gears 1's path network).
-- `ppc/`: generated code from the player's own executable. Git-ignored; never commit it.
+  into a Gears 3 package), `objcopy.py` (actors, Kismet, class/property mapping), `materialconv.py`, `meshconv.py`,
+  `bspconv.py`, `lighting.py`, `navinject.py` / `pylons.py` / `navcross.py` (navigation), `upk.py` / `upkwrite.py`
+  (package read / write), `kismetgraph.py` (a Kismet sequence as text), `g1route.py` (test routes over Gears 1's path
+  network), `campaignclass.py` (classic characters as campaign classes), `modtool.py`, `xpack/` (the decompressor).
+- `examples/mods/`: sample mods. `tests/`: scripted test inputs. `modcore/`: the portable mod core (MIT).
 
 ## Building and testing
 
-- Runtime: `cmd /c tools\build.cmd` (or `ninja gow3.exe` in `build\`). The link fails while gow3.exe is running.
-- A chapter: `python -P tools/trilogy.py --mods <folder> build gears1_ch1 --reuse-navmesh --replace` (about 7
-  minutes reusing the navmesh). Build test variants into a scratch folder, not the player's `build\mods`.
-- Scripted playtest: `powershell -File tools\playtest.ps1 -Script <file> -Seconds N -Mods <mod folder> -Fresh
-  [-Shots "t1,t2"]`. Script verbs (one per line, `<seconds> <verb> ...`): pad, trig, walkto, route, face, look,
-  teleport, follow, choose, fight, shoot, capture (runtime/hid/hid.cpp header). Logs: `build\gow3.log`; shots:
-  `build\shots\`.
-- Diagnostics (environment variables): `GOW3_LOG_POS=1`, `GOW3_LOG_PROPS="Class:Prop,Prop@,+offset;..."` with
-  `GOW3_LOG_PROPS_MS`, `GOW3_SET_PROPS="Class:Prop=value"`, `GOW3_KISMET_TRACE=<package substring>` (needs
-  GOW3_LOG_PROPS set too), `GOW3_NAV_TRACE=1`, `GOW3_COVER_TRACE=1`.
+- A chapter: `python -P tools/trilogy.py --mods <folder> build gears1_ch1 --reuse-navmesh --replace` (about 30
+  minutes). Build test variants into a scratch folder (`build/scratch/...`), never the player's mods.
+- Test on COGBox with its developer-mode switches: `--cogbox_input_script=<file>` (scripted controller: pad, trig,
+  walkto, route, face, teleport, follow, choose, fight, shoot, capture, quit...), `--mod_kismet_trace=<package part>`,
+  `--ue3_mods=<folders>`, `--ue3_exec_at=<ms>:<command>`. Use a test copy of a chapter (e.g. `Gears3\mods-test`) and
+  a test user data folder, never the player's.
+- Gears 1 reference shots: COGBox's Gears 1 build takes the same scripted controller; Gears 1's coordinates equal the
+  conversion's.
 
 ## Rules
 
 - Bring your own game: no game files, executables, extracted assets, generated code or keys in any commit. Facts
   about the game go in docs, in your own words.
 - The repository is public: scan every commit for personal data (names, emails, home paths, IPs) before pushing.
-- Tests use `-Fresh` and their own data folders; never the player's saves, mods or settings.
 - Never kill a game or launcher process you did not start yourself (the player may be playing); kill by exact PID.
+- Back up the player's installed mods before replacing them; never install while the game runs.
 - Write code like the code around it; log what you learn in docs/ENGINEERING_LOG.md.
 - Commits end with a `Co-Authored-By:` line for the AI that helped.
 
 ## Open work (keep this current)
 
-- **2026-11-05 direction: COGBox is the runtime to develop and test on** (map: docs/COGBOX_DEV.md). Next, in order:
-  (1) the COGBox mod framework, design draft docs/superpowers/specs/2026-11-05-cogbox-mod-framework-design.md (share
-  with Shagg/Flippage first): campaign registry + a runtime fix for TU6's five-act cap in ConstructActList (the reason
-  the trilogy's Act VI is hidden on COGBox; ENGINEERING_LOG 2026-11-05), async content packages (35 s title freeze);
-  (2) port the debug tooling and the Scaleform menu mouse (runtime/ui/gfx_menu.cpp) to COGBox; (3) the user's manual
-  trilogy test plan on COGBox; (4) chapter 1's roadie-run door (Gears 3's ledge check stepping off a catwalk mover).
-
-- COGBox (the merged project's home, local clone `../cogbox`): our mod support (PR #122) is merged in COGBox 0.4.3
-  (SDK patch 61, renumbered from our 60); fixes for its issues #146 (PR #148, merged) and #145 (PR #156, Gears 2
-  voice-language twins). Build recipe and status in docs/ECOSYSTEM.md and COGBox's Gears3-Native/notes/28-mod-support.md.
-  **The trilogy's chapter 1 loads and plays on COGBox.** Open: launcher entries for chapters 32+; test tooling.
-
-- Port the six mod files and the debug tooling onto gow3-recomp (docs/REXGLUE_PORT.md).
-- Trilogy, Gears 1 chapter 1 (prison), easy route: scripted runs pass the cell, the cover room, the S02 door, the
-  Drone fight, the S04 catwalk (fixed 2026-11-02: two converter bugs, ENGINEERING_LOG "the catwalk") and the
-  roadie-run door (button at y 4675, hold A); S05's scripting starts. Next: S05 to the yard (script:
-  build/scratch/buttons8.txt, extend it).
-  Continue (quit and resume at a checkpoint) works since 2026-11-03: converted Kismet needs unique net indices
-  (tools/upkwrite.py; ENGINEERING_LOG 2026-11-03). Checkpoint-start tests: build/scratch/snap_s04f (S04 save) +
-  cp_s04_yard.txt; pass -Mods the mod folder itself (.../Gears1_Chapter1), not its parent. Seen once: Dom below the world.
-- Chapter 1 route passes the S05 rubble since 2026-11-04 (the "freeze" was a fatal load error in S06_Scripting: a Gears 1
-  ForceFeedbackWaveform's native tail; ENGINEERING_LOG 2026-11-04 evening). A fatal engine error now logs its text
-  (RtlUnicodeStringToAnsiString). Next: the yard fight (the S04 route dies near (-4618,7821)), the Corpser ending, the
-  hand-off to chapter 2. Chapters 2 and 3 rebuilt 2026-11-04 (build/scratch/trilogy3); both load and play from Select
-  Chapter (boot_ch2/3.txt).
+- Chapter 1 polish (2026-11-12): cutscene character shading (flatter and brighter than Gears 1's key light); ragdolls
+  fall through converted floors (no PhysX collision for converted meshes); the big room after the path choice
+  (stretched floor textures, a door's texture, a black slab, flat light cones); Marcus's arm twitch in dialogue;
+  enemy pathfinding in the hard route's yard fight.
+- Port the navmesh builder to COGBox's developer mode, so building needs no legacy runtime.
+- Effects that Gears 3 lacks (Gears 1/2 particles and materials, the Riftworm...) and a COGBox mod marketplace:
+  design notes in docs/ (2026-11-12).

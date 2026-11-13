@@ -4,13 +4,9 @@ Bug reports, test results and changes are welcome.
 
 ## Reporting a problem
 
-Open an issue with the bug report form: what happened, where (setup, a campaign chapter, a mode, multiplayer, the
-launcher, a mod), your version and PC, and `build\gow3.log`. Network lines in the log hide public addresses and join
-codes, so it is safe to post.
-
-Results from setups that have not been tested yet are especially useful: multiplayer between two PCs or over the
-internet, routers with and without UPnP, and campaign chapters played to their end (docs/STATUS.md lists what is
-verified).
+Open an issue with the bug report form: what happened, where (which converted chapter, and where in it), your COGBox
+version, and the game's log (COGBox keeps one per session in `Gears3\logs\`). Screenshots of the same spot in the
+original game help a lot with visual problems.
 
 ## Game files
 
@@ -27,9 +23,6 @@ docs/REVERSE_ENGINEERING.md, written in your own words.
 
 ## Making changes
 
-- Build and run as in README.md (Developing). `cmd /c tools\build.cmd` rebuilds the runtime, the launcher and the
-  server.
-- Test with the scripted playtests (tests/README.md: `tools\playtest.ps1`, `tools\mp_test.ps1`). Tests use their own
-  data folders and never touch a player's saves, mods or settings; keep it that way.
-- Write code like the code around it, and note what you learned in docs/ENGINEERING_LOG.md (newest at the end).
-- Changes are released under GPL-3.0 (LICENSE).
+- Build chapters as in README.md, into a scratch folder; test them on COGBox with a test copy of the mod.
+- Changes to the game's runtime or the launcher (mod support included) belong in COGBox: open them there, on `dev`.
+- Write down what you learn in docs/ENGINEERING_LOG.md, and game facts in docs/REVERSE_ENGINEERING.md.

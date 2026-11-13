@@ -4,6 +4,7 @@
 /game_link/
 /build/
 /tools/XenonRecomp/
+/tools/third_party/
 /config/GOW3_new.toml
 *.log
 # tool build products

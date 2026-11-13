@@ -8,7 +8,7 @@ labels: bug
 <!-- What you did, what you expected, and what you saw instead. Screenshots help. -->
 
 **Where**
-<!-- Setup / campaign (act and chapter) / Horde / Versus / Beast / multiplayer / launcher / a mod -->
+<!-- Which converted chapter and where in it / the converter / a sample mod -->
 
 **Version and PC**
 - Port version (VERSION file, or the launcher's title):

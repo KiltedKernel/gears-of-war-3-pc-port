@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0: COGBox-trilogy (2026-11-12)
+
+The repository is now the trilogy's and its tools' home, for COGBox. The Gears 3 PC port (runtime, launcher, server,
+setup) is kept at the tag `legacy-port-final`; its mod support lives on in COGBox.
+- Removed from the main branch: the port's runtime, Xenia glue, launcher, server, setup and recompilation scripts.
+- `tools/build_xpack.cmd` fetches libmspack itself (no XenonRecomp checkout needed).
+- `tools/trilogy.py`: building a chapter's navmeshes for the first time still needs the legacy runtime (docs/NAVMESH.md).
+- Chapter 1 converter fixes up to fix12 (ENGINEERING_LOG 2026-11-12).
+
 ## Unreleased
 
 **Mods** (docs/MODDING.md)

@@ -92,7 +92,9 @@ def vertex_lighting_374(p, lod, mesh):
     m = mesh['lods'][0]
     uvs, stride, n, data = m['interleaved']
     ch = int(mesh['props'].get('LightMapCoordinateIndex', 1))
-    if ch >= uvs: return None
+    # a mesh with one UV set was light-mapped on it (29 of chapter 1's light-mapped meshes, the cover slab in the
+    # cell block's big room among them: with no light they took the level's average and drew dark)
+    if ch >= uvs: ch = uvs - 1
     a = np.frombuffer(data, dtype=np.uint8).reshape(n, stride)
     uv = np.frombuffer(a[:, 28 + 8 * ch:36 + 8 * ch].tobytes(), dtype='>f4').reshape(n, 2).astype(np.float64)
     (sx, sy), (bx, by) = lod['coord']

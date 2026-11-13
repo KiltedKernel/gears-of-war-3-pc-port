@@ -3531,3 +3531,49 @@ On COGBox 0.5.0 (gitlab.com/shagg88/cogbox, branch kiltedkernel/mod-framework).
   balls, its goo orange blobs). Verified on a test copy: the opening's grate shows (no web sheets, no drool), no black
   patches; the hard route's counter seals S02 after Marcus passes the gap (hard9: Touch_16 once, Touch_4 at
   (-1603,6655)); the blood pool by the cell dark red, not black speckle. Installed to the player's mods.
+
+## 2026-11-12 (night): the user's test of fix12 on COGBox 0.6.0 (shots 11-12-26\2, a recording)
+
+- **COGBox 0.6.0** (the user's update, 19:39) merged this project's mod framework (MR !3) but ships
+  `gow3_path_choice_mouse` off (Shagg's review: off until a game without mods reaches the menu and a level with it on):
+  left mouse picked the right path again. Shown on the 0.6.0 exe with the switch on and no mods (title, main menu,
+  campaign chapter 1, 150 s at 60 fps); COGBox PR #277 turns it on by default.
+- **The classic Marcus's swap works on 0.6.0** (Kismet trace: G1PlayerWait -> G1PlayerFactory after the opening; the
+  player respawns at the spawn point as GearPawn_COGMarcusG1). The arm twitch in dialogue is therefore not the
+  multiplayer class. Gears 1's comm-link actions in chapter 1 all target Dom; Marcus's hand-to-ear comes from Gears 3's
+  native SpeakLine (GearPawn.SetConversing(bConv, bUseCommLink); the decision is native). Open.
+- **Ragdolls fell through the floors.** Gears 3 cooks a level mesh's PhysX shape into the level; the console cooks
+  nothing at load, so the converted meshes (merged chunks, BSP) had none. RB_BodySetup box elements need no cooking
+  (PhysX makes a box from its size; a Gears 3 static mesh's body setup: PreCachedPhysDataVersion 0x02080491, AggGeom
+  .BoxElems {TM (Matrix, rows X Y Z origin), X, Y, Z full lengths, bNoRBCollision, bPerPolyShape}, then an empty
+  PreCachedPhysData array). tools/rbfloors.py: boxes 24 deep under every upward surface (flat ones merged on a 32-unit
+  grid per 4-unit height, slopes per triangle), on hidden meshes per 4096-unit cell that block only rigid bodies
+  (CollideActors, BlockRigidBody; no actor, zero- or non-zero-extent blocking). Chapter 1: up to 22,000 boxes per
+  section; it loads and plays at full frame rate. Not yet seen with a ragdoll (the scripted fights did not reach one).
+- **The cell block's black cover slab:** a mesh with one UV set and no LightMapCoordinateIndex was light-mapped on UV
+  set 0; the converter looked for set 1 and dropped its light (29 of chapter 1's light-mapped meshes).
+- **Gears 1's BSP light maps as texture light maps** (tools/lightmap2d.py). Gears 3's LightMap_2D is laid out like
+  Gears 1's: three texture slots, each a ref and a 3-float scale, then CoordinateScale and CoordinateBias (2 floats
+  each); Gears 3 fills two (its LightMapTexture2Ds are named DirectionalMaxComponent...: the colour, and the directional
+  maxima the vertex path writes). Each Gears 1 section has one atlas (three DXT1 textures, 512-1024). The atlas is
+  decoded into image space (texture2d.tiled_offsets), the light Gears 1 drew dynamically (its point lights, shadowed)
+  is baked into the texels its BSP covers, converted to the two coefficients and written back in the same tiled layout
+  (the packed mip tail converted block by block in place); the light-mapped BSP chunks carry their atlas UVs as UV set
+  1 (chunks are all light-mapped or all not). Decode checked against the reference decoder (under one 8-bit step);
+  the converted pair reconstructs the average light within 1%. Sections whose template package has no light map
+  texture borrow one's properties from a Gears 3 level (LIGHTMAP_TEMPLATE_PACKAGES). LEVELINJECT_VERTEX_BSP_LIGHT=1:
+  per vertex as before.
+- **The big room after the path choice, Gears 1 against the conversion** (teleport views in both games): Gears 1's
+  floors carry sun patches and shadow edges from its light maps where the conversion was flat; the left path's door
+  (an InterpActor, lit through its light environment) nearly black; the light cone (Gears 1's lightbeam material: dust
+  panners x two falloff textures x a screen fade) a flat bright wedge on the fog sheet stand-in; the mountain backdrop
+  beyond the windows missing from the conversion's sky.
+- Test harness note: viewshotsN.sh reads the log as it grows; reusing a log name made it fire at launch on the
+  previous run's "log view" lines (fresh names per run).
+- **The first texture light maps hung the load** (fix16: frames presented, the game thread stopped as the sections
+  streamed in; fix15's run stalled likewise at the path choice, where S05 streams). A Gears 3 LightMapTexture2D
+  serialises one more field after the texture: its LightmapFlags (uint32; the levels' own: 1, streamed). The converted
+  ones (NeverStream) now end with 0.
+- ...and the reference itself: after a Gears 3 texture light map's coordinate scale and bias come only the LOD's 5
+  tail bytes (a level's own components: 00 00000000). lightmap2d.gears3_reference had copied the vertex writer's four
+  ints before them (the 1D light map's second sample array), misaligning every light-mapped BSP component.
